@@ -1,0 +1,15 @@
+# Inference + UI (enough to run `main.py tui` against a served model)
+rich>=13.7
+textual>=0.79
+pydantic>=2.7
+requests>=2.31
+
+# Training + local weights. Heavy; install when you are ready to fine-tune:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
+torch>=2.3
+transformers>=4.44
+trl>=0.11
+peft>=0.12
+datasets>=2.20
+accelerate>=0.33
+bitsandbytes>=0.43        # 4-bit QLoRA; CUDA only

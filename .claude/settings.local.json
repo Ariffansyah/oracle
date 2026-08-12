@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python main.py train)",
+      "Bash(.venv/bin/python main.py analyze --mock --safe --always-explain --llm-model qwen2.5-coder:7b)"
+    ]
+  }
+}

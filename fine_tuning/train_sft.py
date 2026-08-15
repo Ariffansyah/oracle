@@ -35,6 +35,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--grad-accum", type=int, default=GRAD_ACCUM)
     ap.add_argument("--lr", type=float, default=SFT_LR)
     ap.add_argument("--max-seq-length", type=int, default=MAX_SEQ_LENGTH)
+    ap.add_argument("--warmup-steps", type=int, default=10)
     ap.add_argument("--no-4bit", dest="four_bit", action="store_false",
                     help="load in bf16 instead of 4-bit (needs much more VRAM)")
     ap.set_defaults(four_bit=LOAD_IN_4BIT)
@@ -69,13 +70,18 @@ def main(argv=None) -> None:
             per_device_train_batch_size=args.batch_size,
             gradient_accumulation_steps=args.grad_accum,
             gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
+            # Paged states survive the VRAM spikes that otherwise OOM a small
+            # card mid-step; 8-bit keeps the optimiser itself off the budget.
+            optim="paged_adamw_8bit",
             learning_rate=args.lr,
             lr_scheduler_type="cosine",
-            warmup_ratio=0.03,
+            # transformers 5.x dropped warmup_ratio; steps is what remains.
+            warmup_steps=args.warmup_steps,
             max_length=args.max_seq_length,
             logging_steps=5,
             save_strategy="epoch",
-            **precision_flags(),
+            **precision_flags(args.four_bit),
             report_to=[],
             # The dataset is already conversational: TRL applies the chat
             # template and masks everything but the assistant turn.
@@ -91,7 +97,7 @@ def main(argv=None) -> None:
     tokenizer.save_pretrained(str(args.output_dir))
     print(f"\nSFT adapter -> {args.output_dir}")
     print("next:\n"
-          "  python -m dataset_builder.build_dpo_data --mock\n"
+          "  python -m dpo_pipeline.build_dpo_data --mock\n"
           "  python -m fine_tuning.train_dpo")
 
 

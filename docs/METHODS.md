@@ -223,11 +223,11 @@ a corpus that only rewards silence.
   captcha cases. Enough to prove the pipeline trains and the format holds. Not
   enough to produce a good reviewer. Real training needs real diffs with real
   written explanations, which means distilling them from a stronger model.
-- **The statistical baseline lives in `legacy/`.** CatBoost on ApacheJIT: AUC
-  0.8666, Popt 0.8113, PofB20 0.5621. Kept as a comparison row, not as the
-  method. Also worth knowing: CatBoost, LightGBM and XGBoost landed within 0.005
-  AUC of each other on identical data — the 14 metrics are the ceiling, not the
-  algorithm.
+- **The statistical classifier was removed.** Measured on ApacheJIT first:
+  CatBoost AUC 0.8666, LightGBM 0.8618, XGBoost 0.8658 — within 0.005 of each
+  other on identical data, which says the 14 process metrics are the ceiling and
+  the algorithm is not the lever. Those numbers stay useful as a baseline row in
+  a comparison table; they are not a method worth carrying.
 - **The context claim is untested.** `--no-context` exists precisely so the
   before/after can be measured rather than asserted. Until that experiment runs,
   "context reduces hallucination" is a hypothesis with one anecdote behind it.

@@ -1,0 +1,398 @@
+"""Label fetched commits with a teacher model, then verify what it said.
+
+The teacher sets the student's ceiling, so this is the one step worth paying
+for. It is also the one step you should not have to repeat: every raw response
+is written to disk, so a schema change means re-parsing, not re-paying.
+
+    export DEEPSEEK_API_KEY=sk-...
+    python -m corpus.label --provider deepseek --limit 2000
+
+    python -m corpus.label --provider ollama --model qwen3-coder:latest   # local
+
+Verification matters as much as the teacher. Three filters run on every label:
+
+  grounded      every finding must name a category and a real explanation
+  agreement     teacher silent on a buggy=True commit (or vocal on a clean one)
+                is quarantined, not trained on
+  consistent    with --samples 3, only findings that appear in a majority of
+                samples survive
+
+Expect to discard 30-40%. Verified examples are worth several unverified ones.
+"""
+
+from __future__ import annotations
+
+import argparse
+import concurrent.futures as cf
+import json
+import os
+import sys
+import time
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+
+import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from config import MAX_DIFF_CHARS, ROOT
+from dataset_builder.schema import SYSTEM_PROMPT, Analysis, build_user_message
+from llm_explainer.client import extract_json
+
+IN_PATH = ROOT / "data" / "apachejit_commits.jsonl"
+OUT_PATH = ROOT / "data" / "labelled.jsonl"
+RAW_PATH = ROOT / "data" / "labelled_raw.jsonl"
+
+
+@dataclass
+class Provider:
+    name: str
+    base_url: str
+    model: str
+    key_env: str
+
+    @property
+    def key(self) -> str:
+        key = os.getenv(self.key_env, "")
+        if not key and self.key_env:
+            raise SystemExit(
+                f"{self.key_env} is not set.\n"
+                f"  export {self.key_env}=..."
+            )
+        return key
+
+
+PROVIDERS = {
+    # All OpenAI-compatible /chat/completions, so one code path serves them all.
+    # Model ids come from the live account, not from documentation: this API
+    # serves deepseek-v4-pro / deepseek-v4-flash. Check /v1/models if a call
+    # 404s on the model name.
+    "deepseek": Provider("deepseek", "https://api.deepseek.com/v1",
+                         "deepseek-v4-pro", "DEEPSEEK_API_KEY"),
+    "openai": Provider("openai", "https://api.openai.com/v1",
+                       "gpt-4o-mini", "OPENAI_API_KEY"),
+    # Free tier, very fast, OpenAI-compatible. Rate limits are per-minute rather
+    # than per-request, so the 429 backoff below matters more here than
+    # elsewhere - pair it with --sleep.
+    "groq": Provider("groq", "https://api.groq.com/openai/v1",
+                     "openai/gpt-oss-120b", "GROQ_API_KEY"),
+    "together": Provider("together", "https://api.together.xyz/v1",
+                         "Qwen/Qwen2.5-Coder-32B-Instruct", "TOGETHER_API_KEY"),
+    "ollama": Provider("ollama", "http://192.168.1.170:11434/v1",
+                       "qwen3-coder:latest", ""),
+}
+
+
+def ask(provider: Provider, model: str, system: str, user: str,
+        temperature: float, timeout: int, retries: int = 8) -> str:
+    # 8, not 3. A free tier rations tokens per minute rather than per request
+    # (Groq: 8000 TPM, and one commit costs ~2650), so a 429 is the normal case
+    # and not an error - it means "wait five seconds". Three retries turned a
+    # queue into a failure and lost the commit permanently.
+    """One chat completion. Returns raw content; parsing happens later."""
+    headers = {"Content-Type": "application/json"}
+    if provider.key:
+        headers["Authorization"] = f"Bearer {provider.key}"
+
+    payload = {
+        "model": model,
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+        "temperature": temperature,
+        "response_format": {"type": "json_object"},
+    }
+    for attempt in range(retries):
+        try:
+            resp = requests.post(f"{provider.base_url}/chat/completions",
+                                 headers=headers, json=payload, timeout=timeout)
+        except requests.RequestException as e:
+            if attempt == retries - 1:
+                raise RuntimeError(f"{provider.name}: {e}") from e
+            time.sleep(2 ** attempt)
+            continue
+
+        if resp.status_code == 429:  # rate limited: back off and retry
+            wait = int(resp.headers.get("retry-after", 10 * (attempt + 1)))
+            time.sleep(wait)
+            continue
+        if not resp.ok:
+            if attempt == retries - 1:
+                raise RuntimeError(f"{provider.name} {resp.status_code}: "
+                                   f"{resp.text[:200]}")
+            time.sleep(2 ** attempt)
+            continue
+        content = resp.json()["choices"][0]["message"]["content"]
+        if not content or not content.strip():
+            # A 200 with an empty body is a transient server hiccup, not an
+            # answer. Counting it as a failure loses the commit permanently.
+            time.sleep(2 ** attempt)
+            continue
+        return content
+    raise RuntimeError(f"{provider.name}: exhausted retries")
+
+
+def majority_findings(analyses: list[Analysis], votes_needed: int) -> Analysis:
+    """Keep findings a majority of samples agree on.
+
+    A defect the teacher names once out of three is usually a hallucination; one
+    it names every time usually is not.
+    """
+    if len(analyses) == 1:
+        return analyses[0]
+
+    counts = Counter(f.category for a in analyses for f in a.findings)
+    keep = {c for c, n in counts.items() if n >= votes_needed}
+    merged, seen = [], set()
+    for a in analyses:
+        for f in a.findings:
+            if f.category in keep and f.category not in seen:
+                seen.add(f.category)
+                merged.append(f)
+    # Take the summary from a sample whose verdict matches the merged one.
+    summary = next((a.summary for a in analyses
+                    if bool(a.findings) == bool(merged)), analyses[0].summary)
+    return Analysis(summary=summary, findings=merged)
+
+
+def verify(analysis: Analysis, buggy: bool, hinted: bool = True) -> tuple[bool, str]:
+    """Should this label be trained on? Returns (keep, reason).
+
+    `hinted` says whether the teacher was told a defect exists. It changes what
+    silence means, and therefore what may be filtered.
+
+    When the teacher was hinted, silence on a buggy commit contradicts an
+    instruction it was given, so it is a malfunction and is quarantined.
+
+    When it was not, silence is the teacher's actual verdict: it read the diff
+    and saw nothing. Dropping those is what made the corpus report a recall of
+    1.00 with zero misses across 844 commits - not because the teacher never
+    missed a defect, but because a miss could not survive to be counted. The
+    filter manufactured its own ceiling. Unhinted, the disagreement is the most
+    informative record in the set and is kept.
+    """
+    for f in analysis.findings:
+        if len(f.explanation.strip()) < 30:
+            return False, "explanation too thin to learn from"
+    if not analysis.summary.strip():
+        return False, "no summary"
+
+    if hinted and buggy and not analysis.findings:
+        return False, "SZZ says buggy, teacher found nothing"
+    # Kept in both modes: a teacher naming three defects on a commit no later
+    # fix touched is over-reporting, and training on it teaches exactly that.
+    if not buggy and len(analysis.findings) > 2:
+        return False, "SZZ says clean, teacher found several defects"
+    return True, "ok"
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--in", dest="inp", type=Path, default=IN_PATH)
+    ap.add_argument("--out", type=Path, default=OUT_PATH)
+    ap.add_argument("--raw", type=Path, default=RAW_PATH)
+    ap.add_argument("--provider", choices=sorted(PROVIDERS), default="deepseek")
+    ap.add_argument("--model", help="override the provider's default model")
+    ap.add_argument("--limit", type=int, default=2000)
+    ap.add_argument("--samples", type=int, default=1,
+                    help="responses per commit; >1 enables majority voting")
+    ap.add_argument("--temperature", type=float, default=0.0)
+    ap.add_argument("--timeout", type=int, default=180)
+    ap.add_argument("--sleep", type=float, default=0.0)
+    ap.add_argument("--workers", type=int, default=8,
+                    help="parallel requests; labelling is IO-bound, and a "
+                         "reasoning teacher spends minutes per commit")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--hint", action="store_true",
+                    help="tell the teacher a defect exists on SZZ-buggy "
+                         "commits. Leaks the label into the training target — "
+                         "see label_one(). Off by default.")
+    ap.add_argument("--no-balance", dest="balance", action="store_false",
+                    help="take records in file order instead of balancing "
+                         "buggy/clean")
+    ap.set_defaults(balance=True)
+    args = ap.parse_args(argv)
+
+    if not args.inp.exists():
+        raise SystemExit(f"{args.inp} not found — fetch commits first:\n"
+                         f"  python -m corpus.fetch --limit 2500")
+
+    provider = PROVIDERS[args.provider]
+    model = args.model or provider.model
+    provider.key  # fail now, not after 500 requests
+
+    records = [json.loads(l) for l in open(args.inp) if l.strip()]
+    done = set()
+    if args.out.exists():
+        done = {json.loads(l)["commit_id"] for l in open(args.out) if l.strip()}
+        print(f"{len(done)} already labelled, skipping those")
+
+    # Balanced by the SZZ label. Taking the first N gave 3 buggy to 17 clean,
+    # and a corpus that lopsided teaches the model that "no defects found" is
+    # right 85% of the time - which it then says to everything.
+    pool = [r for r in records if r["commit_id"] not in done]
+    if args.balance:
+        import random as _random
+
+        rng = _random.Random(args.seed)
+        buggy = [r for r in pool if r.get("buggy")]
+        clean = [r for r in pool if not r.get("buggy")]
+        rng.shuffle(buggy)
+        rng.shuffle(clean)
+        half = args.limit // 2
+        todo = buggy[:half] + clean[: args.limit - min(half, len(buggy))]
+        rng.shuffle(todo)
+        print(f"sampling {sum(1 for r in todo if r.get('buggy'))} buggy / "
+              f"{sum(1 for r in todo if not r.get('buggy'))} clean")
+    else:
+        todo = pool[: args.limit]
+    votes = max(1, args.samples // 2 + 1) if args.samples > 1 else 1
+    print(f"{len(todo)} commits to label with {provider.name}/{model}"
+          + (f", {args.samples} samples each (need {votes} votes)"
+             if args.samples > 1 else ""))
+
+    kept = dropped = failed = 0
+    seen: list[tuple[bool, bool]] = []   # (teacher found a defect, SZZ label)
+    started = time.time()
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+
+    def label_one(rec: dict):
+        """One commit -> (record, analyses, raw texts). Runs in a worker."""
+        user = build_user_message(
+            rec["diff"], rec.get("subject", ""),
+            ", ".join(rec.get("files", [])),
+            max_diff_chars=MAX_DIFF_CHARS, include_schema=True)
+        # Off by default. The hint tells the teacher the answer on exactly the
+        # half of the corpus where the answer is the thing being learnt, and the
+        # student never sees it at inference - so it trains the model to assert
+        # what it cannot infer. Measured cost: teacher recall 1.00 / fn 0 on 844
+        # commits, and a student that scored F1 0.56 against a free baseline of
+        # 0.63. Use --hint only to write explanations for defects whose presence
+        # was established by an unhinted pass.
+        if args.hint and rec.get("buggy"):
+            hint = ("\n\nGround truth: a later commit in this repository "
+                    "fixed a defect in the lines this change introduced. "
+                    "Identify what is wrong here and report it. If the "
+                    "defect genuinely is not visible in this diff, say so "
+                    "and return no findings rather than inventing one.")
+            if rec.get("fix_subject"):
+                hint += f"\nThe fix was described as: {rec['fix_subject']!r}"
+            user += hint
+
+        analyses, raws = [], []
+        for s in range(args.samples):
+            content = ask(provider, model, SYSTEM_PROMPT, user,
+                          args.temperature if s == 0 else 0.7, args.timeout)
+            raws.append(content)
+            analyses.append(Analysis.model_validate(extract_json(content)))
+        return rec, analyses, raws
+
+    with open(args.out, "a") as out, open(args.raw, "a") as raw:
+        with cf.ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = {pool.submit(label_one, rec): rec for rec in todo}
+            for i, fut in enumerate(cf.as_completed(futures), 1):
+                rec = futures[fut]
+                try:
+                    rec, analyses, raws = fut.result()
+                except Exception as e:
+                    failed += 1
+                    print(f"  [{i}] {rec['commit_id'][:8]} failed: "
+                          f"{type(e).__name__}: {str(e)[:90]}", flush=True)
+                    continue
+                for s, content in enumerate(raws):
+                    raw.write(json.dumps({"commit_id": rec["commit_id"],
+                                          "sample": s, "raw": content}) + "\n")
+                raw.flush()
+
+                analysis = majority_findings(analyses, votes)
+                keep, reason = verify(analysis, bool(rec.get("buggy")),
+                                      hinted=args.hint)
+                if not keep:
+                    dropped += 1
+                else:
+                    kept += 1
+                    out.write(json.dumps({
+                        "commit_id": rec["commit_id"],
+                        "project": rec.get("project", ""),
+                        "buggy": rec.get("buggy"),
+                        "subject": rec.get("subject", ""),
+                        "files": rec.get("files", []),
+                        "diff": rec["diff"],
+                        "analysis": analysis.model_dump(),
+                        "teacher": f"{provider.name}/{model}",
+                        # Stamped per record: a corpus labelled with the hint and
+                        # one labelled without are not the same dataset, and
+                        # nothing else on the record tells them apart.
+                        "hinted": bool(args.hint),
+                    }) + "\n")
+                    out.flush()
+                    seen.append((bool(analysis.findings), bool(rec.get("buggy"))))
+
+                if i % 10 == 0 or i == 1:
+                    rate = i / max(time.time() - started, 1e-9)
+                    eta = (len(todo) - i) / max(rate, 1e-9) / 60
+                    print(f"  {i}/{len(todo)}  kept {kept}  dropped {dropped}  "
+                          f"failed {failed}  ({rate:.2f}/s, ETA {eta:.0f}m)",
+                          flush=True)
+
+    total = kept + dropped
+    print(f"\n{kept} verified labels -> {args.out}")
+    print(f"{dropped} dropped by verification"
+          + (f" ({100 * dropped // total}%)" if total else "")
+          + f", {failed} failed outright")
+    print(f"raw responses kept in {args.raw} — re-parse instead of re-paying")
+
+    # The teacher's own agreement with SZZ, on the kept records. This is the
+    # student's ceiling, so it is worth seeing the moment it is knowable rather
+    # than a training run later. Unhinted it is a measurement; hinted it is the
+    # teacher repeating what it was told, and `fn` gives that away by sitting
+    # at zero.
+    if seen:
+        from evaluate import confusion
+
+        c = confusion(seen)
+        print(f"\nteacher vs SZZ ({'hinted' if args.hint else 'unhinted'}): "
+              f"P={c['precision']:.2f} R={c['recall']:.2f} F1={c['f1']:.2f} "
+              f"acc={c['accuracy']:.2f}")
+        print(f"  tp={c['tp']} fp={c['fp']} fn={c['fn']} tn={c['tn']}")
+        base = sum(a for _, a in seen) / len(seen)
+        print(f"  always-buggy would score F1={2 * base / (1 + base):.2f} "
+              f"acc={base:.2f} — beat that or the label carries no signal")
+        if not args.hint and c["fn"] == 0:
+            print("  fn=0 unhinted is suspicious — check the filter, not the teacher")
+    if kept:
+        print(f"next:\n  python main.py build-sft --jsonl {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    from dataset_builder.schema import Finding
+
+    # Majority voting must drop the one-off and keep the repeated.
+    a = [Analysis(summary="s", findings=[Finding(category="off-by-one",
+                                                 explanation="x" * 40)]),
+         Analysis(summary="s", findings=[Finding(category="off-by-one",
+                                                 explanation="x" * 40),
+                                         Finding(category="security",
+                                                 explanation="y" * 40)]),
+         Analysis(summary="s", findings=[Finding(category="off-by-one",
+                                                 explanation="x" * 40)])]
+    merged = majority_findings(a, votes_needed=2)
+    assert [f.category for f in merged.findings] == ["off-by-one"], merged
+
+    assert verify(Analysis(summary="s"), buggy=False)[0]
+    assert not verify(Analysis(summary="s"), buggy=True)[0], \
+        "hinted: silent on a buggy commit contradicts the instruction given"
+    # Unhinted, that same silence is the teacher's verdict and must survive, or
+    # the corpus can never contain a false negative and its recall is a fiction.
+    assert verify(Analysis(summary="s"), buggy=True, hinted=False)[0], \
+        "unhinted disagreement is data, not noise"
+    assert not verify(Analysis(summary="s", findings=[
+        Finding(category="other", explanation="short")]), buggy=True)[0]
+    # Over-reporting on a clean commit is filtered either way.
+    three = [Finding(category="other", explanation="x" * 40) for _ in range(3)]
+    assert not verify(Analysis(summary="s", findings=three), buggy=False,
+                      hinted=False)[0]
+    print("voting + verification ok")
+    raise SystemExit(main())

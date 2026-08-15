@@ -25,7 +25,7 @@ trains a model specifically for it.
 ## Two-stage training
 
 ```
-  Qwen2.5-Coder-7B-Instruct  (base)
+  Qwen2.5-Coder-3B-Instruct  (base)
              │
              │  stage 1 — SFT (QLoRA, 4-bit)
              │  teaches the task and the output format
@@ -39,7 +39,7 @@ trains a model specifically for it.
        artifacts/dpo-adapter ──merge──► artifacts/oracle-merged
                                               │
                                               ▼
-                                   llm_inference/client.py
+                                   llm_explainer/client.py
                                               │
                                               ▼
                                         ui/tui_app.py
@@ -114,6 +114,46 @@ python main.py build-dpo --reviews data/reviews.jsonl
 The SFT builder rejects a CSV with no `diff` column — ORACLE trains on code, so
 a metrics-only corpus (ApacheJIT's default export) is not usable without
 fetching the diffs first.
+
+## Evaluation
+
+```bash
+python evaluate.py --model artifacts/sft-adapter/checkpoint-220   # a checkpoint
+python evaluate.py --model Qwen/Qwen2.5-Coder-3B-Instruct         # the baseline
+python evaluate.py --compare data/eval_sft220.jsonl data/eval_stock.jsonl
+```
+
+Five measures against `data/labelled_heldout.jsonl` — valid JSON, detection
+P/R/F1 against the SZZ label, grounding, category match against the teacher, and
+fix agreement where a repair diff is available. `--model` takes a local adapter,
+a merged directory, or a hub id: an untrained base model is the baseline the
+tuned one has to beat, so it is a supported target rather than a missing path.
+
+The baseline gets the full JSON Schema in its prompt and the tuned model does
+not, because that is what each was built for — the tuned model learnt the format
+from a schema-free prompt, and handing a stock model a prompt that never names
+the fields measures the prompt instead of the model.
+
+Reviews run unchunked here. The teacher labelled each commit in one prompt and
+the SFT targets were built the same way; scoring a per-file review against those
+labels would measure the chunker.
+
+### On-policy DPO
+
+```bash
+python -m dpo_pipeline.build_dpo_data --from-eval data/eval_sft220.jsonl
+```
+
+Preference pairs built from the tuned model's own errors on held-out commits:
+the teacher's analysis is the chosen side, the sentence the model actually
+produced is the rejected one. That is the point of going on-policy — the
+rejection is real output rather than a hallucination written by hand.
+
+A commit counts as an error only when SZZ and the teacher agree about it. They
+agree on roughly seven in eight; on the eighth "wrong" is not established, and a
+pair built on a disputed label teaches the disagreement. Missed defects are
+included alongside false positives by default, for the reason above: a set that
+only ever prefers the empty answer teaches silence. `--no-misses` drops them.
 
 ## The TUI
 
@@ -191,18 +231,34 @@ ORACLE_BACKEND=ollama ORACLE_OLLAMA_HOST=http://192.168.1.170:11434 python main.
 
 | key | default |
 | --- | --- |
-| `ORACLE_BASE_MODEL` | `Qwen/Qwen2.5-Coder-7B-Instruct` |
-| `ORACLE_LORA_R` / `ORACLE_LORA_ALPHA` | `16` / `32` |
+| `ORACLE_BASE_MODEL` | `Qwen/Qwen2.5-Coder-3B-Instruct` |
+| `ORACLE_LORA_R` / `ORACLE_LORA_ALPHA` | `32` / `64` |
 | `ORACLE_LOAD_IN_4BIT` | `true` |
 | `ORACLE_SFT_LR` / `ORACLE_DPO_LR` | `2e-4` / `5e-6` |
 | `ORACLE_DPO_BETA` | `0.5` |
 | `ORACLE_DPO_LOSS_TYPE` | `dpop` |
 | `ORACLE_BACKEND` | `ollama` |
 
-LoRA targets `q_proj, k_proj, v_proj, o_proj` at r=16, alpha=32, 4-bit NF4 with
-double quantisation. The learning rates differ by two orders of magnitude on
-purpose: LoRA SFT tolerates 2e-4, while preference tuning at that rate destroys
-the reference behaviour.
+LoRA targets all seven linear projections (`q/k/v/o_proj` plus
+`gate/up/down_proj`) at r=32, alpha=64, 4-bit NF4 with double quantisation. The
+MLP projections are included because format adherence lives there as much as in
+attention. The learning rates differ by two orders of magnitude on purpose: LoRA
+SFT tolerates 2e-4, while preference tuning at that rate destroys the reference
+behaviour.
+
+### Why 3B
+
+The task is narrow — read a diff, emit one JSON verdict — and a small model
+masters it once trained. That buys three things at once: it trains inside 6GB of
+VRAM (7B was measured OOMing on a GTX 1660 SUPER *before the first step*), it
+answers in well under a second, and it runs on the machine that wrote the code
+rather than a server. Hyperparameters are sized for it: sequence 1024 (real
+prompts measure 414 tokens median, 476 at p90), generation capped at 256 tokens
+(answers measure 24 median, 60 max), greedy decoding so a verdict is
+reproducible.
+
+`ORACLE_BASE_MODEL=Qwen/Qwen2.5-Coder-1.5B-Instruct` halves memory and latency
+again if you want it smaller still.
 
 ## Layout
 
@@ -211,18 +267,19 @@ config.py                          all configuration, ORACLE_ overridable
 main.py                            CLI: build-sft, build-dpo, train-sft, train-dpo, analyze, tui
 dataset_builder/schema.py          the Analysis contract + system prompt
 dataset_builder/mock_data.py       annotated synthetic commits (6 defect classes, 4 safe traps)
-dataset_builder/frontend_cases.py  Turnstile / auth-guard false positives for DPO
+dpo_pipeline/frontend_cases.py     Turnstile / auth-guard false positives for DPO
 dataset_builder/build_sft_data.py  → conversational JSONL
-dataset_builder/build_dpo_data.py  → {prompt, chosen, rejected}
+dpo_pipeline/build_dpo_data.py     → {prompt, chosen, rejected}, incl. on-policy
+evaluate.py                        score a reviewer on held-out commits
 fine_tuning/qlora.py               shared 4-bit + LoRA setup, adapter merge
 fine_tuning/train_sft.py           TRL SFTTrainer
 fine_tuning/train_dpo.py           TRL DPOTrainer, continues from the SFT adapter
-llm_inference/client.py            transformers | ollama, strict JSON parsing
+llm_explainer/client.py            transformers | ollama, strict JSON parsing
 ui/tui_app.py                      three-pane Textual UI
+corpus/fetch.py                    fetch real ApacheJIT diffs for training
 ui/commands.py                     `:` command mode, parsed and tested standalone
-llm_inference/context.py           git context retrieval (-U50, file snapshots)
+llm_explainer/context.py           git context retrieval (-U50, file snapshots)
 docs/METHODS.md                    plain-language explanation of every method
-legacy/                            the previous XGBoost + SHAP implementation
 ```
 
 Every module has a `__main__` self-check:
@@ -230,13 +287,13 @@ Every module has a `__main__` self-check:
 ```bash
 python -m dataset_builder.schema        # schema round-trip
 python -m dataset_builder.mock_data     # corpus balance
-python -m dataset_builder.frontend_cases # captcha cases well-formed
+python -m dpo_pipeline.frontend_cases # captcha cases well-formed
 python -m dataset_builder.build_sft_data --mock
-python -m dataset_builder.build_dpo_data --mock
+python -m dpo_pipeline.build_dpo_data --mock
 python -m fine_tuning.qlora             # LoRA config sanity, no torch needed
 python -m ui.commands                   # `:` command parsing and error handling
-python -m llm_inference.context         # git context retrieval, on a temp repo
-python -m llm_inference.client --backend ollama
+python -m llm_explainer.context         # git context retrieval, on a temp repo
+python -m llm_explainer.client --backend ollama
 ```
 
 ## Understanding the method
@@ -257,7 +314,9 @@ it covers. Start there if the design decisions look arbitrary.
   model for anything beyond a smoke test.
 * **bitsandbytes 4-bit is CUDA-only.** On CPU, pass `--no-4bit` and expect to
   need a small base model (1.5B) and patience.
-* **`legacy/`** holds the previous two-stage design (XGBoost risk model + SHAP +
-  a general LLM reviewer), including an ApacheJIT loader with effort-aware
-  metrics (Popt, PofB20, IFA) if you want the statistical baseline back for
-  comparison.
+* **No statistical classifier.** Earlier revisions carried an XGBoost/CatBoost
+  risk model; it was removed. Three boosters landed within 0.005 AUC of each
+  other on ApacheJIT (0.862–0.867), which says the 14 process metrics are the
+  ceiling rather than the algorithm — and a probability cannot be acted on
+  regardless. `corpus/` keeps the ApacheJIT loader and diff fetcher, which is
+  the part that was actually worth keeping.

@@ -24,7 +24,8 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import (Footer, Header, Input, Label, ListItem,
                              ListView, Static)
 
-from config import BACKEND, MERGED_MODEL_DIR, OLLAMA_MODEL, OLLAMA_NUM_CTX
+from config import (BACKEND, BASE_MODEL, MERGED_MODEL_DIR, OLLAMA_MODEL,
+                    OLLAMA_NUM_CTX)
 from dataset_builder.schema import Analysis
 from ui.commands import CommandError, build_registry, run_command
 
@@ -44,7 +45,8 @@ class Commit:
     author: str
     date: str
     diff: str = ""
-    analysis: Analysis | None = field(default=None, compare=False)
+    gate: object | None = field(default=None, compare=False)   # Stage 1
+    analysis: Analysis | None = field(default=None, compare=False)  # Stage 2
 
     @property
     def label(self) -> Text:
@@ -101,6 +103,7 @@ class OracleTUI(App):
     #sidebar.hidden { display: none; }
     #diff-pane { width: 3fr; border: round $accent; }
     #analysis-pane { width: 2fr; border: round $success; }
+    #gate { height: auto; padding: 0 1; }
     #analysis { height: auto; padding: 0 1; }
     #status { height: auto; padding: 0 1; }
     #cmdline { display: none; border: none; height: 3; }
@@ -122,14 +125,26 @@ class OracleTUI(App):
     ]
 
     def __init__(self, commits: list[Commit], repo: str | None,
-                 model_path=None, backend: str = BACKEND):
+                 model_path=None, backend: str = BACKEND, gate=None):
         super().__init__()
         self.commits = commits
         self.repo = repo
-        self.model_path = model_path or MERGED_MODEL_DIR
+        self.model_path = Path(model_path or MERGED_MODEL_DIR)
+        # Once the fine-tuned model exists locally it is the better answer:
+        # smaller, faster, and trained for exactly this. Fall back to a served
+        # model only while it does not.
+        if backend == "auto":
+            trained = ((self.model_path / "config.json").exists() or
+                       (self.model_path / "adapter_config.json").exists())
+            backend = "transformers" if trained else "ollama"
         self.backend = backend
         self.index = 0
         self._syncing = False  # guards sidebar repopulation
+        # Stage 1 is loaded *before* the app starts, in run(). Loading it from
+        # inside a Textual worker spawns a subprocess (huggingface_hub) while
+        # stdio is redirected, and Python raises
+        # "ValueError: bad value(s) in fds_to_keep".
+        self._gate = gate
         # Runtime-settable via `:` commands, so a session can switch model or
         # repo without restarting.
         self.ollama_model = OLLAMA_MODEL
@@ -152,6 +167,7 @@ class OracleTUI(App):
             with VerticalScroll(id="diff-pane"):
                 yield Static(id="diff")
             with VerticalScroll(id="analysis-pane"):
+                yield Static(id="gate")
                 yield Static(id="analysis")
         yield Static(id="status")
         # Disabled until `:` opens it - a hidden-but-enabled Input still takes
@@ -162,7 +178,9 @@ class OracleTUI(App):
 
     def on_mount(self) -> None:
         self.title = "ORACLE"
-        self.sub_title = f"{self.repo or 'mock commits'} · {self.backend}"
+        which = (self.model_path.name if self.backend == "transformers"
+                 else self.ollama_model)
+        self.sub_title = f"{self.repo or 'mock commits'} · {which}"
         self._select(0)
         self.query_one("#sidebar", ListView).focus()
         self._status("[s] commits · [j/k] move · [a] analyze · [:] command "
@@ -184,18 +202,63 @@ class OracleTUI(App):
             Syntax(commit.diff or "(empty diff)", "diff",
                    line_numbers=True, theme="ansi_dark", word_wrap=False)
         )
+        self._render_gate(commit)
         self._render_analysis(commit)
+        if commit.gate is None and not commit.sha.startswith("mock"):
+            self._score_gate(commit)
+
+    def _render_gate(self, commit: Commit) -> None:
+        """Stage 1 probability, always shown - it is why Stage 2 did or did not run."""
+        target = self.query_one("#gate", Static)
+        d = commit.gate
+        if d is None:
+            target.update(Text("stage 1 · scoring…", style="dim"))
+            return
+        if isinstance(d, str):          # gate unavailable, carrying the reason
+            body = Text("stage 1 · ", style="bold")
+            body.append(d + "\n", style="yellow")
+            body.append("stage 2 still runs — press [a]\n\n", style="dim")
+            target.update(body)
+            return
+
+        style = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "green"}[d.band]
+        body = Text()
+        body.append("stage 1 · gatekeeper\n", style="bold")
+        body.append(f"{d.score:.1%} {d.band}", style=f"bold {style}")
+        body.append(f"   gate {d.threshold:.1%}\n", style="dim")
+        body.append(d.reason + "\n", style="italic dim")
+        for name, value in d.top_metrics:
+            body.append(f"  {name:<6}{value:>10g}\n", style="dim")
+        body.append("\n")
+        target.update(body)
+
+    @work(thread=True, exclusive=False)
+    def _score_gate(self, commit: Commit) -> None:
+        if self._gate is None:
+            commit.gate = "not loaded (train one: python -m ml_model.train_gate)"
+            if self.current is commit:
+                self.call_from_thread(self._render_gate, commit)
+            return
+        try:
+            decision = self._gate.decide(commit.diff)
+        except Exception as e:
+            # The message, not just the type - "unavailable (ValueError)" says
+            # nothing about which of a dozen causes it was.
+            decision = f"unavailable — {type(e).__name__}: {e}"
+        commit.gate = decision
+        if self.current is commit:
+            self.call_from_thread(self._render_gate, commit)
 
     def _render_analysis(self, commit: Commit) -> None:
         target = self.query_one("#analysis", Static)
         analysis = commit.analysis
         if analysis is None:
-            target.update(Text("semantic review\npress [a] to read the code",
+            target.update(Text("stage 2 · press [a] to run the validator",
                                style="dim"))
             return
 
         body = Text()
-        body.append("semantic review\n", style="bold")
+        body.append("stage 2 · semantic validator\n", style="bold")
         body.append(analysis.summary + "\n\n")
         if not analysis.findings:
             body.append("✓ no defects found in the diff\n", style="green")
@@ -228,7 +291,7 @@ class OracleTUI(App):
     # --- workers -----------------------------------------------------------
     @work(thread=True, exclusive=True)
     def _run_analysis(self, commit: Commit) -> None:
-        from llm_inference.client import InferenceError, OracleClient
+        from llm_explainer.client import InferenceError, OracleClient
 
         client = OracleClient(model_path=self.model_path, backend=self.backend,
                               ollama_model=self.ollama_model)
@@ -432,12 +495,39 @@ class OracleTUI(App):
             self._select(event.list_view.index)
 
 
+def load_gate():
+    """Stage 1, loaded before the TUI takes over stdio.
+
+    The encoder pulls from huggingface_hub, which may spawn a subprocess; doing
+    that inside a Textual worker fails with "bad value(s) in fds_to_keep".
+    Loading here also means the first commit is scored immediately instead of
+    waiting several seconds for a cold model.
+    """
+    try:
+        from ml_model.gate import Gatekeeper
+
+        print("loading stage 1 gatekeeper …", flush=True)
+        gate = Gatekeeper.load()
+        if gate.use_embeddings:
+            # `.encoder` only constructs the wrapper; the transformers model
+            # loads lazily on the first encode. Scoring one diff here forces
+            # that load into this process, where a subprocess spawn is legal.
+            gate.decide("diff --git a/warm.py b/warm.py\n@@ -1 +1 @@\n-a\n+b\n")
+        return gate
+    except FileNotFoundError:
+        print("no gatekeeper trained — stage 1 will be skipped", flush=True)
+    except Exception as e:
+        print(f"stage 1 unavailable ({type(e).__name__}: {e})", flush=True)
+    return None
+
+
 def run(repo: str | None = None, model_path=None, backend: str = BACKEND,
-        limit: int = 50) -> None:
+        limit: int = 50, with_gate: bool = True) -> None:
     commits = git_log(repo, limit) if repo else mock_commits()
     if not commits:
         raise SystemExit(f"no commits found in {repo}")
-    OracleTUI(commits, repo, model_path, backend).run()
+    gate = load_gate() if with_gate else None
+    OracleTUI(commits, repo, model_path, backend, gate).run()
 
 
 if __name__ == "__main__":

@@ -68,7 +68,7 @@ def to_example(diff: str, buggy: bool, analysis: Analysis | None = None,
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_user_message(
                 diff, subject, files, max_diff_chars=MAX_DIFF_CHARS,
-                context=context)},
+                context=context, include_schema=False)},
             {"role": "assistant", "content": analysis.to_json()},
         ]
     }

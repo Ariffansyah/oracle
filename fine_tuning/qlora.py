@@ -33,27 +33,50 @@ def require_torch():
     return torch
 
 
-def compute_dtype():
-    """bfloat16 where the GPU supports it, float16 otherwise.
+def native_bf16() -> bool:
+    """True only for hardware bf16, not the emulated kind.
 
-    Turing cards (GTX 16xx, RTX 20xx) have no bf16 - asking for it either throws
-    or silently falls back. Ampere and newer do. CPU keeps float32.
+    `torch.cuda.is_bf16_supported()` answers True on Turing (GTX 16xx, RTX 20xx)
+    because torch counts *emulation*. Emulated bf16 is markedly slower than fp16,
+    so the plain call is the wrong question to ask.
     """
     import torch
 
     if not torch.cuda.is_available():
+        return False
+    try:
+        return torch.cuda.is_bf16_supported(including_emulation=False)
+    except TypeError:  # older torch has no kwarg; fall back to compute capability
+        return torch.cuda.get_device_capability(0)[0] >= 8
+
+
+def compute_dtype():
+    """bfloat16 on Ampere+, float16 on older CUDA cards, float32 on CPU."""
+    import torch
+
+    if not torch.cuda.is_available():
         return torch.float32
-    return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    return torch.bfloat16 if native_bf16() else torch.float16
 
 
-def precision_flags() -> dict:
-    """`bf16=`/`fp16=` for a HuggingFace TrainingArguments, matched to the GPU."""
+def precision_flags(quantized: bool = LOAD_IN_4BIT) -> dict:
+    """`bf16=`/`fp16=` for a HuggingFace TrainingArguments, matched to the GPU.
+
+    Both off for QLoRA on pre-Ampere cards. `prepare_model_for_kbit_training`
+    leaves every trainable parameter in fp32 and bitsandbytes already computes
+    in fp16 inside the quantised layers, so the trainer's AMP layer adds nothing
+    - and it actively breaks here: accelerate turns on bf16 autocast (its own
+    bf16 check counts Turing's emulation), the fp16 GradScaler then meets bf16
+    gradients, and torch has no bf16 unscale kernel for this architecture.
+    """
     import torch
 
     if not torch.cuda.is_available():
         return {"bf16": False, "fp16": False}
-    bf16 = torch.cuda.is_bf16_supported()
-    return {"bf16": bf16, "fp16": not bf16}
+    if native_bf16():
+        return {"bf16": True, "fp16": False}
+    return {"bf16": False, "fp16": False} if quantized else {"bf16": False,
+                                                             "fp16": True}
 
 
 def quant_config(load_in_4bit: bool = LOAD_IN_4BIT):
@@ -102,6 +125,17 @@ def load_base(model_name: str, load_in_4bit: bool = LOAD_IN_4BIT):
 
     model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
     model.config.use_cache = False  # incompatible with gradient checkpointing
+
+    if load_in_4bit:
+        # The standard QLoRA prep, and not optional: it upcasts norms and the
+        # output head to fp32. Without it Qwen's bf16 config leaks bf16
+        # gradients into an fp16 GradScaler, and Turing has no bf16 unscale
+        # kernel - "_amp_foreach_non_finite_check_and_unscale_cuda not
+        # implemented for 'BFloat16'" at the first optimiser step.
+        from peft import prepare_model_for_kbit_training
+
+        model = prepare_model_for_kbit_training(
+            model, use_gradient_checkpointing=True)
     return model, tokenizer
 
 
@@ -136,15 +170,16 @@ def gpu_report() -> str:
     name = torch.cuda.get_device_name(0)
     vram = torch.cuda.get_device_properties(0).total_memory / 1e9
     cap = ".".join(map(str, torch.cuda.get_device_capability(0)))
-    bf16 = torch.cuda.is_bf16_supported()
-    note = "" if bf16 else "  (no bf16 on this architecture — using fp16)"
+    bf16 = native_bf16()
+    note = "" if bf16 else "  (no hardware bf16 on this architecture — using fp16)"
     return (f"{name}, {vram:.1f}GB VRAM, compute {cap}, "
             f"dtype={'bf16' if bf16 else 'fp16'}{note}")
 
 
 if __name__ == "__main__":
     # Config sanity that needs no GPU.
-    assert LORA_TARGET_MODULES == ["q_proj", "k_proj", "v_proj", "o_proj"]
+    assert {"q_proj", "k_proj", "v_proj", "o_proj"} <= set(LORA_TARGET_MODULES), \
+        "attention projections are the minimum LoRA target set"
     assert LORA_ALPHA == 2 * LORA_R, "alpha = 2r is the usual scaling"
 
     import torch

@@ -23,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import (BASE_MODEL, BATCH_SIZE, DPO_ADAPTER_DIR, DPO_BETA,
                     DPO_DATASET, DPO_EPOCHS, DPO_LOSS_TYPE, DPO_LR, GRAD_ACCUM,
-                    LOAD_IN_4BIT, MAX_PROMPT_LENGTH, MAX_SEQ_LENGTH,
-                    MERGED_MODEL_DIR, SFT_ADAPTER_DIR)
+                    DPO_BATCH_SIZE, DPO_MAX_LENGTH, LOAD_IN_4BIT,
+                    DPO_SFT_WEIGHT, MERGED_MODEL_DIR, SFT_ADAPTER_DIR)
 from fine_tuning.qlora import (gpu_report, load_base, lora_config,
                                merge_adapter, precision_flags, require_torch)
 
@@ -40,15 +40,21 @@ def parse_args(argv=None) -> argparse.Namespace:
                     help="skip the SFT adapter and align the base model directly")
     ap.add_argument("--output-dir", type=Path, default=Path(DPO_ADAPTER_DIR))
     ap.add_argument("--epochs", type=float, default=DPO_EPOCHS)
-    ap.add_argument("--batch-size", type=int, default=BATCH_SIZE)
+    ap.add_argument("--batch-size", type=int, default=DPO_BATCH_SIZE)
     ap.add_argument("--grad-accum", type=int, default=GRAD_ACCUM)
     ap.add_argument("--lr", type=float, default=DPO_LR)
     ap.add_argument("--beta", type=float, default=DPO_BETA,
                     help="KL penalty; lower stays closer to the reference model")
     ap.add_argument("--loss-type", default=DPO_LOSS_TYPE,
-                    help="TRL DPO loss variant (default dpop = DPO-Positive)")
-    ap.add_argument("--max-length", type=int, default=MAX_SEQ_LENGTH)
-    ap.add_argument("--max-prompt-length", type=int, default=MAX_PROMPT_LENGTH)
+                    help="comma-separated TRL loss terms; default 'sigmoid,sft' "
+                         "anchors the chosen log-prob the way DPO-Positive does")
+    ap.add_argument("--sft-weight", type=float, default=DPO_SFT_WEIGHT,
+                    help="weight of the anchoring sft term")
+    ap.add_argument("--max-length", type=int, default=DPO_MAX_LENGTH,
+                    help="covers the p90 prompt (813 tokens) plus the answer "
+                         "(max 60); logits over Qwen's 152k vocab dominate "
+                         "memory, so every token costs ~0.6MB of gradient")
+    ap.add_argument("--warmup-steps", type=int, default=20)
     ap.add_argument("--merge", action="store_true",
                     help="merge the adapter into the base weights when done")
     ap.add_argument("--merged-dir", type=Path, default=Path(MERGED_MODEL_DIR))
@@ -57,36 +63,37 @@ def parse_args(argv=None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def check_loss_type(loss_type: str) -> str:
-    """Confirm the installed TRL actually supports the requested DPO variant.
-
-    `dpop` (DPO-Positive) landed in TRL after the original DPO loss, so an older
-    install silently has no such option. Failing here with the real list beats
-    discovering it inside the trainer after the model is loaded.
-    """
+def supported_losses() -> list[str]:
+    """Loss names this TRL build accepts, read from its own documentation."""
     import inspect
 
     from trl import DPOConfig
 
-    field = DPOConfig.__dataclass_fields__.get("loss_type")
-    annotation = str(field.type) if field else ""
-    # TRL declares loss_type as a Literal[...] of the supported names.
-    supported = re.findall(r"'([a-z0-9_]+)'", annotation)
-    if not supported:  # unknown TRL layout - let the trainer validate instead
-        source = inspect.getsource(DPOConfig)
-        supported = re.findall(r"'([a-z0-9_]+)'", source.split("loss_type")[1][:400])
+    source = inspect.getsource(DPOConfig)
+    head = source.split("loss_type")[1][:900] if "loss_type" in source else ""
+    return sorted(set(re.findall(r"`'([a-z0-9_]+)'`", head)))
 
-    if supported and loss_type not in supported:
+
+def check_loss_type(loss_type: str) -> list[str]:
+    """Validate the requested loss terms before anything expensive loads."""
+    terms = [t.strip() for t in loss_type.split(",") if t.strip()]
+    if not terms:
+        raise SystemExit("--loss-type is empty")
+
+    supported = supported_losses()
+    unknown = [t for t in terms if supported and t not in supported]
+    if unknown:
         raise SystemExit(
-            f"this TRL build does not support loss_type={loss_type!r}.\n"
-            f"supported: {', '.join(sorted(set(supported)))}\n"
-            f"upgrade TRL (`pip install -U trl`) for DPO-Positive, or pass "
-            f"--loss-type sigmoid to fall back to standard DPO."
+            f"this TRL build does not support {', '.join(unknown)}.\n"
+            f"supported: {', '.join(supported)}\n"
+            f"Note there is no `dpop` loss in TRL; ['sigmoid', 'sft'] anchors "
+            f"the chosen log-probability the same way DPO-Positive does."
         )
-    print(f"DPO loss: {loss_type}"
-          + (" (DPO-Positive — penalises chosen log-prob collapse)"
-             if loss_type == "dpop" else ""))
-    return loss_type
+    note = ""
+    if terms == ["sigmoid", "sft"]:
+        note = "  (DPO + an SFT anchor on the chosen answer — DPOP's mechanism)"
+    print(f"DPO loss: {terms}{note}")
+    return terms
 
 
 def main(argv=None) -> None:
@@ -94,7 +101,7 @@ def main(argv=None) -> None:
     if not args.dataset.exists():
         raise SystemExit(
             f"{args.dataset} not found — build it first:\n"
-            f"  python -m dataset_builder.build_dpo_data --mock"
+            f"  python -m dpo_pipeline.build_dpo_data --mock"
         )
 
     torch = require_torch()
@@ -131,16 +138,37 @@ def main(argv=None) -> None:
             per_device_train_batch_size=args.batch_size,
             gradient_accumulation_steps=args.grad_accum,
             gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
+            # Paged states survive the VRAM spikes that otherwise OOM a small
+            # card mid-step; 8-bit keeps the optimiser itself off the budget.
+            optim="paged_adamw_8bit",
             learning_rate=args.lr,
             lr_scheduler_type="cosine",
-            warmup_ratio=0.1,
+            warmup_steps=args.warmup_steps,
             beta=args.beta,
             loss_type=loss_type,
+            **({"loss_weights": [1.0, args.sft_weight]}
+               if len(loss_type) > 1 else {}),
             max_length=args.max_length,
-            max_prompt_length=args.max_prompt_length,
+            # DPO holds logits for the policy *and* the reference model, and
+            # Qwen's 152k vocab makes each one ~1.2GB at 2048 tokens. Computing
+            # the reference log-probs in a separate pass first means the two are
+            # never resident together - the single biggest saving available.
+            precompute_ref_log_probs=True,
+            precompute_ref_batch_size=1,
+            # Prompts run 751-1132 tokens (median 751); padding every one to a
+            # fixed length wastes about a quarter of the activation memory that
+            # the vocab-sized logits then have to carry.
+            padding_free=True,
+            # DPOConfig no longer takes max_prompt_length; prompts are
+            # truncated within max_length by truncation_mode.
+            truncation_mode="keep_end",
             logging_steps=5,
             save_strategy="epoch",
-            **precision_flags(),
+            # Free the allocator between steps: fragmentation is what turns a
+            # "just fits" run into an OOM three steps in.
+            torch_empty_cache_steps=1,
+            **precision_flags(args.four_bit),
             report_to=[],
         ),
         train_dataset=dataset,

@@ -125,6 +125,17 @@ def render(files: list[dict], reverse: bool) -> str:
     return "".join(parts)
 
 
+def plus_minus(diff: str) -> int:
+    """Added minus deleted lines — the feature `--balance` filters on.
+
+    Taken from `count_control.py` rather than recounted here: the filter has to
+    measure exactly what the control measures, or it trims the wrong thing.
+    """
+    from count_control import features
+
+    return int(features(diff)[2])
+
+
 def first_sentence(text: str) -> str:
     m = re.search(r"(?<=[.!?])\s", text)
     return text[: m.start()] if m else text
@@ -147,6 +158,9 @@ def commits(db: Path, languages: set[str] | None = None):
     descriptions = {c: description(d) for c, d in
                     con.execute("select cve_id, description from cve")}
     repo = dict(con.execute("select hash, repo_url from commits"))
+    cwes: dict[str, set[str]] = {}
+    for cve_id, cwe_id in con.execute("select cve_id, cwe_id from cwe_classification"):
+        cwes.setdefault(cve_id, set()).add(cwe_id)
 
     current, rows = None, []
     q = ("select hash, filename, old_path, new_path, programming_language, diff "
@@ -155,7 +169,8 @@ def commits(db: Path, languages: set[str] | None = None):
     for h, filename, old_path, new_path, lang, diff in con.execute(q):
         if h != current:
             if rows:
-                yield _group(current, rows, cve_for_hash, descriptions, repo, languages)
+                yield _group(current, rows, cve_for_hash, descriptions, repo,
+                             languages, cwes)
             current, rows = h, []
         rows.append({"filename": filename, "old_path": old_path,
                      "new_path": new_path, "language": lang, "diff": diff})
@@ -164,7 +179,8 @@ def commits(db: Path, languages: set[str] | None = None):
     con.close()
 
 
-def _group(h, rows, cve_for_hash, descriptions, repo, languages) -> dict | None:
+def _group(h, rows, cve_for_hash, descriptions, repo, languages,
+           cwes=None) -> dict | None:
     cve_id = cve_for_hash.get(h)
     text = descriptions.get(cve_id, "")
     if not cve_id or not text:
@@ -180,6 +196,7 @@ def _group(h, rows, cve_for_hash, descriptions, repo, languages) -> dict | None:
         return None
     url = repo.get(h, "")
     return {"hash": h, "cve_id": cve_id, "description": text, "language": language,
+            "cwes": sorted((cwes or {}).get(cve_id, ())),
             "project": "/".join(url.rstrip("/").split("/")[-2:]), "files": rows}
 
 
@@ -196,10 +213,16 @@ def records(commit: dict) -> list[dict]:
              "findings": [{"category": "security", "explanation": text}]}
             if buggy else
             # The negative side has no human text - the CVE describes the defect,
-            # not its repair - so this one line is templated. It is a detection
-            # target, not an explanation target; score explanations on `intro`.
-            {"summary": "This change removes a vulnerable code path. "
-                        "No defect is introduced.", "findings": []}
+            # not its repair. It used to be one fixed sentence, and training on
+            # that collapsed the model: half the SFT targets were byte-identical,
+            # so memorising the string drove loss to zero (see docs/RESULTS.md
+            # §2.3). Restating this CVE keeps every negative target distinct and
+            # still unproducible without reading which way the diff moves.
+            # It is a detection target, not an explanation target; score
+            # explanations on `intro`.
+            {"summary": f"This change removes a vulnerable code path: "
+                        f"{first_sentence(text)} No defect is introduced.",
+             "findings": []}
         )
         out.append({
             "commit_id": f"{commit['hash']}:{direction}",
@@ -214,6 +237,7 @@ def records(commit: dict) -> list[dict]:
             "diff": diff,
             "analysis": analysis,
             "cve_id": commit["cve_id"],
+            "cwes": commit.get("cwes", []),
         })
     return out
 
@@ -225,8 +249,19 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--limit", type=int, default=500, help="commit pairs to emit")
     ap.add_argument("--languages", help="comma-separated, e.g. Python,Go,TypeScript")
+    ap.add_argument("--cwe", help="comma-separated CWE ids, e.g. CWE-502,CWE-94. "
+                                  "Keeps only commits whose CVE carries one.")
+    ap.add_argument("--balance", type=int, metavar="N",
+                    help="drop pairs whose diff is more than N lines out of "
+                         "balance (|added-deleted|). The reversal is a mirror, "
+                         "so the line count alone separates the classes at AUC "
+                         "0.934 unless the pairs are near-balanced. Verify with "
+                         "count_control.py; not near 0.5 means not fixed.")
     ap.add_argument("--max-per-project", type=int, default=20,
                     help="cap one repository's share; chromium and linux dominate")
+    ap.add_argument("--exclude", type=Path,
+                    help="drop every pair whose *repository* appears in this "
+                         "record file — repo-disjoint, not merely pair-disjoint")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
 
@@ -236,16 +271,40 @@ def main(argv=None) -> int:
         raise SystemExit(f"{args.db} not found — restore the CVEfixes dump first")
 
     langs = set(args.languages.split(",")) if args.languages else None
+    want_cwe = set(args.cwe.split(",")) if args.cwe else None
+    # Splitting on the pair alone is not enough: the same project's style,
+    # idioms and CVE prose would sit on both sides and the test set would
+    # measure memorisation of a repository.
+    held_repos: set[str] = set()
+    held_cves: set[str] = set()
+    if args.exclude:
+        for line in open(args.exclude):
+            if line.strip():
+                r = json.loads(line)
+                held_repos.add(r["project"])
+                # One CVE is often fixed in a fork as well as upstream. Different
+                # repository, same description - and the description is the
+                # explanation target, so it must not appear on both sides.
+                held_cves.add(r["cve_id"])
+        print(f"excluding {len(held_repos)} repositories and {len(held_cves)} CVEs "
+              f"held out in {args.exclude}")
+
     per_project: Counter = Counter()
     kept, seen = [], 0
     for commit in commits(args.db, langs):
         if commit is None:
             continue
         seen += 1
+        if commit["project"] in held_repos or commit["cve_id"] in held_cves:
+            continue
+        if want_cwe and not want_cwe.intersection(commit["cwes"]):
+            continue
         if per_project[commit["project"]] >= args.max_per_project:
             continue
         pair = records(commit)
         if not pair:
+            continue
+        if args.balance is not None and abs(plus_minus(pair[0]["diff"])) > args.balance:
             continue
         per_project[commit["project"]] += 1
         kept.extend(pair)
@@ -258,8 +317,12 @@ def main(argv=None) -> int:
             fh.write(json.dumps(r) + "\n")
 
     langs_seen = Counter(r["language"] for r in kept)
+    cwes_seen = Counter(c for r in kept for c in r["cwes"])
     print(f"{len(kept)} records ({len(kept) // 2} commit pairs) from {seen} candidates")
     print(f"  languages   {dict(langs_seen.most_common(8))}")
+    print(f"  cwes        {dict(cwes_seen.most_common(8))}")
+    print(f"  plus-minus  mean {sum(plus_minus(r['diff']) for r in kept) / max(len(kept), 1):+.2f} "
+          f"lines (near 0 across both directions is the point of --balance)")
     print(f"  projects    {len(per_project)} repositories, "
           f"top {per_project.most_common(3)}")
     print(f"  buggy       {sum(r['buggy'] for r in kept)}/{len(kept)}")

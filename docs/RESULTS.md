@@ -1,0 +1,371 @@
+# Results
+
+Every measurement taken, with the command that reproduces it. Numbers only —
+interpretation lives in `ROADMAP.md`, corpus provenance in `DATASETS.md`.
+
+Status as of 2026-08-16.
+
+---
+
+## 0. Trivial baselines
+
+No detection number in this project means anything without the matching trivial
+baseline beside it. Two are in play.
+
+| baseline | where it applies | value |
+|---|---|---|
+| always-buggy | F1 at a 50/50 base rate | **F1 0.665** |
+| always-clean | accuracy at a 50/50 base rate | **acc 0.500** |
+| counting (10 features on `+`/`-` lines) | any diff-direction task | see §4 |
+
+Separation (TPR − FPR) is the measure that survives all three: it is zero for
+any constant answer and independent of base rate.
+
+```
+python count_control.py data/cve_gate.jsonl 0.6667      # paired corpus
+python count_control.py data/apachejit_commits.jsonl 0.8 # ApacheJIT
+```
+
+---
+
+## 1. ApacheJIT detection — `data/detect_eval.jsonl`
+
+1000 commits, balanced 500/500, SZZ labels only, no teacher involved. Sampled
+from the 6030 commits the teacher never touched.
+
+```
+python evaluate.py --paired data/detect_sft220.jsonl data/detect_stock.jsonl
+```
+
+| metric | checkpoint-220 | stock 3B | trivial |
+|---|---|---|---|
+| valid JSON | 99.8% | 99.9% | — |
+| precision | 0.59 | 0.55 | 0.50 |
+| recall | 0.71 | 0.63 | 1.00 |
+| F1 | 0.64 | 0.59 | **0.665** |
+| accuracy | 0.61 | 0.56 | 0.500 |
+| **separation (TPR−FPR)** | **+21.0pp** | +11.6pp | 0.0pp |
+| grounded | 99.8% | 98.4% | — |
+| category match vs teacher | 27.1% | 26.9% | — |
+| median latency | 21.7s | 19.8s | — |
+| confusion | tp=355 fp=251 fn=143 tn=249 | tp=314 fp=256 fn=185 tn=244 | — |
+
+**Paired bootstrap, n=997, 10000 resamples:**
+
+```
+separation diff   +9.5pp   95% CI [+2.0, +17.0]   p=0.007
+McNemar           220-only-correct 209, stock-only-correct 162, p=0.017
+```
+
+Acceptance criterion 3 (beats the base model significantly) **passes**.
+Criterion 2 fails on F1 (0.64 < 0.665), passes on accuracy (0.61 > 0.500).
+
+Both checkpoints were trained on the leaked corpus, so this is the pre-fix
+baseline, not a publishable result.
+
+---
+
+## 2. CVEfixes paired detection — `data/cvefixes_eval.jsonl`
+
+500 fix commits, each emitted forward (clean) and reversed (buggy). Human-written
+CVE descriptions, no teacher. **See §4 — this corpus cannot carry a detection
+claim.**
+
+```
+python evaluate.py --paired data/cve_sft220.jsonl data/cve_stock.jsonl
+python evaluate.py --paired data/cve_trained.jsonl data/cve_stock.jsonl
+```
+
+| metric | checkpoint-220 | stock 3B | sft-cve (CVE-trained) |
+|---|---|---|---|
+| valid JSON | 98.6% | 99.6% | 100% |
+| precision / recall | 0.49 / 0.70 | 0.49 / 0.76 | — / 0.00 |
+| F1 | 0.57 | 0.60 | 0.00 |
+| accuracy | 0.48 | 0.49 | 0.500 |
+| **separation** | **−4.2pp** | **−1.8pp** | **0.0pp** |
+| positive rate | 0.72 | 0.77 | 0.00 |
+| grounded | 99.1% | 80.7% | — |
+| category match vs CVE | 12.9% | 32.1% | — |
+| median latency | 19.9s | 17.5s | 9.9s |
+| confusion | tp=345 fp=363 fn=150 tn=128 | tp=378 fp=387 fn=120 tn=111 | tp=0 fp=0 fn=500 tn=500 |
+
+**Paired bootstrap (resampled on `pair`):**
+
+```
+220 vs stock        −2.6pp   95% CI [−9.1, +4.0]   p=0.78   n=982, 497 blocks
+sft-cve vs stock    +1.8pp   95% CI [−2.3, +5.8]   p=0.20   n=996, 499 blocks
+```
+
+The `sft-cve` figure is an artifact: stock's separation is negative, so scoring
+exactly zero beats it arithmetically.
+
+### 2.1 Within-pair behaviour
+
+The same commit, forward and reversed. This is the measurement the paired
+construction exists for.
+
+| | checkpoint-220 | stock 3B |
+|---|---|---|
+| complete pairs | 488 | 497 |
+| flags both directions | 269 (55%) | 328 (66%) |
+| flags neither | 57 (12%) | 61 (12%) |
+| correct (flags intro, clears fix) | 70 | 50 |
+| backwards | 92 | 58 |
+| forced-choice accuracy | 0.432 (sign test p=0.099) | 0.463 (p=0.501) |
+
+Neither model reads direction. Both fire on "this diff looks risky."
+
+### 2.2 Per-language separation (checkpoint-220)
+
+| language | n | TPR | FPR | separation |
+|---|---|---|---|---|
+| PHP | 124 | 0.76 | 0.76 | +0.0pp |
+| C | 109 | 0.72 | 0.76 | −3.7pp |
+| C++ | 62 | 0.68 | 0.66 | +1.6pp |
+| JavaScript | 42 | 0.67 | 0.74 | −7.1pp |
+| Python | 30 | 0.60 | 0.66 | −5.5pp |
+| Ruby | 29 | 0.69 | 0.71 | −2.5pp |
+| Java | 19 | 0.84 | 0.74 | +10.5pp |
+| TypeScript | 18 | 0.67 | 0.83 | −16.7pp |
+
+Java's +10.5pp is n=19. Noise.
+
+### 2.3 The `sft-cve` collapse
+
+Trained on 1000 CVEfixes pairs, the model emits **one distinct output** across
+all 1000 records:
+
+```
+1000×  "This change removes a vulnerable code path. No defect is introduced."
+```
+
+Cause: half the SFT targets were that identical string, and `assistant_only_loss`
+puts the whole loss on the target text, so memorising it drove loss near zero on
+50% of examples. Training loss 0.925 and token accuracy 0.862 looked healthy for
+exactly that reason.
+
+**Check before any future training run:** count distinct assistant turns in the
+SFT file. Ten hours of GPU went into a null result that was visible in the data.
+
+### 2.4 Explanation quality against the human CVE text
+
+Acceptance criterion 4, measured on human ground truth — the CVE description
+beside each finding. Word overlap is content-word F1 between the finding's
+explanation and the CVE summary; identifier Jaccard is the shared-mechanism
+measure (both name the same function/symbol or not). Inference already paid.
+
+```
+python cve_quality.py data/cve_sft220.jsonl data/cve_stock.jsonl
+```
+
+| measure | checkpoint-220 | stock 3B |
+|---|---|---|
+| word overlap F1 | 0.033 (median 0.000) | 0.028 (median 0.000) |
+| nonzero word overlap | 37.1% | 23.6% |
+| identifier Jaccard | 0.009 (5.4% nonzero) | 0.004 (2.2% nonzero) |
+
+**Paired bootstrap (567 commits, 10000 resamples):**
+
+```
+word overlap      +0.005   95% CI [+0.000, +0.009]   p=0.017
+identifier Jacc   +0.004   95% CI [+0.001, +0.008]   p=0.011
+```
+
+Fine-tuning moves the model toward the human text, and the CI just excludes
+zero — but the absolute levels are the result: explanations share almost no
+vocabulary with the CVE. Read alongside §2's category match (12.9% vs 32.1%):
+the models describe the same defect at the diff level (names the changed
+symbols, e.g. `blk_mq_tag_to_rq`, `calendar displayname`) while the human text
+states the mechanism (use-after-free, XSS). The gap is a level mismatch, and
+the paper should say so — it is the honest ceiling of the "reviewable
+findings" claim, not a fixable token problem.
+
+---
+
+## 3. Stage 1 — the gate
+
+GraphCodeBERT embeddings (768) + 14 Kamei process metrics → LightGBM.
+Threshold tuned to 95% recall; "saved" is the share of commits that never reach
+the LLM.
+
+```
+python -m ml_model.train_gate --jsonl data/apachejit_commits.jsonl --ablate
+```
+
+**ApacheJIT, 7989 commits, 27.5% buggy, chronological 80/20, test n=1598:**
+
+| variant | AUC | PR-AUC | threshold | recall | LLM calls | saved |
+|---|---|---|---|---|---|---|
+| counting baseline | 0.638 | 0.363 | — | — | — | — |
+| metrics only (2013 baseline) | 0.777 | 0.660 | 0.093 | 95.1% | 79.6% | 20.4% |
+| embeddings only | 0.761 | 0.498 | 0.067 | 95.1% | 72.9% | 27.1% |
+| **embeddings + metrics** | **0.822** | **0.699** | 0.037 | 95.1% | 71.8% | 28.2% |
+
+Reading the code adds **+0.045 AUC / +0.039 PR-AUC** over process metrics alone,
+and the stack clears the counting baseline by **+0.184**. AUC 0.822 is inside the
+range DeepJIT and CC2Vec report on QT/OPENSTACK.
+
+**CVEfixes paired, 3000 records, 50% buggy, repo-disjoint split, test n=1000:**
+
+| variant | AUC | PR-AUC | recall | saved |
+|---|---|---|---|---|
+| counting baseline | **0.934** | 0.935 | — | — |
+| gate (embeddings only — corpus has no process metrics) | 0.792 | 0.792 | 95.0% | 19.2% |
+
+The gate scores *below* the counting baseline here, so it is recovering a noisy
+version of `wc`. See §4.
+
+An earlier run reported 0.832 on a stale 1164-commit copy of the corpus; the
+7989 figure above supersedes it.
+
+---
+
+## 4. The paired-corpus confound
+
+Equal total length is not equal composition. A fix adds a guard, so it carries
+more `+` lines than `-` lines; its reverse carries the mirror image.
+
+```
+mean(plus-minus lines):   reversed −9.71    fix +9.72
+```
+
+| features | AUC | PR-AUC |
+|---|---|---|
+| counting only (all 10) | **0.934** | 0.935 |
+| plus-minus lines alone | 0.908 | 0.879 |
+| plus-minus chars alone | 0.925 | 0.910 |
+
+For contrast, the same control on ApacheJIT, where the labels are real SZZ and
+nothing is reversed:
+
+| features | AUC | PR-AUC |
+|---|---|---|
+| counting only (all 10) | 0.638 | 0.363 |
+| plus-minus lines alone | 0.634 | 0.344 |
+| plus-minus chars alone | 0.629 | 0.339 |
+
+`wc` solves the paired corpus and does not solve ApacheJIT. Consequences:
+
+- **`cvefixes_eval.jsonl` cannot carry a detection claim.** It remains valid as
+  an explanation benchmark with human ground truth.
+- The gate's 0.792 there is an artifact.
+- Both LLMs sat at chance on a task a line-counter solves at 0.934 — they did not
+  even find the cue. This sharpens the negative result about the LLMs and weakens
+  any claim that the task measures defect understanding.
+
+The construction closed a smaller leak (git prints `-` before `+`; a naive sign
+flip inverts that, and both directions are re-sorted) while missing this one.
+
+---
+
+## 5. Teacher ceiling — why ApacheJIT distillation was abandoned
+
+Same 200 held-out commits, hinted versus unhinted.
+
+| teacher | P | R | F1 | acc | fn |
+|---|---|---|---|---|---|
+| hinted, deepseek-v4-flash | 0.77 | **1.00** | 0.87 | 0.86 | **0** |
+| unhinted, gpt-oss-120b (120B) | 0.56 | 0.43 | **0.49** | 0.58 | 52 |
+| always-buggy | 0.46 | 1.00 | 0.63 | 0.46 | 0 |
+
+A 120B model reading diffs unaided scores below the majority-class baseline.
+SZZ-buggy is largely not inferable from the diff alone.
+
+---
+
+## 6. Training runs
+
+| run | data | examples | steps | epochs | wall | loss | token acc |
+|---|---|---|---|---|---|---|---|
+| `sft-adapter/checkpoint-110`, `-220` | ApacheJIT (leaked corpus) | 1759 | 220 | 2 | 13h46m | — | — |
+| `sft-cve/checkpoint-172` | CVEfixes pairs | 2000 → 1376 used | 172 | 1 | 9h49m | 0.925 | 0.862 |
+
+`sft-cve` lost ~600 examples to `MAX_SEQ_LENGTH=1024`: prompts over the limit
+lose their assistant turn entirely and TRL drops them as fully masked. Pairs are
+within 2 characters of each other, so the drops are symmetric and balance holds.
+
+Hyperparameters were held identical between the two runs so that the difference
+is attributable to the data.
+
+---
+
+## 7. Corpora
+
+| file | rows | status |
+|---|---|---|
+| `apachejit_commits.jsonl` | 7989 | ✅ sound |
+| `detect_eval.jsonl` | 1000 (500/500) | ✅ sound, SZZ only |
+| `heldout_unhinted.jsonl` | 200 | ✅ sound |
+| `cvefixes_eval.jsonl` | 1000 (500 pairs) | ⚠️ explanation only, see §4 |
+| `cvefixes_train.jsonl` | 2000 (1000 pairs) | ⚠️ same, repo/CVE-disjoint from eval |
+| `cvefixes_all.jsonl` | 13850 (6925 pairs) | full scan, 3074 repositories |
+| `cve_gate.jsonl` | 3000 | train+eval concatenated, positional split at 0.6667 |
+| `labelled.jsonl` and everything derived | 1959 | ⚠️ label leakage, not reportable |
+| `mined.jsonl` | 0 | empty |
+
+`CVEfixes.db` — 52 GB, 11873 CVEs, 12923 fixes, 12107 commits, 51342 file
+changes. Full corpus language spread: PHP 3392, C 3162, JavaScript 1108,
+Python 1098, C++ 1032, Ruby 662, TypeScript 616, Go 588.
+
+---
+
+## 8. What the numbers support
+
+| claim | evidence | verdict |
+|---|---|---|
+| the gate detects | AUC 0.822 vs counting 0.638, ApacheJIT n=1598 | ✅ holds |
+| reading code beats counting lines | +0.045 AUC over metrics-only, with control | ✅ holds |
+| fine-tuning improves format | grounded 99.1% vs 80.7%, both corpora | ✅ holds |
+| fine-tuning improves detection | +9.5pp on ApacheJIT, p=0.007 | ⚠️ in-distribution only |
+| the LLM detects out of distribution | separation −4.2pp on CVEfixes | ❌ fails |
+| the LLM beats the trivial baseline | F1 0.64 vs 0.665 | ❌ fails |
+| distillation preserves the taxonomy | `security` 12.9% vs stock's 32.1% | ❌ fails |
+| CVEfixes is a clean detection benchmark | counting scores 0.934 | ❌ fails |
+
+---
+
+## 9. Next
+
+Ordered by cost. Everything in the first group is free and answers an
+acceptance criterion.
+
+### No GPU, do first
+
+1. **Explanation quality against the human text.** Never actually measured.
+   `cve_sft220.jsonl` and `cve_stock.jsonl` already hold 754 and 851 findings
+   beside the CVE descriptions that are the ground truth. This is the core of
+   acceptance criterion 4 and the strongest evidence available for the reviewable
+   findings claim, and it costs nothing — the inference is already done.
+2. **Gate/LLM disagreement rate.** Two independent verdicts on the same commits;
+   no prior JIT work has had a second one to compare. Score the gate over
+   `detect_eval.jsonl` and cross-tabulate with `detect_sft220.jsonl`.
+3. **Commit the repository.** 33 untracked source files against a single
+   `initial commit`. `corpus/cvefixes.py`, `count_control.py`,
+   `evaluate.py --paired`, three docs.
+
+### Cheap, decides the paper's shape
+
+4. **Repair the paired construction, or retire the detection claim.** Two
+   options: match pairs on `+`/`-` balance (correct, costs most of the corpus —
+   6925 pairs is enough to absorb it), or recover real vulnerability-introducing
+   commits by running SZZ over each fix, which needs full clones. Re-run
+   `count_control.py` on whatever comes out; if it is not near 0.5, it is not
+   fixed.
+5. **Rebuild the CVE training set with a non-degenerate clean target.** The clean
+   half needs a target that cannot be produced without reading the diff. Either
+   drop it from training and sample negatives elsewhere, or derive it from the
+   diff. Verify with a distinct-assistant-turn count before spending GPU.
+
+### GPU, only after 4 and 5
+
+6. **Retrain on the repaired corpus.** ~10h. This is the experiment that decides
+   whether a small model can learn direction when trained on it directly.
+7. **Phase 2 comparability** — `corpus/deepjit.py` for QT (C++) and OPENSTACK
+   (Python), authors' splits unchanged. Enables a table against published
+   DeepJIT / CC2Vec / JITLine numbers.
+
+### Reconsidered
+
+8. **The unhinted ApacheJIT relabel** (~34 GPU hours) stays deferred. A 120B
+   teacher scores F1 0.49 there, below the 0.63 baseline — the signal is not in
+   the diff, and distilling it would spend the budget to reproduce noise.

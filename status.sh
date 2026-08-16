@@ -31,19 +31,20 @@ report() {
 echo "=== training (on $H) ==="
 R 'pgrep -f "fine_tuning[.]train_sft" >/dev/null && echo "  SFT: running" || echo "  SFT: idle"
    pgrep -f "fine_tuning[.]train_dpo" >/dev/null && echo "  DPO: running" || echo "  DPO: idle"
-   tr "\r" "\n" < ~/oracle/sft.log 2>/dev/null | grep -E "[0-9]+/[0-9]+ \[" | tail -1 | sed "s/^/  /"
+   tr "\r" "\n" < "$(ls -t ~/oracle/sft*.log 2>/dev/null | head -1)" 2>/dev/null | grep -E "[0-9]+/[0-9]+ \[" | tail -1 | sed "s/^/  /"
    tr "\r" "\n" < ~/oracle/dpo.log 2>/dev/null | grep -E "[0-9]+/[0-9]+ \[" | tail -1 | sed "s/^/  /"'
 
 echo "=== gpu ==="
 R 'nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader | sed "s/^/  /"'
 
 echo "=== checkpoints ==="
-R 'for d in sft-adapter dpo-adapter oracle-merged gate-encoder; do
+R 'for d in sft-adapter sft-cve dpo-adapter oracle-merged gate-encoder; do
      if [ -d ~/oracle/artifacts/$d ]; then
        echo "  $d: $(du -sh ~/oracle/artifacts/$d | cut -f1)"
      else echo "  $d: not built"; fi
    done
-   ls -d ~/oracle/artifacts/sft-adapter/checkpoint-* 2>/dev/null | sed "s|.*/|  saved: |"'
+   ls -d ~/oracle/artifacts/*/checkpoint-* 2>/dev/null |
+     sed "s|.*/artifacts/|  saved: |"'
 
 echo "=== evals ==="
 # etimes (seconds) not etime (D-HH:MM:SS): the ETA arithmetic below needs a
@@ -57,7 +58,7 @@ if [ -n "$EV" ]; then
   MODEL=$(printf '%s' "$EV" | sed -n 's/.*--model \([^ ]*\).*/\1/p')
   # Whichever eval log was written most recently — detection on ApacheJIT and
   # on CVEfixes use the same progress format but different files.
-  PROG=$(R 'tr "\r" "\n" < "$(ls -t ~/oracle/detect.log ~/oracle/cve.log 2>/dev/null | head -1)" 2>/dev/null | grep -E "^  [0-9]+/[0-9]+ " | tail -1')
+  PROG=$(R 'tr "\r" "\n" < "$(ls -t ~/oracle/detect*.log ~/oracle/cve*.log 2>/dev/null | head -1)" 2>/dev/null | grep -E "^  [0-9]+/[0-9]+ " | tail -1')
   DONE=$(printf '%s' "$PROG" | sed -n 's|^ *\([0-9]*\)/.*|\1|p')
   TOTAL=$(printf '%s' "$PROG" | sed -n 's|^ *[0-9]*/\([0-9]*\).*|\1|p')
   echo "  running: $MODEL"
@@ -70,7 +71,7 @@ if [ -n "$EV" ]; then
 else
   echo "  idle"
 fi
-R 'for log in ~/oracle/detect.log ~/oracle/cve.log ~/oracle/eval.log; do
+R 'for log in ~/oracle/detect*.log ~/oracle/cve*.log ~/oracle/eval.log; do
      [ -f "$log" ] || continue
      line=$(tr "\r" "\n" < "$log" | grep -E "^  [0-9]+/[0-9]+ " | tail -1)
      [ -n "$line" ] && echo "  $(basename $log): $line"

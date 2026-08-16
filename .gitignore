@@ -5,3 +5,20 @@ __pycache__/
 data/*.jsonl
 data/*.csv
 data/diff_cache/
+
+# 61G: the restored CVEfixes dump plus the .sql.gz it came from
+data/cvefixes/
+# 131M of partial clones, re-fetchable by corpus/mine.py
+data/repos/
+# generated knowledge graph and its AST cache
+graphify-out/
+# sft.log, dpo.log, detect.log, cve.log
+*.log
+
+# agent / IDE tooling config, machine-local
+.claude/
+.clinerules/
+.cursor/
+.opencode/
+.windsurf/
+.cline/

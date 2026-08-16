@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -33,7 +34,7 @@ def cmd_build_sft(args) -> int:
 
 
 def cmd_build_dpo(args) -> int:
-    from dataset_builder.build_dpo_data import main as build
+    from dpo_pipeline.build_dpo_data import main as build
 
     argv = ["--out", str(args.out)]
     if args.reviews:
@@ -58,54 +59,106 @@ def cmd_train_dpo(args) -> int:
     return 0
 
 
+def _run_gate(console, diff: str, commit_id: str | None, force: bool):
+    """Stage 1. Returns (decision, ok) - ok is False when no gate is trained."""
+    from ml_model.gate import Gatekeeper
+
+    try:
+        gate = Gatekeeper.load()
+    except FileNotFoundError as e:
+        console.print(f"[dim]stage 1 skipped: {e.args[0].splitlines()[0]}[/]")
+        return None, False
+
+    metrics = None
+    if commit_id:
+        import numpy as np
+
+        from corpus.apachejit import load_rows, row_values
+        from corpus.kamei_metrics import KAMEI_FEATURES
+        from config import ROOT
+
+        csv = ROOT / "data" / "apachejit_total.csv"
+        if csv.exists():
+            src = {r["commit_id"]: r for r in load_rows(csv)}.get(commit_id)
+            if src:
+                v = row_values(src)
+                metrics = np.array([v[k] for k in KAMEI_FEATURES], dtype="float32")
+    return gate.decide(diff, metrics, force=force), True
+
+
 def cmd_analyze(args) -> int:
-    from llm_inference.client import InferenceError, OracleClient
+    from llm_explainer.client import InferenceError, OracleClient
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
 
     console = Console()
 
+    # --- gather the diff ---------------------------------------------------
     if args.commit:
-        # Context-aware path: expanded hunks + post-commit file bodies.
-        client = OracleClient(model_path=args.model, backend=args.backend)
-        try:
-            analysis = client.analyze_commit(
-                args.repo, args.commit,
-                with_context=not args.no_context,
-                progress=lambda i, n, p: console.print(
-                    f"[dim]  file {i}/{n}  {p}[/]"))
-        except InferenceError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
-        return _render(console, analysis, args.json)
+        from ui.tui_app import git_diff
 
-    if args.diff_file:
+        diff, subject = git_diff(args.repo, args.commit), args.commit
+    elif args.diff_file:
         diff, subject = Path(args.diff_file).read_text(), str(args.diff_file)
     else:
         from dataset_builder.mock_data import DEFECT_TEMPLATES
 
         diff, subject = DEFECT_TEMPLATES[0][0].format(n=8), "(mock commit)"
 
+    # --- stage 1: gatekeeper ------------------------------------------------
+    decision = None
+    if not args.no_gate:
+        decision, ok = _run_gate(console, diff, args.commit, args.always_review)
+        if ok and decision is not None:
+            colour = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "green"}[decision.band]
+            console.print(Panel(
+                f"[bold {colour}]{decision.score:.1%} {decision.band}[/]  "
+                f"(gate at {decision.threshold:.1%})\n{decision.reason}",
+                title="ORACLE · stage 1 · deep-learning gatekeeper",
+                border_style=colour))
+            if not decision.should_review:
+                console.print("[green]✓ clean — no LLM call made.[/] "
+                              "[dim]--always-review overrides.[/]")
+                if args.json:
+                    print(json.dumps({"risk_score": decision.score,
+                                      "risk_band": decision.band,
+                                      "reviewed": False, "analysis": None},
+                                     indent=2))
+                return 0
+
+    # --- stage 2: fine-tuned semantic validator -----------------------------
     client = OracleClient(model_path=args.model, backend=args.backend)
     try:
-        analysis = client.analyze(diff, subject=subject)
+        if args.commit:
+            analysis = client.analyze_commit(
+                args.repo, args.commit, with_context=not args.no_context,
+                progress=lambda i, n, p: console.print(
+                    f"[dim]  file {i}/{n}  {p}[/]"))
+        else:
+            analysis = client.analyze(diff, subject=subject)
     except InferenceError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
-    return _render(console, analysis, args.json)
+    return _render(console, analysis, args.json, decision)
 
 
-def _render(console, analysis, as_json: bool) -> int:
+def _render(console, analysis, as_json: bool, decision=None) -> int:
     from rich.panel import Panel
     from rich.table import Table
 
     if as_json:
-        print(analysis.model_dump_json(indent=2))
+        print(json.dumps({
+            "risk_score": decision.score if decision else None,
+            "risk_band": decision.band if decision else None,
+            "reviewed": True,
+            "analysis": analysis.model_dump(),
+        }, indent=2))
         return 0
 
-    console.print(Panel(analysis.summary, title="ORACLE · review",
+    console.print(Panel(analysis.summary,
+                        title="ORACLE · stage 2 · semantic validator",
                         border_style="cyan"))
     if not analysis.findings:
         console.print("[green]✓ no defects found[/]")
@@ -125,7 +178,7 @@ def cmd_tui(args) -> int:
     from ui.tui_app import run
 
     run(repo=None if args.mock else args.repo, model_path=args.model,
-        backend=args.backend, limit=args.limit)
+        backend=args.backend, limit=args.limit, with_gate=not args.no_gate)
     return 0
 
 
@@ -165,19 +218,26 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--json", action="store_true")
     a.add_argument("--no-context", action="store_true",
                    help="review the bare diff, without surrounding file context")
+    a.add_argument("--no-gate", action="store_true",
+                   help="skip stage 1 and always run the validator")
+    a.add_argument("--always-review", action="store_true",
+                   help="run stage 2 even when the gate says clean")
     a.set_defaults(func=cmd_analyze)
 
     u = sub.add_parser("tui", help="three-pane review UI")
     u.add_argument("--repo", default=".")
     u.add_argument("--mock", action="store_true", help="demo commits, no repo")
     u.add_argument("--limit", type=int, default=50)
+    u.add_argument("--no-gate", action="store_true",
+                   help="skip stage 1 entirely")
     u.set_defaults(func=cmd_tui)
 
     for p in (a, u):
         p.add_argument("--model", type=Path, default=None,
                        help=f"model dir (default {config.MERGED_MODEL_DIR})")
-        p.add_argument("--backend", choices=("transformers", "ollama"),
-                       default=config.BACKEND)
+        p.add_argument("--backend", choices=("auto", "transformers", "ollama"),
+                       default=config.BACKEND,
+                       help="auto prefers the trained model when it exists")
     return ap
 
 

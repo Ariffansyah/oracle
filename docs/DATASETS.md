@@ -143,9 +143,41 @@ repository. Instead each fix commit is emitted twice:
 | `{hash}:fix` | the fix, as committed | `false` | empty `findings` |
 
 The positive and the negative differ **only in direction** — same repository,
-same files, same lines, same length (mean 1887 chars on both sides). Every
-confound that usually decides a JIT benchmark is held fixed, so a model cannot
-score by noticing that buggy commits are bigger.
+same files, same lines, same total length (mean 1887 chars on both sides).
+
+### ⚠️ The construction leaks through line composition
+
+Equal *length* is not equal *composition*, and the difference is a trivial
+classifier. A fix typically adds a guard, so it carries more `+` lines than `-`
+lines; its reverse carries exactly the mirror image:
+
+```
+mean(plus-minus lines):  reversed -9.71    fix +9.72
+```
+
+Ten hand-written counting features — added lines, removed lines, their
+difference and ratio, the same in characters — score **AUC 0.934, PR-AUC 0.935**
+on the held-out 500 pairs, with no model and no embedding. `wc` solves this
+benchmark.
+
+Consequences, all of which must be stated wherever a number from this corpus is
+reported:
+
+- **Detection results on this corpus are meaningless without the counting
+  baseline beside them.** It is the always-buggy of this dataset. Reproduce with
+  `python count_control.py` (reads `data/cve_gate.jsonl`).
+- The GraphCodeBERT + LightGBM gate scores AUC 0.792 here — *below* the counting
+  baseline, so it is recovering a noisy version of the same cue rather than
+  reading code.
+- Both LLMs scored at chance (separation −4.2pp and −1.8pp). They did not
+  exploit the cue at all, which sharpens the negative result about them and
+  weakens any claim that the task measures defect understanding.
+
+The proper repair is real vulnerability-introducing commits — SZZ over the fix,
+against a full clone of each repository — rather than reversed fixes. Matching
+pairs on `+`/`-` balance is the cheap alternative and costs most of the corpus.
+Until one of those is done, treat this corpus as an **explanation** benchmark
+with human ground truth, not as a detection benchmark.
 
 Two construction details that are easy to get wrong, both asserted in
 `python -m corpus.cvefixes --selftest`:
@@ -153,7 +185,8 @@ Two construction details that are easy to get wrong, both asserted in
 - **Line order.** Flipping `+`/`-` signs is semantically correct but inverts
   git's convention of printing a run of `-` before its `+`. That alone is a
   perfect classifier for "this one is reversed". Both directions are re-sorted
-  into git's order; measured 0 order tells across all 1000 records.
+  into git's order; measured 0 order tells across all 1000 records. Note this
+  closed one leak and missed a larger one — see the composition warning above.
 - **The commit message is never used.** `subject` is the placeholder
   `(N files changed)`, as in `detect_eval.jsonl` — a fix message usually names
   the CVE.

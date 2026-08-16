@@ -1,5 +1,8 @@
 # ORACLE — Roadmap to a Draft Paper
 
+**Every measurement, with its reproduction command, lives in `RESULTS.md`.**
+This file carries the plan and the interpretation.
+
 **Window:** 2026-08-14 → 2026-10-14 (8 working weeks + buffer)
 **Deliverable:** a submittable draft with defensible results on established
 benchmarks.
@@ -155,12 +158,101 @@ another model."
       `data/cvefixes/CVEfixes.db`. Emits `data/cvefixes_eval.jsonl`.
 - [x] Map CVE description → `Analysis.summary` + a `security` finding. These are
       **human-written** explanations: no teacher, no leak, no cost.
-- [ ] **In flight:** checkpoint-220 then stock on 1000 CVEfixes records
-      (`run_cve.sh`, ~28s/commit, ≈8h each). Score with
-      `evaluate.py --paired data/cve_sft220.jsonl data/cve_stock.jsonl` — it
-      resamples on `pair`, which the paired construction requires.
-- [ ] Evaluate explanation quality against human text, not model text. This is
+- [x] Evaluated checkpoint-220 and stock on 1000 records / 500 pairs
+      (`run_cve.sh`). **Both models are at chance.**
+
+### Result (2026-08-15, n=982 paired, 497 blocks)
+
+| metric | checkpoint-220 | stock 3B |
+|---|---|---|
+| separation (TPR−FPR) | **−4.2pp** | **−1.8pp** |
+| positive rate | 0.72 | 0.77 |
+| F1 / accuracy | 0.57 / 0.48 | 0.60 / 0.49 |
+| grounded | **99.1%** | 80.7% |
+| category match vs CVE | 12.9% | **32.1%** |
+
+Difference −2.6pp, 95% CI `[-9.1, +4.0]`, p=0.78. Neither model beats the other,
+and neither beats zero.
+
+Within the complete pairs — the same commit forward and reversed:
+
+| | ckpt-220 | stock |
+|---|---|---|
+| flags both directions | 269 (55%) | 328 (66%) |
+| flags neither | 57 | 61 |
+| correct (flags intro, clears fix) | 70 | 50 |
+| backwards | 92 | 58 |
+| forced-choice accuracy | 0.432 (p=0.10) | 0.463 (p=0.50) |
+
+Three things this says, and only the first is about our model:
+
+1. **Neither model reads direction.** Given the same lines forward and reversed,
+   both fire on "this diff looks risky" and cannot say which way the code moved.
+   Removing every confound left nothing behind.
+2. **Fine-tuning bought format, not judgment.** Grounding 99.1% vs 80.7% is a
+   real and reproducible gain. Separation is not.
+3. **Fine-tuning on ApacheJIT destroyed the `security` category.** Stock emits
+   `security` 397 times in 851 findings; checkpoint-220 emits it 103 times in 754
+   and says `logic-error` 440 times instead — on commits that are, by
+   construction, CVEs. The Java bug-fix teacher corpus overwrote a class the base
+   model already had. This is a distillation cost worth reporting on its own.
+
+**Exit:** criteria 4 and 5 satisfied on human ground truth. The answer is
+negative.
+
+### Correction (2026-08-16): the paired corpus leaks through line composition
+
+Equal total length is not equal composition. A fix adds a guard, so it carries
+~9.7 more `+` lines than `-` lines and its reverse carries the mirror. Ten
+counting features score **AUC 0.934** on the held-out pairs with no model at all
+(`python count_control.py data/cve_gate.jsonl 0.6667`).
+
+So this corpus **cannot carry a detection claim**. It remains valid as an
+explanation benchmark with human ground truth. Two facts survive the correction,
+and one gets stronger:
+
+- Both LLMs sat at chance on a task a line-counter solves at 0.934. They did not
+  even find the cue.
+- The gate scores 0.792 here — *below* the counting baseline, so it is
+  recovering a noisy version of `wc`, not reading code.
+
+Every detection number from a paired corpus now ships with its counting baseline,
+the same way F1 ships with always-buggy.
+
+---
+
+## Stage 1 — the gate, measured (2026-08-16)
+
+The first positive result in this project, and it is not the LLM.
+
+`python -m ml_model.train_gate --jsonl data/apachejit_commits.jsonl --ablate`,
+7989 commits, chronological 80/20 split, test n=1598, target recall 95%:
+
+| variant | AUC | PR-AUC | LLM calls saved |
+|---|---|---|---|
+| counting baseline | 0.638 | 0.363 | — |
+| metrics only (the 2013 baseline) | 0.777 | 0.660 | 20.4% |
+| embeddings only | 0.761 | 0.498 | 27.1% |
+| **embeddings + metrics** | **0.822** | **0.699** | 28.2% |
+
+Reading the code adds **+0.045 AUC and +0.039 PR-AUC** over process metrics
+alone, and the whole stack clears the counting baseline by +0.184. AUC 0.822 is
+inside the range DeepJIT and CC2Vec report on QT/OPENSTACK.
+
+This is what makes the two-stage framing evidential rather than face-saving:
+the classifier detects (0.822), the LLM explains (99.1% grounded) and cannot
+detect out of distribution (separation −4.2pp). Each component is used where it
+measures well.
+
+**Do not pipe the gate's verdict into the explainer's prompt.** That is the
+`corpus/label.py` hint in a new costume — the teacher complied on 98.2% of buggy
+commits when told the answer. The gate selects *who* gets an LLM call; the LLM
+reaches its own verdict, and the disagreement rate between the two is itself a
+number nobody in JIT has been able to report.
+- [x] Evaluate explanation quality against human text, not model text. This is
       the strongest evidence available for the "reviewable findings" claim.
+      Measured: word-overlap F1 0.033 (220) vs 0.028 (stock), p=0.017 — both
+      near zero; fine-tuning gains significance, not magnitude. See RESULTS §2.4.
 - [ ] Document the caveat honestly: CVE text is written post-hoc with knowledge
       of the bug, and describes the vulnerability rather than always pointing at
       diff lines.

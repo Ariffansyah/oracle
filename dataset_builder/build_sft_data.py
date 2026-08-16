@@ -24,6 +24,7 @@ import csv
 import json
 import random
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -131,7 +132,30 @@ def build_mock(n: int = 60, seed: int = 0) -> list[dict]:
     return out
 
 
+def distinct_targets(rows: list[dict]) -> tuple[int, str, int]:
+    """How many distinct assistant turns, and the most repeated one.
+
+    `sft-cve` was trained on a file where half the targets were byte-identical.
+    Memorising that one string drove the loss near zero, training looked healthy,
+    and the model emitted exactly one output for all 1000 eval records — ten GPU
+    hours for a null result visible in the data. Never write an SFT file without
+    looking at this number.
+    """
+    turns = Counter(m["content"] for r in rows for m in r["messages"]
+                    if m["role"] == "assistant")
+    top, n = turns.most_common(1)[0] if turns else ("", 0)
+    return len(turns), top, n
+
+
 def write_jsonl(rows: list[dict], path: Path) -> Path:
+    distinct, top, n = distinct_targets(rows)
+    share = n / max(len(rows), 1)
+    print(f"  {distinct} distinct assistant turns in {len(rows)} rows; "
+          f"most repeated {share:.0%} ({n}x)")
+    if share >= 0.2:
+        print(f"  !!! {share:.0%} of targets are one string — training on this "
+              f"collapses the model. Vary the target before you spend the GPU:\n"
+              f"      {top[:160]}")
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as fh:
         for row in rows:

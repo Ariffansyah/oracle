@@ -100,7 +100,7 @@ def from_csv(path: Path) -> list[dict]:
     return out
 
 
-def from_jsonl(path: Path) -> list[dict]:
+def from_jsonl(path: Path, langs: set[str] | None = None) -> list[dict]:
     """Records written by a fetcher: {diff, buggy, subject, files, analysis?}."""
     out = []
     with open(path) as fh:
@@ -109,6 +109,8 @@ def from_jsonl(path: Path) -> list[dict]:
                 continue
             rec = json.loads(line)
             if not rec.get("diff"):
+                continue
+            if langs and rec.get("language") not in langs:
                 continue
             analysis = (Analysis.model_validate(rec["analysis"])
                         if rec.get("analysis") else None)
@@ -172,12 +174,14 @@ def main(argv=None) -> None:
     ap.add_argument("--mock", action="store_true", help="generate synthetic commits")
     ap.add_argument("--n", type=int, default=60, help="how many, with --mock")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--langs", nargs="*", default=None,
+                    help="keep only records whose `language` field is in this list")
     args = ap.parse_args(argv)
 
     if args.mock:
         rows = build_mock(args.n, args.seed)
     elif args.jsonl:
-        rows = from_jsonl(args.jsonl)
+        rows = from_jsonl(args.jsonl, langs=set(args.langs) if args.langs else None)
     else:
         csv_path = args.csv or Path(RAW_COMMITS_CSV)
         if not csv_path.exists():

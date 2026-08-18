@@ -94,6 +94,25 @@ def main(argv=None) -> int:
     print(f"{len(rows)} commits, {y.mean():.1%} buggy, "
           f"train {len(tr)} / test {len(te)}\n")
 
+    # Commit-message channel (DeepJIT's signal, unused here so far). Fitted on
+    # the train split only — fitting on everything leaks test vocabulary into
+    # the features.
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    subjects = [r.get("subject", "") or "" for r in rows]
+    text = np.zeros((len(rows), 1), dtype=np.float32)
+    if any(s.strip() for s in subjects):
+        vec = TfidfVectorizer(ngram_range=(1, 2), min_df=3,
+                              max_features=300, sublinear_tf=True)
+        text = vec.fit_transform([s for i, s in enumerate(subjects)
+                                  if i in tr]).toarray().astype(np.float32)
+        # transform test rows against the train vocabulary
+        te_text = vec.transform([subjects[i] for i in te]).toarray()
+        full = np.zeros((len(rows), text.shape[1]), dtype=np.float32)
+        full[tr] = text
+        full[te] = te_text
+        text = full
+        print(f"subject text: {text.shape[1]} tf-idf dims (fit on train)\n")
+
     results = []
     for model_name in [e.strip() for e in args.encoders.split(",") if e.strip()]:
         short = model_name.split("/")[-1]
@@ -111,10 +130,12 @@ def main(argv=None) -> int:
         feature_sets = {
             "emb": emb,
             "emb+stats": np.hstack([emb, stats]),
+            "emb+text": np.hstack([emb, text]),
         }
         if metrics is not None:
             feature_sets["emb+metrics"] = np.hstack([emb, metrics])
             feature_sets["emb+metrics+stats"] = np.hstack([emb, metrics, stats])
+            feature_sets["emb+metrics+text"] = np.hstack([emb, metrics, text])
 
         for fname, X in feature_sets.items():
             for head_kind in ("lightgbm", "mlp"):

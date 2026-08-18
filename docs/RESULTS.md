@@ -200,10 +200,28 @@ python -m ml_model.train_gate --jsonl data/apachejit_commits.jsonl --ablate
 | metrics only (2013 baseline) | 0.777 | 0.660 | 0.093 | 95.1% | 79.6% | 20.4% |
 | embeddings only | 0.761 | 0.498 | 0.067 | 95.1% | 72.9% | 27.1% |
 | **embeddings + metrics** | **0.822** | **0.699** | 0.037 | 95.1% | 71.8% | 28.2% |
+| fine-tuned encoder + metrics | 0.828 | 0.709 | 0.017 | 95.0% | 70.4% | 29.6% |
+| frozen emb+metrics, head re-swept | 0.829 | 0.702 | — | 95% | 69.9% | 30.1% |
 
 Reading the code adds **+0.045 AUC / +0.039 PR-AUC** over process metrics alone,
 and the stack clears the counting baseline by **+0.184**. AUC 0.822 is inside the
 range DeepJIT and CC2Vec report on QT/OPENSTACK.
+
+**Fine-tuning the encoder (4 epochs, 6391 train commits, 512 tokens, ~14h on
+the 1660 SUPER) buys +0.006 AUC — inside noise.** Epoch 3 is the best checkpoint
+(0.8283 / 0.7088); a head re-sweep on frozen embeddings scores the same
+(0.8293 / 0.702, `python -m ml_model.sweep_gate`). The frozen gate stays Stage
+1; the encoder run settles the question the paper needed asked. Full table:
+
+```
+epoch 1  loss=0.833  AUC=0.8162  PR-AUC=0.6874  saved=26.6%
+epoch 2  loss=0.742  AUC=0.8179  PR-AUC=0.6977  saved=26.8%
+epoch 3  loss=0.664  AUC=0.8283  PR-AUC=0.7088  saved=29.6%
+epoch 4  loss=0.547  AUC=0.8266  PR-AUC=0.7065  saved=30.4%
+```
+
+The head sweep also tested unixcoder-base (0.824) and codebert-base (0.822)
+against graphcodebert (0.829) — graphcodebert stays the encoder.
 
 **CVEfixes paired, 3000 records, 50% buggy, repo-disjoint split, test n=1000:**
 
@@ -369,3 +387,75 @@ acceptance criterion.
 8. **The unhinted ApacheJIT relabel** (~34 GPU hours) stays deferred. A 120B
    teacher scores F1 0.49 there, below the 0.63 baseline — the signal is not in
    the diff, and distilling it would spend the budget to reproduce noise.
+
+### Prompt rules cannot move the SFT'd 3B (17 Aug)
+
+Divide-by-zero in new Go code (`calculator.go`): summary says "risky, no zero
+check", findings stay empty. Tried, in order, on the served checkpoint-220:
+
+- `INFERENCE_SAMPLES=3` consensus: no change (majority of structured heads
+  says "no finding"; consensus amplifies the bias, does not fix it).
+- `SYSTEM_PROMPT` rule "missing validation in new code IS a finding", then
+  promoted to rule 3 with an inline divide example: no change, single-sample
+  or consensus.
+
+Cause: SFT targets (Java bug-fix commits) contain findings only for changed-
+line wrongness (flips, null derefs); "absent guard in new code" is outside the
+target distribution, and prompt text cannot override the imprint at 3B.
+
+Fix is data, not prompt: mined Go/JS commits whose fixes ADD guards (e.g.
+dovecot `return -1` on error) put missing-validation into the SFT target
+distribution. Until then, measure the gap: summaries flagging risk with empty
+findings = unreported-risk rate, report it as a known limitation.
+
+### Labelling throughput was a retry bug, not a token budget (18 Aug)
+
+Pass 1 over `data/multilang_commits.jsonl` had been averaging ~5 minutes per
+commit — 14 records in 75 minutes on 18 Aug, against a per-minute budget that
+allows roughly four. The worker thread spent that time in `time.sleep`, not in
+the network, so the ceiling was self-inflicted.
+
+Measured cause, in three steps:
+
+1. One labelling call costs `1863` total tokens (1226 prompt, 637 completion,
+   of which 502 are reasoning) and returns in ~1.8s. Reproduce by posting
+   `SYSTEM_PROMPT` + `build_user_message(...)` for one record and reading
+   `usage` off the response.
+2. Groq's free tier caps **tokens per day**, not only per minute:
+   `Rate limit reached ... on tokens per day (TPD): Limit 200000, Used 199955`.
+   The three keys sit in three *different* organisations, so the daily budget
+   is 3 × 200,000 = **600,000 tokens/day ≈ 320 commits/day**, and the 8000 TPM
+   limit is never the binding constraint over a long run.
+3. An exhausted key answers with `retry-after` in the hundreds of seconds (716s
+   and 960s observed). `ask()` rotated keys by `attempt % len(keys)`, so every
+   commit began on the same spent key, slept out its full daily penalty, and
+   only then tried a live one. That sleep *is* the five minutes.
+
+Fixed in `corpus/label.py`: a 429 whose penalty exceeds 60s parks that key in
+`_BLOCKED` and the call retries immediately on the next live key; only when
+every key is parked does it wait, and then only until the earliest unblocks.
+Short (per-minute) 429s still sleep their `retry-after`. Alongside it,
+`_pace()` reads `x-ratelimit-remaining-tokens` off each response and sleeps
+exactly the shortfall before the next call, so the per-minute bucket is spent
+smoothly instead of by collision.
+
+Two smaller defects fell out of the same read: `--sleep` was declared and never
+applied (the `--sleep 18` in `label_watch.sh` did nothing, and is now dropped),
+and `Provider.keys` returned `""` for unset key variables, which would send an
+empty bearer token as though it were a fallback.
+
+Measured after the fix by counting records written to
+`data/labelled_multilang.jsonl` over a 300-second window (492 -> 507):
+**3.0 commits/min**, against **0.19/min** before (14 records in 75 minutes) —
+a **16x** speedup, with no change to the teacher, the prompt, or `--samples`.
+`--samples` was already 1: it is the argparse default and the launch command
+never overrode it, so the "3x faster with `--samples 1`" note in the old handoff
+was offering a speedup that did not exist.
+
+That burst rate holds only while daily budget remains. The daily cap is the real
+limit and it does not go away: at ~1,863 tokens a commit against 600,000
+tokens/day the sustained ceiling is ~320 commits/day, so the remaining ~1,250
+commits of passes 1 and 2 need roughly **four days** of free-tier budget. The
+levers, in order, are more Groq organisations, a paid tier, or
+`reasoning_effort: "low"` on the teacher call — 502 of the 637 completion tokens
+are reasoning tokens.

@@ -155,7 +155,7 @@ TEMPERATURE = _env("TEMPERATURE", 0.0)  # greedy: a verdict should be reproducib
 # With >1, the reviewer answers several times and keeps only findings a majority
 # of samples agree on. Costs N times the latency, removes one-off hallucinations
 # - the failure mode that matters most when the output is prose.
-INFERENCE_SAMPLES = _env("INFERENCE_SAMPLES", 1)
+INFERENCE_SAMPLES = _env("INFERENCE_SAMPLES", 3)
 INFERENCE_SAMPLE_TEMPERATURE = _env("INFERENCE_SAMPLE_TEMPERATURE", 0.6)
 MAX_DIFF_CHARS = _env("MAX_DIFF_CHARS", 12000)
 

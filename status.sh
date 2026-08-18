@@ -33,6 +33,13 @@ R 'pgrep -f "fine_tuning[.]train_sft" >/dev/null && echo "  SFT: running" || ech
    pgrep -f "fine_tuning[.]train_dpo" >/dev/null && echo "  DPO: running" || echo "  DPO: idle"
    tr "\r" "\n" < "$(ls -t ~/oracle/sft*.log 2>/dev/null | head -1)" 2>/dev/null | grep -E "[0-9]+/[0-9]+ \[" | tail -1 | sed "s/^/  /"
    tr "\r" "\n" < ~/oracle/dpo.log 2>/dev/null | grep -E "[0-9]+/[0-9]+ \[" | tail -1 | sed "s/^/  /"'
+R 'if pgrep -f "ml_model[.]train_encoder" >/dev/null; then
+     echo "  encoder: running"
+     tr "\r" "\n" < ~/oracle/encoder_full.log 2>/dev/null | grep -E "epoch |best " | tail -2 | sed "s/^/    /"
+     pgrep -f "ml_model[.]train_encoder" >/dev/null && nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader | sed "s/^/    gpu: /"
+   else
+     echo "  encoder: idle"
+   fi'
 
 echo "=== gpu ==="
 R 'nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader | sed "s/^/  /"'
@@ -44,7 +51,9 @@ R 'for d in sft-adapter sft-cve dpo-adapter oracle-merged gate-encoder; do
      else echo "  $d: not built"; fi
    done
    ls -d ~/oracle/artifacts/*/checkpoint-* 2>/dev/null |
-     sed "s|.*/artifacts/|  saved: |"'
+     sed "s|.*/artifacts/|  saved: |"
+   pt=~/oracle/artifacts/gate_encoder.pt
+   [ -f "$pt" ] && echo "  gate_encoder.pt: $(du -h $pt | cut -f1)  $(date -r $pt +%m-%d\ %H:%M)"'
 
 echo "=== evals ==="
 # etimes (seconds) not etime (D-HH:MM:SS): the ETA arithmetic below needs a
@@ -84,17 +93,30 @@ R 'for log in ~/oracle/detect*.log ~/oracle/cve*.log ~/oracle/eval.log; do
 
 echo "=== local jobs ==="
 pgrep -f "corpus[.]label" >/dev/null && echo "  labelling: running" || echo "  labelling: idle"
-# Progress of the newest labelling run, wherever its log was written.
-LBL=$(ls -t /tmp/claude-*/*/*/scratchpad/relabel*.log logs/relabel*.log 2>/dev/null | head -1)
+# The log counter resets on every watchdog restart, so count from the output
+# file — the ground truth — and take the total from the log's denominator.
+LAB_DONE=$(wc -l < data/labelled_multilang.jsonl 2>/dev/null || echo 0)
+LAB_TOTAL=$(grep -oE "[0-9]+ commits to label" label_multilang.log 2>/dev/null | grep -oE "[0-9]+" | tail -1)
+[ -n "$LAB_TOTAL" ] && printf '    %s/%s labelled\n' "$LAB_DONE" "$LAB_TOTAL"
+LBL=$(ls -t /tmp/claude-*/*/*/scratchpad/relabel*.log logs/relabel*.log label*.log 2>/dev/null | head -1)
 [ -n "$LBL" ] && grep -E "^  [0-9]+/[0-9]+  kept" "$LBL" | tail -1 | sed "s/^ */    /"
 pgrep -f "corpus[.]fetch" >/dev/null && echo "  fetching:  running" || echo "  fetching:  idle"
-pgrep -f "corpus[.]mine"  >/dev/null && echo "  mining:    running" || echo "  mining:    idle"
+pgrep -f "corpus[.]mine"  >/dev/null && echo "  mining:    running ($(tail -1 mining.log 2>/dev/null))" || echo "  mining:    idle"
+for J in fill unixcoder codebert; do
+  LOG=embed_$J.log
+  # Freshness beats pgrep: the log only advances while encoding, and pgrep
+  # patterns match this script's own wrapper command line.
+  if [ -f "$LOG" ] && [ $(( $(date +%s) - $(stat -c %Y "$LOG") )) -lt 300 ]; then
+    printf '  %-9s running   %s\n' "$J" "$(tr '\r' '\n' < "$LOG" | tail -1 | sed 's/^/    /')"
+  fi
+done
 
 echo "=== corpus ==="
 for f in data/labelled.jsonl data/labelled_train.jsonl data/labelled_heldout.jsonl \
          data/heldout_unhinted.jsonl data/mined.jsonl data/detect_eval.jsonl \
          data/cvefixes_eval.jsonl data/apachejit_commits.jsonl data/oracle_sft.jsonl \
-         data/oracle_dpo_onpolicy.jsonl; do
+         data/oracle_dpo_onpolicy.jsonl data/multilang_commits.jsonl \
+         data/labelled_multilang.jsonl; do
   [ -f "$f" ] && printf '  %-34s %6d\n' "$(basename "$f")" "$(wc -l < "$f")"
 done
 

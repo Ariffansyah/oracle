@@ -26,6 +26,7 @@ import argparse
 import concurrent.futures as cf
 import json
 import os
+import re
 import sys
 import time
 from collections import Counter
@@ -53,14 +54,18 @@ class Provider:
     key_env: str
 
     @property
-    def key(self) -> str:
-        key = os.getenv(self.key_env, "")
-        if not key and self.key_env:
+    def keys(self) -> list[str]:
+        # Comma-separated env names = fallback keys. A free-tier Groq account
+        # rate-limits per minute, so three accounts tripling the token budget
+        # is cheaper than waiting one account out.
+        envs = [e.strip() for e in self.key_env.split(",")]
+        keys = [v for e in envs if (v := os.getenv(e, "").strip())]
+        if not keys:
             raise SystemExit(
-                f"{self.key_env} is not set.\n"
-                f"  export {self.key_env}=..."
+                f"none of {envs} is set.\n"
+                f"  export GROQ_API_KEY=... GROQ_API_KEY2=... GROQ_API_KEY3=..."
             )
-        return key
+        return keys
 
 
 PROVIDERS = {
@@ -73,10 +78,11 @@ PROVIDERS = {
     "openai": Provider("openai", "https://api.openai.com/v1",
                        "gpt-4o-mini", "OPENAI_API_KEY"),
     # Free tier, very fast, OpenAI-compatible. Rate limits are per-minute rather
-    # than per-request, so the 429 backoff below matters more here than
-    # elsewhere - pair it with --sleep.
+    # than per-request, and per-day on top of that, so ask() paces on the
+    # rate-limit headers and rotates keys rather than sleeping a limit out.
     "groq": Provider("groq", "https://api.groq.com/openai/v1",
-                     "openai/gpt-oss-120b", "GROQ_API_KEY"),
+                     "openai/gpt-oss-120b",
+                     "GROQ_API_KEY,GROQ_API_KEY2,GROQ_API_KEY3"),
     "together": Provider("together", "https://api.together.xyz/v1",
                          "Qwen/Qwen2.5-Coder-32B-Instruct", "TOGETHER_API_KEY"),
     "ollama": Provider("ollama", "http://192.168.1.170:11434/v1",
@@ -84,16 +90,82 @@ PROVIDERS = {
 }
 
 
+# Groq rations tokens per minute and reports the bucket on every response, so
+# the wait before the next call is arithmetic, not guesswork. The previous
+# blind ladder (10s, 20s, 30s...) slept ~5 minutes per commit against a budget
+# that allows ~4 per minute; pacing on the header measured 16x faster.
+_RATE: dict[str, dict] = {}          # api key -> last seen token bucket
+_BLOCKED: dict[str, float] = {}      # api key -> unix time it is usable again
+_COST = [2000.0]                     # largest total_tokens a commit has cost
+
+
+def _duration(v: str | None) -> float | None:
+    """Seconds from '3', '9.202s' or '1m26.4s'. None if unparseable."""
+    if not v:
+        return None
+    m = re.fullmatch(r"(?:(\d+(?:\.\d+)?)m)?(\d+(?:\.\d+)?)s?", v.strip())
+    return None if not m else float(m.group(1) or 0) * 60 + float(m.group(2))
+
+
+def _observe(key: str, resp, used: float | None = None) -> None:
+    """Record the token bucket a response reported for this key."""
+    try:
+        bucket = {"limit": float(resp.headers["x-ratelimit-limit-tokens"]),
+                  "remaining": float(resp.headers["x-ratelimit-remaining-tokens"]),
+                  "at": time.time()}
+    except (KeyError, ValueError):
+        return
+    _RATE[key] = bucket
+    if used:
+        # Bias to the largest commit seen: under-estimating the cost buys a
+        # 429, over-estimating only costs a few idle seconds.
+        _COST[0] = max(_COST[0], used)
+
+
+def _pace(key: str) -> None:
+    """Sleep exactly long enough for this key's next call to fit the bucket."""
+    b = _RATE.get(key)
+    if not b:
+        return
+    refill = b["limit"] / 60.0                        # tokens per second
+    have = min(b["remaining"] + (time.time() - b["at"]) * refill, b["limit"])
+    short = min(_COST[0], b["limit"]) - have
+    if short > 0:
+        time.sleep(short / refill)
+
+
+def _pick_key(keys: list[str]) -> str:
+    """The first key not rate-limited right now.
+
+    Groq's free tier caps tokens per *day* as well as per minute (200k TPD per
+    organisation, measured 2026-08-18), and it answers an exhausted key with a
+    `retry-after` of several hundred seconds. Sleeping that out is the whole
+    reason a pass averaged five minutes a commit: attempt 0 always reached for
+    the same spent key. Rotating past it costs nothing.
+    """
+    now = time.time()
+    for k in keys:
+        if _BLOCKED.get(k, 0.0) <= now:
+            return k
+    soonest = min(keys, key=lambda k: _BLOCKED[k])
+    wait = _BLOCKED[soonest] - now
+    print(f"  all {len(keys)} keys rate-limited, waiting {wait:.0f}s",
+          file=sys.stderr, flush=True)
+    time.sleep(max(wait, 1.0))
+    return soonest
+
+
 def ask(provider: Provider, model: str, system: str, user: str,
-        temperature: float, timeout: int, retries: int = 8) -> str:
-    # 8, not 3. A free tier rations tokens per minute rather than per request
-    # (Groq: 8000 TPM, and one commit costs ~2650), so a 429 is the normal case
-    # and not an error - it means "wait five seconds". Three retries turned a
-    # queue into a failure and lost the commit permanently.
-    """One chat completion. Returns raw content; parsing happens later."""
+        temperature: float, timeout: int, retries: int = 12) -> str:
+    """One chat completion. Returns raw content; parsing happens later.
+
+    12 retries, not 3. A free tier rations tokens per minute *and* per day, so a
+    429 is the normal case and not an error, and an attempt spent rotating past
+    a key that is out of daily budget is not an attempt spent on this request.
+    Three retries turned a queue into a failure and lost the commit permanently.
+    """
+    keys = provider.keys
     headers = {"Content-Type": "application/json"}
-    if provider.key:
-        headers["Authorization"] = f"Bearer {provider.key}"
 
     payload = {
         "model": model,
@@ -103,30 +175,50 @@ def ask(provider: Provider, model: str, system: str, user: str,
         "response_format": {"type": "json_object"},
     }
     for attempt in range(retries):
+        # A 429 says "this account is out of budget", and another account may
+        # not be - so rotate to a live key rather than waiting this one out.
+        key = _pick_key(keys)
+        headers["Authorization"] = f"Bearer {key}"
+        _pace(key)
         try:
             resp = requests.post(f"{provider.base_url}/chat/completions",
                                  headers=headers, json=payload, timeout=timeout)
         except requests.RequestException as e:
             if attempt == retries - 1:
                 raise RuntimeError(f"{provider.name}: {e}") from e
-            time.sleep(2 ** attempt)
+            print(f"  retry {attempt}: {type(e).__name__}", file=sys.stderr,
+                  flush=True)
+            time.sleep(min(2 ** attempt, 30))
             continue
 
-        if resp.status_code == 429:  # rate limited: back off and retry
-            wait = int(resp.headers.get("retry-after", 10 * (attempt + 1)))
+        _observe(key, resp)
+        if resp.status_code == 429:
+            wait = _duration(resp.headers.get("retry-after")) or 5.0
+            if wait > 60:
+                # Minutes of penalty means the per-day budget, not the
+                # per-minute one. Park the key and reach for the next.
+                _BLOCKED[key] = time.time() + wait
+                print(f"  key ...{key[-4:]} spent for {wait / 60:.0f}m: "
+                      f"{resp.text[:120]}", file=sys.stderr, flush=True)
+                continue
             time.sleep(wait)
             continue
         if not resp.ok:
             if attempt == retries - 1:
                 raise RuntimeError(f"{provider.name} {resp.status_code}: "
                                    f"{resp.text[:200]}")
-            time.sleep(2 ** attempt)
+            print(f"  retry {attempt}: {resp.status_code} {resp.text[:80]}",
+                  file=sys.stderr, flush=True)
+            time.sleep(min(2 ** attempt, 30))
             continue
-        content = resp.json()["choices"][0]["message"]["content"]
+        body = resp.json()
+        _observe(key, resp, (body.get("usage") or {}).get("total_tokens"))
+        content = body["choices"][0]["message"]["content"]
         if not content or not content.strip():
             # A 200 with an empty body is a transient server hiccup, not an
             # answer. Counting it as a failure loses the commit permanently.
-            time.sleep(2 ** attempt)
+            print(f"  retry {attempt}: empty body", file=sys.stderr, flush=True)
+            time.sleep(min(2 ** attempt, 30))
             continue
         return content
     raise RuntimeError(f"{provider.name}: exhausted retries")
@@ -199,7 +291,9 @@ def main(argv=None) -> int:
                     help="responses per commit; >1 enables majority voting")
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--timeout", type=int, default=180)
-    ap.add_argument("--sleep", type=float, default=0.0)
+    ap.add_argument("--sleep", type=float, default=0.0,
+                    help="extra seconds between requests, on top of the "
+                         "rate-limit pacing ask() already does")
     ap.add_argument("--workers", type=int, default=8,
                     help="parallel requests; labelling is IO-bound, and a "
                          "reasoning teacher spends minutes per commit")
@@ -220,7 +314,7 @@ def main(argv=None) -> int:
 
     provider = PROVIDERS[args.provider]
     model = args.model or provider.model
-    provider.key  # fail now, not after 500 requests
+    provider.keys  # fail now, not after 500 requests
 
     records = [json.loads(l) for l in open(args.inp) if l.strip()]
     done = set()
@@ -286,6 +380,8 @@ def main(argv=None) -> int:
                           args.temperature if s == 0 else 0.7, args.timeout)
             raws.append(content)
             analyses.append(Analysis.model_validate(extract_json(content)))
+            if args.sleep:
+                time.sleep(args.sleep)
         return rec, analyses, raws
 
     with open(args.out, "a") as out, open(args.raw, "a") as raw:
@@ -315,6 +411,7 @@ def main(argv=None) -> int:
                     out.write(json.dumps({
                         "commit_id": rec["commit_id"],
                         "project": rec.get("project", ""),
+                        "language": rec.get("language", ""),
                         "buggy": rec.get("buggy"),
                         "subject": rec.get("subject", ""),
                         "files": rec.get("files", []),
@@ -394,5 +491,28 @@ if __name__ == "__main__":
     three = [Finding(category="other", explanation="x" * 40) for _ in range(3)]
     assert not verify(Analysis(summary="s", findings=three), buggy=False,
                       hinted=False)[0]
-    print("voting + verification ok")
+    # Rate-limit pacing: the header parser and the refill arithmetic.
+    assert _duration("3") == 3.0
+    assert _duration("9.202s") == 9.202
+    assert abs(_duration("1m26.4s") - 86.4) < 1e-9
+    assert _duration("") is None and _duration("soon") is None
+    _RATE["k1"] = {"limit": 8000.0, "remaining": 8000.0, "at": time.time()}
+    t = time.time(); _pace("k1")
+    assert time.time() - t < 0.1, "a full bucket must not sleep"
+    t = time.time(); _pace("never-seen")
+    assert time.time() - t < 0.1, "an unseen key must not sleep"
+    # 214 tokens left, 2000 needed, refilling at 8000/60 = 133/s -> ~13.4s.
+    _RATE["k1"] = {"limit": 8000.0, "remaining": 214.0, "at": time.time()}
+    t = time.time(); _pace("k1")
+    assert 12.0 < time.time() - t < 15.0, "pace should wait for the shortfall"
+    # A key parked for the day must be skipped, not waited out.
+    _BLOCKED["k1"] = time.time() + 700
+    t = time.time()
+    assert _pick_key(["k1", "k2"]) == "k2", "must rotate past a spent key"
+    assert time.time() - t < 0.1, "rotating must not sleep"
+    # Everything parked: wait for the one that frees up first, not for keys[0].
+    _BLOCKED["k2"] = time.time() + 1
+    assert _pick_key(["k1", "k2"]) == "k2", "must wait out the soonest key"
+    _BLOCKED.clear()
+    print("voting + verification + pacing ok")
     raise SystemExit(main())

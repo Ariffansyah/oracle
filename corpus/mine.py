@@ -17,8 +17,10 @@ Everything else, sampled from the same history, is the clean class. Language
 comes from the file extensions in the diff, so the corpus can be balanced or
 filtered per language later.
 
-Clones are partial (`--filter=blob:none`): full history for blame, blobs fetched
-lazily, so a large repo costs megabytes rather than gigabytes.
+Clones are full, without checkout: blame and `git show` read everything from
+disk, so SZZ never waits on the network. A full next.js clone is ~1 GB; the
+partial-clone trick saved disk but made blame fetch blobs one at a time over
+HTTPS, which is why the runs never finished.
 """
 
 from __future__ import annotations
@@ -67,16 +69,27 @@ def git(args: list[str], repo: Path, default: str | None = None) -> str:
 
 
 def clone(slug: str, dest: Path) -> Path | None:
-    """Partial clone: full history for blame, blobs only when touched."""
+    """Full clone, no checkout. Blame must not fetch blobs over the network
+    one commit at a time — a partial clone makes SZZ crawl (the original
+    bottleneck: data/mined.jsonl stayed empty while runs sat on the network).
+
+    Single-branch: SZZ blames the default branch's history only, and other
+    branches can double the size of a repo like next.js (which is also why it
+    sits last in DEFAULT_REPOS — the small repos finish first, and if the big
+    clone times out the run still lands most of the corpus)."""
     target = dest / slug.replace("/", "__")
     if (target / ".git").exists():
         return target
     dest.mkdir(parents=True, exist_ok=True)
     print(f"  cloning {slug} …", flush=True)
-    proc = subprocess.run(
-        ["git", "clone", "--filter=blob:none", "--no-checkout", "--quiet",
-         f"https://github.com/{slug}.git", str(target)],
-        capture_output=True, text=True, timeout=1800)
+    try:
+        proc = subprocess.run(
+            ["git", "clone", "--single-branch", "--no-checkout", "--quiet",
+             f"https://github.com/{slug}.git", str(target)],
+            capture_output=True, text=True, timeout=5400)
+    except subprocess.TimeoutExpired:
+        print(f"  {slug}: clone timed out, skipping")
+        return None
     if proc.returncode != 0:
         print(f"  {slug}: clone failed ({proc.stderr.strip()[:100]})")
         return None
@@ -184,7 +197,8 @@ def mine_repo(slug: str, repo: Path, limit: int, max_diff: int, min_diff: int,
 
 DEFAULT_REPOS = [
     # Deliberately spread across ecosystems, not one language with extra steps.
-    "vercel/next.js",          # typescript / react
+    # Small repos first: each is minutes to clone, and next.js is the only one
+    # that can take over an hour - it goes last so a timeout costs nothing.
     "fastapi/fastapi",         # python
     "pallets/flask",           # python
     "expressjs/express",       # javascript
@@ -193,6 +207,7 @@ DEFAULT_REPOS = [
     "laravel/framework",       # php
     "tokio-rs/tokio",          # rust
     "spring-projects/spring-boot",  # java
+    "vercel/next.js",          # typescript / react — largest, cloned last
 ]
 
 

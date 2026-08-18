@@ -315,9 +315,11 @@ class OracleClient:
         # commit can carry a 6kB snapshot and OOM just as easily, and shedding
         # context beats handing the user a 500.
         self._degraded = []
+        context = ctx.context_block() if with_context else ""
+        fw = ctx.framework_block() if with_context else ""
         return self._analyze_with_fallback(
             payload, ctx.subject, ", ".join(ctx.files), retries,
-            ctx.context_block() if with_context else "")
+            "\n".join(b for b in (context, fw) if b))
 
     def analyze(self, diff: str, subject: str = "", files: str = "",
                 retries: int = 1, chunked: bool | None = None,

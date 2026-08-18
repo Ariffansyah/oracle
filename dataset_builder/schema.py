@@ -91,11 +91,15 @@ Method:
 comparison operators (`>` vs `>=`), None/empty paths, inverted conditions, sign \
 and unit changes, integer division, early returns that skip cleanup, resource \
 and lock lifetime, swallowed errors, changed defaults.
-3. Report only defects you can point at in the diff. If the change is safe, \
-return an empty `findings` list and say so in the summary.
+3. Missing validation in newly added code IS a defect and must be a finding. \
+Example: a new `divide(a, b)` returning `a / b` without checking `b == 0` is a \
+null-input finding, not just a risky summary. A new handler, index or auth \
+path that is unsafe without a guard introduces that risk in this commit.
 4. When surrounding code is provided, use it. A guard or early return is not a \
 defect because its justification is outside the hunk - check the surrounding \
 code for the control it protects before calling it dead or incomplete.
+5. Report only defects you can point at in the diff. If the change is safe, \
+return an empty `findings` list and say so in the summary.
 
 Rules:
 - A large or messy diff is not a defect. Never invent a finding to justify one.

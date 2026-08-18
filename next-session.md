@@ -67,14 +67,49 @@ gives 486 examples, **0% repeated assistant turns**, 128 with findings and 358
 clean. Language mix so far: go 149, javascript 102, python 46, php 41, java 40,
 rust 38, ruby 35, typescript 35. Buggy/clean is 220/268.
 
-**One risk to watch.** The whole point of the multilang corpus is to put
-missing-guard findings into the SFT target distribution (RESULTS, "Prompt rules
-cannot move the SFT'd 3B"). Across 141 findings so far only 14 are
-`input-validation` and 10 are `null-dereference`, and only 7 explanations use
-guard/validation language at all — about 5%. Extrapolated to the full 1,734
-that is ~85 examples. That may be too thin to teach the behaviour. Check this
-again when pass 1 completes, and if it stays thin the fix is targeted mining:
-commits whose fix diff *adds* a guard, rather than a general sample.
+# Targeted guard corpus — mined 18 Aug, NOT yet labelled
+
+The general sample was too thin for the defect class the paper turns on: 7
+guard-flavoured findings out of 141. So `corpus/mine.py --guards` now mines that
+class directly — commits whose later fix *adds* a missing check.
+
+`data/guard_commits.jsonl`: **1,458 commits, all 8 languages** (go 324, java 280,
+javascript 230, php 228, rust 175, python 79, typescript 77, ruby 65), from
+151,476 commits of history over 21 repositories. By class: nil-check 727,
+falsy-check 536, empty-check 285, error-check 186, **zero-check 146**,
+bounds-check 47, validation-raise 38. Those 146 zero-checks are the
+divide-by-zero case `calculator.go` exposed — 20x the signal the general corpus
+carried.
+
+The SZZ step needed changing and this is the part to remember: a fix that only
+*inserts* a guard deletes nothing, so `blame_origins()` (which blames deleted
+lines) returns the empty set for exactly these commits.
+`blame_insertion_context()` blames a ±3-line window around each insertion point
+instead. Full reasoning in RESULTS, "Targeted mining for guard-adding fixes".
+
+**To label it** (do NOT drop the two flags):
+
+    .venv/bin/python -m corpus.label --in data/guard_commits.jsonl \
+      --out data/labelled_guards.jsonl --raw data/labelled_guards_raw.jsonl \
+      --provider groq --workers 1 --limit 2000 --per-language 60 --no-balance
+
+`--no-balance` because the corpus is buggy by construction — the balancer would
+fill half the sample with a clean class that does not exist and label only half
+the limit. `--per-language 60` samples 480 evenly across the eight languages;
+uncapped it is 969 net-new commits, which is ~3 days of free-tier budget against
+~1.5. Composition is capped at labelling time, not mining time, because mining
+is free and labelling is what costs days.
+
+Then build the SFT from both corpora together:
+
+    cat data/labelled_multilang.jsonl data/labelled_guards.jsonl > data/labelled_all.jsonl
+    .venv/bin/python -m dataset_builder.build_sft_data --jsonl data/labelled_all.jsonl \
+      --langs go typescript javascript java php rust python ruby --out data/sft_multilang8.jsonl
+
+**Open decision:** pass 1 and the guard corpus compete for the same daily token
+budget, so they are sequential, not parallel. Pass 1 was left running. If the
+guard data matters more than finishing the general sample, stop pass 1 and label
+guards first — the user was asked and had not answered when this was written.
 
 # Decisions made (do not relitigate)
 

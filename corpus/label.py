@@ -302,6 +302,10 @@ def main(argv=None) -> int:
                     help="tell the teacher a defect exists on SZZ-buggy "
                          "commits. Leaks the label into the training target — "
                          "see label_one(). Off by default.")
+    ap.add_argument("--per-language", type=int, default=0,
+                    help="cap how many commits of each language enter the "
+                         "sample, so one large repository cannot decide the "
+                         "corpus. 0 disables the cap.")
     ap.add_argument("--no-balance", dest="balance", action="store_false",
                     help="take records in file order instead of balancing "
                          "buggy/clean")
@@ -326,6 +330,27 @@ def main(argv=None) -> int:
     # and a corpus that lopsided teaches the model that "no defects found" is
     # right 85% of the time - which it then says to everything.
     pool = [r for r in records if r["commit_id"] not in done]
+
+    # Mining is free and labelling costs days, so corpus composition is decided
+    # here rather than in the miner. Without a cap the guard corpus arrives as
+    # 228 php and 15 rust, because a repository's yield tracks its size and its
+    # commit-message habits, not the language's share of the goal.
+    if args.per_language:
+        import random as _random
+
+        _random.Random(args.seed).shuffle(pool)
+        seen: Counter = Counter()
+        capped = []
+        for r in pool:
+            lang = r.get("language", "")
+            if seen[lang] >= args.per_language:
+                continue
+            seen[lang] += 1
+            capped.append(r)
+        print(f"capped at {args.per_language}/language: {len(pool)} -> "
+              f"{len(capped)}  {dict(seen.most_common())}")
+        pool = capped
+
     if args.balance:
         import random as _random
 

@@ -459,3 +459,76 @@ commits of passes 1 and 2 need roughly **four days** of free-tier budget. The
 levers, in order, are more Groq organisations, a paid tier, or
 `reasoning_effort: "low"` on the teacher call — 502 of the 637 completion tokens
 are reasoning tokens.
+
+### Targeted mining for guard-adding fixes (18 Aug)
+
+The general mined corpus does not carry the defect class the paper needs. Across
+the 512 labelled records available on 18 Aug, the teacher produced 141 findings,
+of which 14 were `input-validation`, 10 `null-dereference`, and only 7 used
+guard or validation language at all — about 5%. Extrapolated to the full 1,734
+that is ~85 examples, which is not enough to move the behaviour that "Prompt
+rules cannot move the SFT'd 3B" identified as a data problem.
+
+`corpus/mine.py --guards` mines that class directly. A fix whose diff *adds* a
+check is the mirror image of the gap: the defect is the line that was not there,
+so the commit it blames back to is exactly the missing training example.
+
+**The SZZ step had to change.** `blame_origins()` blames the lines a fix
+*deleted*, which is the correct rule and useless here — a commit that only
+inserts a guard deletes nothing, so it returns the empty set for precisely the
+commits this mode looks for. `blame_insertion_context()` blames a ±3-line window
+around each insertion point in the fix's parent instead, on the reasoning that
+the line which should have been guarded is the one the guard was inserted next
+to. Replaced lines still go through the original deletion-blame path.
+
+**What counts as a guard.** An added line only qualifies if it opens a
+conditional or bails out early (`COND_RE`, `EXIT_RE`), which stops `len(` from
+matching every second line of ordinary code, and comments and test paths are
+excluded outright. Qualifying lines are then classified into `zero-check`,
+`nil-check`, `error-check`, `bounds-check`, `empty-check`, `falsy-check` and
+`validation-raise`. Ruby and Rust needed the postfix form (`return if x.nil?`)
+or the whole Ruby slice mined empty — the self-check in `mine.py` carries one
+real hunk per language for exactly this reason.
+
+Yield over 21 repositories, 151,476 commits of history scanned:
+
+| | |
+|---|---|
+| fix commits found | 21,239 |
+| of those, adding a guard | 1,839 (8.7%) |
+| introducing commits mined | **1,458** |
+
+By language — all eight, which the general corpus reached only for the four
+largest: go 324, java 280, javascript 230, php 228, rust 175, python 79,
+typescript 77, ruby 65.
+
+By guard class: `nil-check` 727, `falsy-check` 536, `empty-check` 285,
+`error-check` 186, **`zero-check` 146**, `bounds-check` 47,
+`validation-raise` 38. The 146 zero-checks are the divide-by-zero class that
+`calculator.go` exposed — against 7 guard-flavoured findings in the entire
+general corpus, a 20x increase in the training signal for the exact behaviour
+the prompt could not buy.
+
+Two defects surfaced while running it. `git()` decoded subprocess output as
+strict UTF-8, so one latin-1 source file raised `UnicodeDecodeError` out of the
+helper and cost an entire repository's slice — `apache/commons-lang` and
+`gohugoio/hugo` both died that way, the latter throwing away 207 already-detected
+guard fixes (recovered: +162 records after the fix). And repository yield tracks
+repository size, not the goal: the first pass returned 228 php and 15 rust.
+
+**Composition is capped at labelling time, not mining time**, because mining is
+free and labelling costs days: `label.py --per-language N`. At `--per-language
+60` the guard corpus samples to ~480 balanced commits, roughly 1.5 days of
+free-tier budget, against ~3 days for the uncapped 969.
+
+Reproduce:
+
+    python -m corpus.mine --guards --repos <slugs> \
+      --langs "go typescript javascript java php rust python ruby"
+    python -m corpus.label --in data/guard_commits.jsonl \
+      --out data/labelled_guards.jsonl --raw data/labelled_guards_raw.jsonl \
+      --provider groq --workers 1 --per-language 60 --no-balance --limit 2000
+
+`--no-balance` matters: the guard corpus is buggy by construction, and the
+balancer would otherwise fill half the sample with a clean class that does not
+exist and label only half the requested limit.

@@ -276,13 +276,39 @@ languages — find fix commits by message, take the lines they repaired,
 them as buggy. Partial clones (`--filter=blob:none`) keep it to megabytes, and
 no API is involved, so it is free.
 
-`data/mined.jsonl` is currently **empty** — runs against next.js, react, fastapi,
-django, gin, tokio, laravel, rails and efcore were launched but did not complete.
-Blame is the bottleneck: `blob:none` forces lazy blob fetches over the network.
-Yield measured at roughly 1 record per 30 commits scanned after the 200–6000
-byte diff filter.
+Partial clones were the original bottleneck — `blob:none` forced lazy blob
+fetches over the network and no run ever finished. Clones are now full,
+`--single-branch`, `--no-checkout`, and mining is CPU-bound and free.
 
-Deferred until the benchmark results are established.
+### `data/multilang_commits.jsonl` — 1,734 commits, 8 languages
+
+The general sample: go 541, javascript 337, php 207, java 154, rust 135,
+python 124, typescript 122, ruby 108. Teacher labelling into
+`data/labelled_multilang.jsonl` is in progress.
+
+### `data/guard_commits.jsonl` — 1,458 commits, 8 languages
+
+Mined by `corpus/mine.py --guards` for one specific defect class: commits whose
+later fix *adds* a missing check. 151,476 commits of history over 21
+repositories yielded 21,239 fix commits, of which 1,839 (8.7%) add a guard.
+
+By language: go 324, java 280, javascript 230, php 228, rust 175, python 79,
+typescript 77, ruby 65. By guard class: nil-check 727, falsy-check 536,
+empty-check 285, error-check 186, **zero-check 146**, bounds-check 47,
+validation-raise 38.
+
+Why it exists: the general sample produced only 7 guard-flavoured findings in
+141: the student cannot learn to report an *absent* guard from targets that only
+ever describe a changed line. See RESULTS, "Targeted mining for guard-adding
+fixes", which also covers the SZZ change this required — a pure insertion
+deletes nothing, so the standard deletion-blame returns the empty set for
+exactly these commits.
+
+Every record is `buggy: true` by construction, and carries `guard_kinds`,
+`fix_commit` and `fix_subject` as provenance. None of those reach the teacher
+prompt (`build_user_message` sends diff, subject and files only), so they are
+eval material, not a label leak. Label it with `--no-balance` and
+`--per-language 60`, which samples 480 commits evenly across the eight.
 
 ---
 

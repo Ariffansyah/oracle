@@ -106,10 +106,17 @@ Then build the SFT from both corpora together:
     .venv/bin/python -m dataset_builder.build_sft_data --jsonl data/labelled_all.jsonl \
       --langs go typescript javascript java php rust python ruby --out data/sft_multilang8.jsonl
 
-**Open decision:** pass 1 and the guard corpus compete for the same daily token
-budget, so they are sequential, not parallel. Pass 1 was left running. If the
-guard data matters more than finishing the general sample, stop pass 1 and label
-guards first — the user was asked and had not answered when this was written.
+**Decided with the user, 18 Aug:** finish pass 1, then the guard corpus at
+`--per-language 60` (480 commits), and **drop pass 2** — the 775 remaining
+general commits are more of the same data, while the guard corpus fixes a known
+blocker. Roughly 2.75 days of free-tier budget to an SFT-ready corpus.
+
+`label_watch.sh` now runs that sequence by itself: it decides the phase from
+`labelled_multilang_raw.jsonl`'s line count (attempts, not kept records —
+`verify()` drops labels, so the output file can never be relied on to reach the
+limit), and launches the guard command with `--per-language 60 --no-balance`
+once pass 1 has attempted its 959. Nothing needs doing at the handover.
+`dashboard.sh` reads the same signal and shows which phase is live.
 
 # Decisions made (do not relitigate)
 

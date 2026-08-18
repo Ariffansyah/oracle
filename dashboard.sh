@@ -56,10 +56,24 @@ printf '%sORACLE dashboard%s   %s   box: %s   refresh %ss%s\n\n' \
   "$BOLD" "$OFF" "$(date +%H:%M:%S)" "$H" "$INTERVAL" "$DIM(ctrl-c to stop)$OFF"
 
 sec "labelling (teacher labels, resume-safe)"
-LAB_FILE=data/labelled_multilang.jsonl
+# Two corpora, one daily token budget, so they run in sequence: the general
+# mined sample first, then the targeted guard corpus. The watchdog decides the
+# phase the same way, off the raw file's attempt count.
+if [ "$(wc -l < data/labelled_multilang_raw.jsonl 2>/dev/null || echo 0)" -lt 959 ]; then
+  LAB_PHASE="pass 1 — general corpus"
+  LAB_FILE=data/labelled_multilang.jsonl
+  LAB_LOG=label_multilang.log
+  LAB_TOTAL=959
+else
+  LAB_PHASE="pass 2 — guard corpus"
+  LAB_FILE=data/labelled_guards.jsonl
+  LAB_LOG=label_guards.log
+  LAB_TOTAL=480
+fi
 LAB_DONE=$(wc -l < "$LAB_FILE" 2>/dev/null || echo 0)
-LAB_TOTAL=$(grep -oE "[0-9]+ commits to label" label_multilang.log 2>/dev/null | grep -oE "[0-9]+" | tail -1)
-LAB_TOTAL=${LAB_TOTAL:-959}
+LAB_N=$(grep -oE "[0-9]+ commits to label" "$LAB_LOG" 2>/dev/null | grep -oE "[0-9]+" | tail -1)
+LAB_TOTAL=${LAB_N:-$LAB_TOTAL}
+job phase yellow "$LAB_PHASE"
 if pgrep -f "corpus[.]label" >/dev/null; then
   LF=$(fresh "$LAB_FILE")
   # Groq's IP throttle makes single commits take 5-15 min; only cry wolf at
@@ -122,6 +136,7 @@ fi
 
 sec "local corpus"
 for f in data/labelled.jsonl data/labelled_multilang.jsonl data/multilang_commits.jsonl \
+         data/guard_commits.jsonl data/labelled_guards.jsonl \
          data/contrastive_pairs.jsonl data/apachejit_commits.jsonl; do
   [ -f "$f" ] && printf '  %-34s %6d\n' "$(basename "$f")" "$(wc -l < "$f")"
 done

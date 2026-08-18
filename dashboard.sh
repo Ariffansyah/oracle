@@ -6,10 +6,16 @@
 #   ./dashboard.sh -n 30           refresh every 30s
 #   ./dashboard.sh --once          one shot, no repaint
 #
-# Status conventions: green = advancing, red = stuck/dead, yellow = idle.
-# A job is "stuck" when its log or output file has not grown past the stale
-# window even though the process is running (the labelling watchdog died at
-# 12:11 once and nothing restarted it — this dashboard exists to catch that).
+# Status conventions: green = advancing, red = stuck/dead, yellow = idle or
+# blocked on something external. A job is "stuck" when neither its log nor its
+# output file has grown past the stale window even though the process is running
+# (the labelling watchdog died at 12:11 once and nothing restarted it — this
+# dashboard exists to catch that).
+#
+# Labelling runs two corpora in sequence against one daily token budget: the
+# general mined sample, then the targeted guard corpus. The phase is derived the
+# same way label_watch.sh derives it, from the raw file's attempt count, so the
+# two can never disagree about which corpus is live.
 
 WATCH=1
 INTERVAL=10
@@ -59,7 +65,9 @@ sec "labelling (teacher labels, resume-safe)"
 # Two corpora, one daily token budget, so they run in sequence: the general
 # mined sample first, then the targeted guard corpus. The watchdog decides the
 # phase the same way, off the raw file's attempt count.
-if [ "$(wc -l < data/labelled_multilang_raw.jsonl 2>/dev/null || echo 0)" -lt 959 ]; then
+PASS1_ATTEMPTS=0
+[ -f data/labelled_multilang_raw.jsonl ] && PASS1_ATTEMPTS=$(wc -l < data/labelled_multilang_raw.jsonl)
+if [ "$PASS1_ATTEMPTS" -lt 959 ]; then
   LAB_PHASE="pass 1 — general corpus"
   LAB_FILE=data/labelled_multilang.jsonl
   LAB_LOG=label_multilang.log
@@ -70,16 +78,26 @@ else
   LAB_LOG=label_guards.log
   LAB_TOTAL=480
 fi
-LAB_DONE=$(wc -l < "$LAB_FILE" 2>/dev/null || echo 0)
-LAB_N=$(grep -oE "[0-9]+ commits to label" "$LAB_LOG" 2>/dev/null | grep -oE "[0-9]+" | tail -1)
+LAB_DONE=0; [ -f "$LAB_FILE" ] && LAB_DONE=$(wc -l < "$LAB_FILE")
+LAB_N=$([ -f "$LAB_LOG" ] && grep -oE "[0-9]+ commits to label" "$LAB_LOG" | grep -oE "[0-9]+" | tail -1)
 LAB_TOTAL=${LAB_N:-$LAB_TOTAL}
 job phase yellow "$LAB_PHASE"
 if pgrep -f "corpus[.]label" >/dev/null; then
-  LF=$(fresh "$LAB_FILE")
-  # Groq's IP throttle makes single commits take 5-15 min; only cry wolf at
-  # the watchdog's own staleness window.
-  if [ "$LF" -gt 900 ]; then
-    job labelling red "running but STUCK ($((LF/60))m since last record)"
+  LF=$(fresh "$LAB_FILE")     # since the last kept record
+  LGF=$(fresh "$LAB_LOG")     # since the last line of any kind
+  # Since the pacing fix a commit lands every ~20s, so minutes of silence is no
+  # longer normal - but it is not automatically a wedge either. Groq caps tokens
+  # per DAY, and an exhausted key legitimately parks for 10-20 minutes while the
+  # log keeps moving. A growing log with a still output file is the run waiting
+  # for budget; neither moving is the wedge the watchdog kills at 900s.
+  if [ ! -f "$LAB_FILE" ]; then
+    # The phase just handed over: the process is up but has not written its
+    # first record yet, which is not the same as wedged.
+    job labelling green "starting on $(basename "$LAB_FILE")"
+  elif [ "$LF" -gt 900 ] && [ "$LGF" -gt 900 ]; then
+    job labelling red "running but STUCK ($((LF/60))m silent — watchdog kills at 15m)"
+  elif [ "$LF" -gt 300 ]; then
+    job labelling yellow "waiting on token budget ($((LF/60))m since last record)   $LAB_DONE/$LAB_TOTAL"
   else
     job labelling green "running   $(bar "$LAB_DONE" "$LAB_TOTAL")   $LAB_DONE/$LAB_TOTAL"
   fi
@@ -95,9 +113,27 @@ if pgrep -f "label_watch[.]sh" >/dev/null; then
 else
   job watchdog red "DOWN — labelling will stop silently"
 fi
-[ -f "$WLOG" ] && grep -E "stale at" "$WLOG" | tail -1 | sed "s/^/    $DIM/;s/$/$OFF/"
-tr '\r' '\n' < label_multilang.log 2>/dev/null | grep -E "^  [0-9]+/[0-9]+  kept" | tail -1 \
-  | sed "s/^/    $DIM/;s/$/$OFF/"
+[ -f "$WLOG" ] && tail -1 "$WLOG" | sed "s/^/    $DIM/;s/$/$OFF/"
+# Strip the rate and ETA: that counter restarts with every process restart, so
+# it reports the pace of the current fragment as though it were the run's. The
+# kept/dropped/failed tallies are cumulative for the fragment and do mean
+# something. The honest progress number is the bar above, which counts the file.
+[ -f "$LAB_LOG" ] && tr '\r' '\n' < "$LAB_LOG" | grep -E "^  [0-9]+/[0-9]+  kept" | tail -1 \
+  | sed "s/ *([^)]*)$//" | sed "s/^/    $DIM/;s/$/$OFF/"
+# The daily token budget is what actually paces this project, and the only free
+# read on it is what the labeller already logged. A parked key here explains a
+# yellow "waiting" row above.
+[ -f "$LAB_LOG" ] && tr '\r' '\n' < "$LAB_LOG" \
+  | grep -oE "key \.\.\.[A-Za-z0-9]+ spent for [0-9]+m|all [0-9]+ keys rate-limited, waiting [0-9]+s" \
+  | tail -1 | sed "s/^/    ${DIM}budget: /;s/$/$OFF/"
+
+sec "local jobs"
+if pgrep -f "mine[.]py" >/dev/null; then
+  MINE_LAST=$(grep -E "records$|add a guard$|cloning" guard_mine.log 2>/dev/null | tail -1 | sed 's/^ *//')
+  job mining green "running   ${MINE_LAST:0:58}"
+else
+  job mining yellow "idle"
+fi
 
 sec "training (on $H)"
 for probe in sft dpo; do

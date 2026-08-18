@@ -3,7 +3,7 @@
 Every measurement taken, with the command that reproduces it. Numbers only —
 interpretation lives in `ROADMAP.md`, corpus provenance in `DATASETS.md`.
 
-Status as of 2026-08-16.
+Status as of 2026-08-18.
 
 ---
 
@@ -559,13 +559,87 @@ The SFT build passes its gate on this corpus:
 gives **1,005 examples, 0% repeated assistant turns**, 251 with findings, 754
 clean.
 
-A keyword sweep for guard/validation language over those 275 findings hits 57
-(20.7%), against the ~5% recorded above. **The two numbers are not comparable** —
-the earlier 7-of-141 was a hand count, this is a broad regex
-(`guard|missing check|nil check|validat|sanitiz|…`). It is not evidence the
-guard problem solved itself, and the targeted corpus is still the plan.
+A keyword sweep for guard/validation language over those 275 findings hits **78
+(28.4%)**, against the ~5% recorded above. **The two numbers are not
+comparable** — the earlier 7-of-141 was a hand count, this is a broad regex. It
+is not evidence the guard problem solved itself, and the targeted corpus is
+still the plan.
+
+That sweep now lives in `guard_share.py` rather than in a shell history, so
+every corpus is measured the same way:
+
+    .venv/bin/python guard_share.py data/labelled_multilang.jsonl
+
+An earlier ad-hoc version of the same regex reported 20.7% (57 findings). It was
+wrong: it matched `null (pointer|deref)` with a literal space, so it missed the
+hyphenated `null-dereference` category entirely — 24 findings, every one of them
+a missing-check defect. The corrected pattern matches `(nil|null)[ -]?(pointer|
+deref)` and takes the count to 78. **28.4% is the pass-1 baseline the guard
+corpus has to beat**; treat any earlier 20.7% in notes or handoffs as superseded.
+
+Guard share by category on pass 1 — the breakdown is what makes the number
+readable, since two categories are guard-flavoured by definition and the rest
+are not:
+
+| category | findings | guard-flavoured |
+|---|---|---|
+| logic-error | 103 | 10 |
+| error-handling | 47 | 8 |
+| api-misuse | 34 | 1 |
+| input-validation | 33 | 33 |
+| null-dereference | 24 | 24 |
+| resource-leak | 10 | 1 |
+| other | 9 | 0 |
+| security | 8 | 1 |
+| concurrency | 7 | 0 |
+
+So 57 of the 78 are the two categories that are guard-flavoured by construction,
+and only 21 of the other 197 findings describe a missing check. That is the gap
+the targeted corpus exists to close.
 
 **Six Groq organisations now**, not three: `GROQ_API_KEY1..6`, so the ceiling is
 6 × 200,000 = 1.2M tokens/day ÷ ~1,863 tokens per commit ≈ **640 commits/day**.
 The 480-commit guard phase is therefore under a day of budget, not the ~1.5 days
 estimated at three keys.
+
+### Guard-corpus labelling resumed (18 Aug, 20:48)
+
+The phase was stopped at 6 of 480 on the evening of 18 Aug with all six Groq
+keys returning 429, and both the labeller and the watchdog were killed. It was
+restarted the same evening after probing the keys directly:
+
+    curl -s -D - -o /dev/null -X POST https://api.groq.com/openai/v1/chat/completions \
+      -H "Authorization: Bearer $GROQ_API_KEY1" -H "Content-Type: application/json" \
+      -d '{"model":"openai/gpt-oss-120b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
+
+All six answered `HTTP/2 200` with `x-ratelimit-remaining-tokens: 7927` of an
+8,000 limit. **The evening's 429s were the per-minute ceiling, not the daily
+one** — the retry-after values in `label_guards.log` were 2–17 minutes, which is
+TPM churn; a spent daily budget returns a retry-after measured in hours. Worth
+remembering, because the run was stopped on the assumption that the day's budget
+was gone. Probe before waiting a day: Groq does not expose a daily-remaining
+header, so a single 1-token request is the only cheap way to tell the two limits
+apart.
+
+Restarted with the documented one-liner and it went straight to the guard phase,
+as designed (pass 1's raw count is past its 959 limit):
+
+    setsid nohup ./label_watch.sh >> label_watch.log 2>&1 < /dev/null &
+
+The evening's run was stopped again at 21:0x, at **37 kept / 37 attempted of
+480, 0 dropped, 0 failed** — the per-minute ceiling makes throughput about
+5 commits per minute at `--workers 1`, so the remaining 443 are a next-day job
+against a fresh daily budget rather than an overnight one. Composition of the
+37, too small to conclude from but worth watching:
+
+| | |
+|---|---|
+| records with a finding | 22 of 37 (59%) |
+| guard-flavoured findings | 8 of 22 (36.4%) |
+
+The guard share is above pass 1's 28.4%, which is the intended direction. The
+finding rate is the number to watch: the corpus is buggy by construction, so a
+finding rate that settles near 59% rather than near 100% means the teacher is
+not seeing the guard class, and that is a prompt problem to fix *before* ten
+hours of GPU time. Re-measure with `guard_share.py` at ~100 records — early
+enough to change the prompt without burning the phase — and again at 480.

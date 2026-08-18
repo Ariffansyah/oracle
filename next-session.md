@@ -3,14 +3,9 @@ measurement plus the command that reproduces it), then `docs/ROADMAP.md` and
 `docs/DATASETS.md`, and run `./dashboard.sh` (live) or `./status.sh --once`.
 
 **First action this session:** restart the labelling watchdog — the guard phase
-was stopped at 6 of 480 on 18 Aug evening with all six Groq keys rate-limited,
-and nothing is running now. See "Next steps", step 0. Everything else in this
-file is context for what to do while it runs and once it lands.
-
-**Uncommitted working tree** from 18 Aug: `corpus/label.py` (6th key),
-`dashboard.sh` (denominator fix), `label_watch.sh` (stderr fix),
-`next-session.md`, `docs/RESULTS.md`. Review and commit them early, or the next
-watchdog edit lands on top of unreviewed changes.
+is stopped at 37 of 480 and nothing is running. See "Next steps", step 0.
+Everything else in this file is context for what to do while it runs and once it
+lands.
 
 # The project
 
@@ -21,33 +16,45 @@ verifies and explains. Base model Qwen2.5-Coder-3B-Instruct, QLoRA SFT on
 teacher-labelled data (gpt-oss-120b on Groq is the teacher, the 3B is the
 student). Do NOT use "Explainable JIT" — taken by PyExplainer / JITLine.
 
-# Current state (18 Aug 2026, evening)
+# Current state (18 Aug 2026, late evening)
 
 **Labelling pass 1 is DONE.** 1,013 commits attempted, **1,011 kept** in
 `data/labelled_multilang.jsonl`. It overshot the 959 target because `--limit`
 counts the commits not yet done at each relaunch, not the cumulative total — a
 resumed run attempts up to `limit` more. No harm, just more corpus.
 
-**Pass 2 — the guard corpus — is STOPPED, mid-phase.** It reached 6 kept /
-6 attempted of 480 before the user stopped it on 18 Aug evening: all six
-keys were rate-limited, so the run was burning clock, not budget. Both the
-labeller and `label_watch.sh` were killed (the watchdog first — it relaunches
-the labeller within 15 minutes otherwise).
+**Pass 2 — the guard corpus — is STOPPED, mid-phase, at 37 kept / 37 attempted
+of 480** (0 dropped, 0 failed). It ran 20:48–21:00 on 18 Aug, added 31 records,
+and was stopped again because the per-minute ceiling holds throughput to roughly
+5 commits/minute at `--workers 1` — the remaining 443 want a fresh daily budget,
+not an overnight grind. Both the labeller and `label_watch.sh` are killed (the
+watchdog first — it relaunches the labeller within 15 minutes otherwise).
 
-**To resume, next day, when the daily budget resets** — one command, the
-watchdog picks the phase itself from the raw line counts and relaunches:
+One thing from that hour worth not repeating: the earlier stop at 6 of 480
+assumed the day's token budget was gone, and it was not. The 429s were the
+**per-minute** ceiling. Groq exposes no daily-remaining header, so probe a key
+directly before writing off a day —
+
+    curl -s -D - -o /dev/null -X POST https://api.groq.com/openai/v1/chat/completions \
+      -H "Authorization: Bearer $GROQ_API_KEY1" -H "Content-Type: application/json" \
+      -d '{"model":"openai/gpt-oss-120b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}' \
+      | grep -i ratelimit
+
+200 with a healthy `x-ratelimit-remaining-tokens` means go. Retry-after values of
+2–17 minutes in `label_guards.log` are TPM churn and are normal; a spent daily
+budget answers in hours.
+
+**To resume, next day** — one command, the watchdog picks the phase itself
+from the raw line counts and relaunches:
 
     setsid nohup ./label_watch.sh >> label_watch.log 2>&1 < /dev/null &
 
 Run it from a shell that contains no `pkill` pattern (self-match trap below).
-Resume is free: `label.py` skips by `commit_id`, so the 6 already-kept
-records stand.
+Resume is free: `label.py` skips by `commit_id`, so kept records stand.
 
 **Six Groq keys now** (`GROQ_API_KEY1..6`, six separate organisations), so the
 daily ceiling is 6 x 200,000 = 1.2M tokens/day / ~1,863 tokens per commit
-~= **640 commits/day**, and all six were spent by 18 Aug evening. The 480-commit
-guard phase is under a day of budget once they reset, so one resumed day should
-finish it.
+~= **640 commits/day**. The 480-commit guard phase is under a day of budget.
 Adding a key is three edits: `~/.zshrc`, `/tmp/opencode/keys.env`, and the
 comma-separated env list in `corpus/label.py` (`PROVIDERS["groq"]`); then
 restart the labeller so it inherits the new environment.
@@ -80,7 +87,7 @@ gives **1,005 examples, 0% repeated assistant turns**, 251 with findings and
 logic-error 103, error-handling 47, api-misuse 34, input-validation 33,
 null-dereference 24, resource-leak 10, other 9, security 8, concurrency 7.
 
-# Targeted guard corpus — mined 18 Aug, labelling STOPPED at 6 of 480
+# Targeted guard corpus — mined 18 Aug, labelling STOPPED at 37 of 480
 
 The general sample was too thin for the defect class the paper turns on: 7
 guard-flavoured findings out of 141. So `corpus/mine.py --guards` now mines that
@@ -153,8 +160,8 @@ live.
 
 # Next steps, in order — what to do after the 480 finish
 
-**Step 0, first thing: restart the watchdog** — the guard phase was stopped at 6
-of 480 with every key rate-limited, so nothing is running:
+**Step 0, first thing: restart the watchdog** — the guard phase is stopped at 37
+of 480 and nothing is running:
 
     setsid nohup ./label_watch.sh >> label_watch.log 2>&1 < /dev/null &
 
@@ -188,13 +195,28 @@ below).
    - **findings count must jump.** Pass 1 gave 251 of 1,005 with findings. The
      guard corpus is buggy by construction, so nearly all ~450 should carry a
      finding; if they do not, the teacher is not seeing the guard class and that
-     is a prompt problem to fix *before* 10 hours of GPU time.
+     is a prompt problem to fix *before* 10 hours of GPU time. **Early warning:
+     the first 37 guard records carried a finding only 22 times (59%).** n=37,
+     so it may be noise — but re-measure at ~100 records rather than waiting for
+     480, because a 59% finding rate at 480 means the phase bought much less
+     than it cost.
 
 2. **Re-check the guard-class share** on the merged corpus — the reason the
-   guard corpus exists. Count findings whose category or explanation is
-   guard/validation-flavoured and compare against pass 1's 275 findings. Use one
-   script for both corpora so the numbers are comparable; the 20.7% recorded in
-   RESULTS is a broad regex and does NOT compare to the earlier hand-counted 5%.
+   guard corpus exists. `guard_share.py` (written 18 Aug) is that one script:
+
+       .venv/bin/python guard_share.py data/labelled_multilang.jsonl \
+         data/labelled_guards.jsonl
+
+   **Pass-1 baseline: 78 of 275 findings, 28.4%.** The guard corpus has to beat
+   it. Any 20.7% in older notes is superseded — that ad-hoc regex matched
+   `null (pointer|deref)` with a literal space and so missed all 24
+   `null-dereference` findings. Note that 57 of the 78 are the two categories
+   (`input-validation`, `null-dereference`) that are guard-flavoured by
+   definition; only 21 of the other 197 findings describe a missing check, and
+   that is the number the targeted corpus is trying to move.
+
+   First 37 guard records read 22 findings, 8 guard-flavoured (36.4%) — right
+   direction, far too small to conclude from.
 
 3. **Power the GPU box on**, `scp data/sft_multilang8.jsonl` over, `./serve.sh
    stop` (it is not running, but check), then launch QLoRA SFT (~10h). Nothing

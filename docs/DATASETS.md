@@ -310,6 +310,24 @@ prompt (`build_user_message` sends diff, subject and files only), so they are
 eval material, not a label leak. Label it with `--no-balance` and
 `--per-language 60`, which samples 480 commits evenly across the eight.
 
+### `data/labelled_guards.jsonl` — the labelled slice, in progress
+
+The 480-commit teacher pass over the above. Running as of 18 Aug 20:48 (see
+RESULTS, "Guard-corpus labelling resumed"); `data/labelled_guards_raw.jsonl` is
+the attempt log and reaches 480 when the phase is done. Merge with pass 1 before
+building the SFT:
+
+    cat data/labelled_multilang.jsonl data/labelled_guards.jsonl \
+      > data/labelled_all.jsonl
+
+Whether it did its job is one number — the guard-flavoured share of findings,
+measured the same way on both corpora:
+
+    .venv/bin/python guard_share.py data/labelled_multilang.jsonl \
+      data/labelled_guards.jsonl
+
+Pass 1 sits at 78 of 275 findings (28.4%); this corpus has to beat that.
+
 ---
 
 ## 7. Licensing

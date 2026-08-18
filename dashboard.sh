@@ -44,7 +44,7 @@ fresh() { # seconds since a file was last written
 bar() { # bar <done> <total> [width]
   local done=$1 total=$2 w=${3:-24}
   local pct=0; [ "$total" -gt 0 ] 2>/dev/null && pct=$(( done * 100 / total ))
-  local filled=$(( done * w / total ))
+  local filled=$(( done * w / total )); [ "$filled" -gt "$w" ] && filled=$w
   printf '%*s' "$filled" '' | tr ' ' '#'
   printf '%*s' "$((w - filled))" '' | tr ' ' '-'
   printf ' %3d%%' "$pct"
@@ -79,8 +79,9 @@ else
   LAB_TOTAL=480
 fi
 LAB_DONE=0; [ -f "$LAB_FILE" ] && LAB_DONE=$(wc -l < "$LAB_FILE")
-LAB_N=$([ -f "$LAB_LOG" ] && grep -oE "[0-9]+ commits to label" "$LAB_LOG" | grep -oE "[0-9]+" | tail -1)
-LAB_TOTAL=${LAB_N:-$LAB_TOTAL}
+# Do NOT take the total from the log's "N commits to label": that N is what was
+# LEFT at the last relaunch (resume skips what is done), while LAB_DONE counts
+# the whole output file. Mixing them read 924/829 = 111%.
 job phase yellow "$LAB_PHASE"
 if pgrep -f "corpus[.]label" >/dev/null; then
   LF=$(fresh "$LAB_FILE")     # since the last kept record

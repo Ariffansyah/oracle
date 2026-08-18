@@ -56,14 +56,18 @@ class Provider:
     @property
     def keys(self) -> list[str]:
         # Comma-separated env names = fallback keys. A free-tier Groq account
-        # rate-limits per minute, so three accounts tripling the token budget
-        # is cheaper than waiting one account out.
+        # caps tokens per day (200k TPD per org, measured 18 Aug 2026), so six
+        # accounts multiplying the daily budget is cheaper than waiting one out.
         envs = [e.strip() for e in self.key_env.split(",")]
-        keys = [v for e in envs if (v := os.getenv(e, "").strip())]
+        # dict.fromkeys dedupes by value and keeps order: the unnumbered and
+        # the numbered name for key 1 both appear below, and whichever pair of
+        # shell and env file is in play, one of them is the same key twice.
+        keys = list(dict.fromkeys(
+            v for e in envs if (v := os.getenv(e, "").strip())))
         if not keys:
             raise SystemExit(
                 f"none of {envs} is set.\n"
-                f"  export GROQ_API_KEY=... GROQ_API_KEY2=... GROQ_API_KEY3=..."
+                f"  export GROQ_API_KEY1=... (through GROQ_API_KEY6)"
             )
         return keys
 
@@ -82,7 +86,9 @@ PROVIDERS = {
     # rate-limit headers and rotates keys rather than sleeping a limit out.
     "groq": Provider("groq", "https://api.groq.com/openai/v1",
                      "openai/gpt-oss-120b",
-                     "GROQ_API_KEY,GROQ_API_KEY2,GROQ_API_KEY3"),
+                     "GROQ_API_KEY,GROQ_API_KEY1,GROQ_API_KEY2,"
+                     "GROQ_API_KEY3,GROQ_API_KEY4,GROQ_API_KEY5,"
+                     "GROQ_API_KEY6"),
     "together": Provider("together", "https://api.together.xyz/v1",
                          "Qwen/Qwen2.5-Coder-32B-Instruct", "TOGETHER_API_KEY"),
     "ollama": Provider("ollama", "http://192.168.1.170:11434/v1",

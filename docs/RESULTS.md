@@ -532,3 +532,40 @@ Reproduce:
 `--no-balance` matters: the guard corpus is buggy by construction, and the
 balancer would otherwise fill half the sample with a clean class that does not
 exist and label only half the requested limit.
+
+### Labelling pass 1 complete (18 Aug, evening)
+
+Pass 1 over the general mined corpus finished: **1,013 commits attempted, 1,011
+kept**, 0 dropped by `verify()` in the final fragment. It overshot the 959
+target because `--limit` applies to the commits *not yet done* at each
+relaunch, not to the cumulative total — a resumed run therefore attempts up to
+`limit` more. Harmless here (more corpus), but it means the limit is not a
+budget cap across restarts.
+
+Composition of the 1,011:
+
+| | |
+|---|---|
+| buggy / clean | 415 / 596 |
+| languages | go 302, javascript 222, php 107, java 88, rust 79, python 78, typescript 70, ruby 59 (+6 stragglers: c 4, kotlin 1, unlabelled 1) |
+| findings | 275 total — logic-error 103, error-handling 47, api-misuse 34, input-validation 33, null-dereference 24, resource-leak 10, other 9, security 8, concurrency 7 |
+
+The SFT build passes its gate on this corpus:
+
+    .venv/bin/python -m dataset_builder.build_sft_data \
+      --jsonl data/labelled_multilang.jsonl \
+      --langs go typescript javascript java php rust python ruby --out /tmp/dry.jsonl
+
+gives **1,005 examples, 0% repeated assistant turns**, 251 with findings, 754
+clean.
+
+A keyword sweep for guard/validation language over those 275 findings hits 57
+(20.7%), against the ~5% recorded above. **The two numbers are not comparable** —
+the earlier 7-of-141 was a hand count, this is a broad regex
+(`guard|missing check|nil check|validat|sanitiz|…`). It is not evidence the
+guard problem solved itself, and the targeted corpus is still the plan.
+
+**Six Groq organisations now**, not three: `GROQ_API_KEY1..6`, so the ceiling is
+6 × 200,000 = 1.2M tokens/day ÷ ~1,863 tokens per commit ≈ **640 commits/day**.
+The 480-commit guard phase is therefore under a day of budget, not the ~1.5 days
+estimated at three keys.

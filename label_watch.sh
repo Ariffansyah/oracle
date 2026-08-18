@@ -63,9 +63,9 @@ while true; do
   # flips during the window the counts tie, which trips the kill below — that is
   # the intended handover, not a false alarm.
   OUT=$(active_out)
-  N1=$(wc -l < "$OUT" 2>/dev/null || echo 0)
+  N1=$({ wc -l < "$OUT"; } 2>/dev/null || echo 0)
   sleep 900
-  N2=$(wc -l < "$OUT" 2>/dev/null || echo 0)
+  N2=$({ wc -l < "$OUT"; } 2>/dev/null || echo 0)
   if pgrep -f "corpus[.]label" >/dev/null && [ "$N2" -le "$N1" ]; then
     echo "$(date +%H:%M) stale at $N2 records in $OUT — killing"
     pkill -f "corpus[.]label"

@@ -1,11 +1,10 @@
 Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first (every
-measurement plus the command that reproduces it), then `docs/ROADMAP.md` and
-`docs/DATASETS.md`, and run `./dashboard.sh` (live) or `./status.sh --once`.
+measurement plus the command that reproduces it, latest section is "Ablation:
+general-only vs guard-augmented SFT"), then `docs/ROADMAP.md`.
 
-**First action this session:** restart the labelling watchdog — the guard phase
-is stopped at 37 of 480 and nothing is running. See "Next steps", step 0.
-Everything else in this file is context for what to do while it runs and once it
-lands.
+**First action this session:** check whether the ablation eval finished —
+see "Next steps", step 0. If it's done, the comparison is the point of this
+whole handoff.
 
 # The project
 
@@ -16,129 +15,65 @@ verifies and explains. Base model Qwen2.5-Coder-3B-Instruct, QLoRA SFT on
 teacher-labelled data (gpt-oss-120b on Groq is the teacher, the 3B is the
 student). Do NOT use "Explainable JIT" — taken by PyExplainer / JITLine.
 
-# Current state (18 Aug 2026, late evening)
+# Current state (22 Aug 2026)
 
-**Labelling pass 1 is DONE.** 1,013 commits attempted, **1,011 kept** in
-`data/labelled_multilang.jsonl`. It overshot the 959 target because `--limit`
-counts the commits not yet done at each relaunch, not the cumulative total — a
-resumed run attempts up to `limit` more. No harm, just more corpus.
+**Labelling is done, both corpora.** Pass 1: 1,011 kept (`data/labelled_multilang.jsonl`).
+Guard corpus: 662 kept (`data/labelled_guards.jsonl`), overshot the 480 target
+(per-language cap didn't count records already on disk across relaunches — fixed
+in `corpus/label.py`, not yet committed, see "Uncommitted at handoff"). Merged:
+`data/labelled_all.jsonl`, 1,673 records. Guard-class share on the guard corpus
+alone: **33.9%** (109/322 findings), beats pass 1's 28.4% baseline — the
+targeted mining did what it was for. Full numbers in RESULTS.md, "Guard corpus
+finished, checkpoint-204 trained and evaluated".
 
-**Pass 2 — the guard corpus — is STOPPED, mid-phase, at 37 kept / 37 attempted
-of 480** (0 dropped, 0 failed). It ran 20:48–21:00 on 18 Aug, added 31 records,
-and was stopped again because the per-minute ceiling holds throughput to roughly
-5 commits/minute at `--workers 1` — the remaining 443 want a fresh daily budget,
-not an overnight grind. Both the labeller and `label_watch.sh` are killed (the
-watchdog first — it relaunches the labeller within 15 minutes otherwise).
+**Two SFT adapters trained and being compared:**
 
-One thing from that hour worth not repeating: the earlier stop at 6 of 480
-assumed the day's token budget was gone, and it was not. The 429s were the
-**per-minute** ceiling. Groq exposes no daily-remaining header, so probe a key
-directly before writing off a day —
+- `artifacts/sft-adapter/checkpoint-204` — trained on `data/sft_multilang8.jsonl`
+  (1,667 examples, pass 1 + guard corpus merged). Evaluated 21 Aug: CVE eval
+  (human ground truth, 1000 commits) gives P=0.59 R=0.51 F1=0.55, grounded
+  91.5%, category match 20.8%.
+- `artifacts/sft-adapter-general/checkpoint-136` — trained on `data/sft_general.jsonl`
+  (1,005 examples, pass 1 only, no guard commits) — the ablation control, same
+  build as the original pass-1 corpus. Training finished 22 Aug 04:52.
+  **Evaluation launched 22 Aug, in progress at handoff** (`eval_general.log` on
+  `oracle-gpu`, background `setsid nohup`, ~12.5h by checkpoint-204's timing:
+  200-commit eval ~2.5h, ApacheJIT 1000 ~5h, CVEfixes 1000 ~5h).
 
-    curl -s -D - -o /dev/null -X POST https://api.groq.com/openai/v1/chat/completions \
-      -H "Authorization: Bearer $GROQ_API_KEY1" -H "Content-Type: application/json" \
-      -d '{"model":"openai/gpt-oss-120b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}' \
-      | grep -i ratelimit
+The ablation question: does the guard corpus's extra signal actually improve
+detection/category-match, or would the same GPU hour have gone just as far on
+more general-corpus data? checkpoint-204 vs checkpoint-general on the CVE eval
+(category match, grounded%) is the number that answers it.
 
-200 with a healthy `x-ratelimit-remaining-tokens` means go. Retry-after values of
-2–17 minutes in `label_guards.log` are TPM churn and are normal; a spent daily
-budget answers in hours.
+Other state, unchanged from before:
 
-**To resume, next day** — one command, the watchdog picks the phase itself
-from the raw line counts and relaunches:
-
-    setsid nohup ./label_watch.sh >> label_watch.log 2>&1 < /dev/null &
-
-Run it from a shell that contains no `pkill` pattern (self-match trap below).
-Resume is free: `label.py` skips by `commit_id`, so kept records stand.
-
-**Six Groq keys now** (`GROQ_API_KEY1..6`, six separate organisations), so the
-daily ceiling is 6 x 200,000 = 1.2M tokens/day / ~1,863 tokens per commit
-~= **640 commits/day**. The 480-commit guard phase is under a day of budget.
-Adding a key is three edits: `~/.zshrc`, `/tmp/opencode/keys.env`, and the
-comma-separated env list in `corpus/label.py` (`PROVIDERS["groq"]`); then
-restart the labeller so it inherits the new environment.
-
-Other state:
-
-- `label_watch.sh` (the watchdog) keeps labelling alive and moves it between
-  phases: every 15 minutes, no record growth means kill and relaunch, which is
-  safe because `label.py` resumes by `commit_id`.
-- `dashboard.sh` is the live TUI (jobs, bars, stuck flags, watchdog liveness);
-  `./dashboard.sh --once` for one shot, `status.sh` is the plain one-shot.
-- **GPU box is OFF** (the user powered it down). `oracle-gpu` / 192.168.1.170,
-  user `arpthef`, fish login shell, so every remote command goes through
-  `ssh oracle-gpu "bash -lc '...'"`. SFT (~10h), whole-diff embeddings and
-  serving all wait on it.
+- **GPU box is ON right now** (`oracle-gpu` / 192.168.1.170, user `arpthef`,
+  fish login shell — every remote command goes through
+  `ssh oracle-gpu "bash -lc '...'"`) running the ablation eval. Do not launch
+  anything else on it until `EVAL_GENERAL_DONE` shows in `eval_general.log`.
 - Gate: frozen GraphCodeBERT embeddings + 14 Kamei metrics + LightGBM, AUC
   **0.8293** (`artifacts/gate.joblib`), counting baseline 0.638. No regressions.
-- `sft-adapter/checkpoint-220` is the served explainer. `INFERENCE_SAMPLES=3`
-  consensus is the default in `config.py`.
+- `INFERENCE_SAMPLES=3` consensus is the default in `config.py`.
 
-# Measured on the completed pass-1 corpus (1,011 labelled)
+# Uncommitted at handoff
 
-    .venv/bin/python -m dataset_builder.build_sft_data \
-      --jsonl data/labelled_multilang.jsonl \
-      --langs go typescript javascript java php rust python ruby --out /tmp/dry.jsonl
+Local working tree has changes from the guard-phase overshoot investigation,
+never committed:
 
-gives **1,005 examples, 0% repeated assistant turns**, 251 with findings and
-754 clean. Buggy/clean is 415/596. Language mix: go 302, javascript 222, php
-107, java 88, rust 79, python 78, typescript 70, ruby 59. Findings by category:
-logic-error 103, error-handling 47, api-misuse 34, input-validation 33,
-null-dereference 24, resource-leak 10, other 9, security 8, concurrency 7.
+- `corpus/label.py` — adds `cap_per_language()`, seeded with per-language
+  counts already in the output file, so a resumed run stops at the true
+  `--per-language N` instead of re-capping N more on top of what's already
+  kept. This is the fix for the 480→662 overshoot.
+- `dashboard.sh` — guard-phase total now computed from what's actually on
+  disk per language (`awk` over `labelled_guards.jsonl`) instead of a fixed
+  480, since the corpus can legitimately end up bigger than the nominal
+  target; also widened the eval-progress log glob to pick up `eval*.log`
+  (needed once `eval_general.log` existed, not just `detect*.log`/`cve*.log`),
+  and fixed the training-progress grep pattern.
+- `run_phase2.sh` (untracked) — start/stop wrapper for the labelling watchdog,
+  superseded now that both phases are done; keep or delete, wasn't reused this
+  session.
 
-# Targeted guard corpus — mined 18 Aug, labelling STOPPED at 37 of 480
-
-The general sample was too thin for the defect class the paper turns on: 7
-guard-flavoured findings out of 141. So `corpus/mine.py --guards` now mines that
-class directly — commits whose later fix *adds* a missing check.
-
-`data/guard_commits.jsonl`: **1,458 commits, all 8 languages** (go 324, java 280,
-javascript 230, php 228, rust 175, python 79, typescript 77, ruby 65), from
-151,476 commits of history over 21 repositories. By class: nil-check 727,
-falsy-check 536, empty-check 285, error-check 186, **zero-check 146**,
-bounds-check 47, validation-raise 38. Those 146 zero-checks are the
-divide-by-zero case `calculator.go` exposed — 20x the signal the general corpus
-carried.
-
-The SZZ step needed changing and this is the part to remember: a fix that only
-*inserts* a guard deletes nothing, so `blame_origins()` (which blames deleted
-lines) returns the empty set for exactly these commits.
-`blame_insertion_context()` blames a ±3-line window around each insertion point
-instead. Full reasoning in RESULTS, "Targeted mining for guard-adding fixes".
-
-**To label it** (do NOT drop the two flags):
-
-    .venv/bin/python -m corpus.label --in data/guard_commits.jsonl \
-      --out data/labelled_guards.jsonl --raw data/labelled_guards_raw.jsonl \
-      --provider groq --workers 1 --limit 2000 --per-language 60 --no-balance
-
-`--no-balance` because the corpus is buggy by construction — the balancer would
-fill half the sample with a clean class that does not exist and label only half
-the limit. `--per-language 60` samples 480 evenly across the eight languages;
-uncapped it is 969 net-new commits, which is ~3 days of free-tier budget against
-~1.5. Composition is capped at labelling time, not mining time, because mining
-is free and labelling is what costs days.
-
-Then build the SFT from both corpora together:
-
-    cat data/labelled_multilang.jsonl data/labelled_guards.jsonl > data/labelled_all.jsonl
-    .venv/bin/python -m dataset_builder.build_sft_data --jsonl data/labelled_all.jsonl \
-      --langs go typescript javascript java php rust python ruby --out data/sft_multilang8.jsonl
-
-**Decided with the user, 18 Aug:** finish pass 1, then the guard corpus at
-`--per-language 60` (480 commits), and **drop pass 2** — the 775 remaining
-general commits are more of the same data, while the guard corpus fixes a known
-blocker. Roughly 2.75 days of free-tier budget to an SFT-ready corpus.
-
-`label_watch.sh` runs that sequence by itself once started: it decides the phase
-from `labelled_multilang_raw.jsonl`'s line count (attempts, not kept records —
-`verify()` drops labels, so the output file can never be relied on to reach the
-limit), and launches the guard command with `--per-language 60 --no-balance`
-once pass 1 has attempted its 959. Pass 1 is past that, so a restart goes
-straight to the guard phase — but the watchdog itself is NOT running and must be
-started by hand. `dashboard.sh` reads the same signal and shows which phase is
-live.
+Worth a commit once the ablation eval's numbers are in, same session or next.
 
 # Decisions made (do not relitigate)
 
@@ -146,9 +81,6 @@ live.
   first. Framework idiom (next.js / react) is a LATER phase — the rules already
   exist in `llm_explainer/context.py` (`detect_framework`, `FRAMEWORK_RULES`).
 - Do NOT switch the teacher to deepseek — the user vetoed it.
-- `--samples` is already 1 (it is the argparse default and the launch command
-  never overrode it). The old handoff note offering "`--samples 1` for a 3x
-  speedup on pass 2" was wrong; there is no such speedup available.
 - The user's professor rejects "previous ML methods" (no XGBoost family). The
   narrative: the LightGBM head is infrastructure, the method is the gate→LLM
   cascade plus the eval framework. Contingency if pushed: the contrastive
@@ -157,107 +89,67 @@ live.
   started, then killed per the user's pivot. Offer it, do not assume it.
 - Keep the ApacheJIT gate numbers (0.8293) as-is.
 - Labelling runs locally and talks only to Groq; the GPU box is irrelevant to it.
+  Labelling itself is now DONE — no more Groq budget needed for the small goal.
 
-# Next steps, in order — what to do after the 480 finish
+# Next steps, in order
 
-**Step 0, first thing: restart the watchdog** — the guard phase is stopped at 37
-of 480 and nothing is running:
+**Step 0, first thing: check the ablation eval.**
 
-    setsid nohup ./label_watch.sh >> label_watch.log 2>&1 < /dev/null &
+    ssh oracle-gpu "tail -5 ~/oracle/eval_general.log"
 
-Then check it is advancing before walking away, and again once it should be done:
+`EVAL_GENERAL_DONE` at the end means all three stages landed
+(`data/eval_sft_general.jsonl`, `data/detect_sft_general.jsonl`,
+`data/cve_sft_general.jsonl` on the GPU box). If not done and nothing is
+running (`ssh oracle-gpu "pgrep -af evaluate.py"` empty, watch the self-match
+trap below), the job died — relaunch:
 
-    ./dashboard.sh --once                       # phase row + bar
-    wc -l data/labelled_guards.jsonl            # kept records, target ~480
-    wc -l data/labelled_guards_raw.jsonl        # attempts; the phase is done at 480
-    tail -3 label_watch.log                     # kills and relaunches, if any
+    ssh oracle-gpu "bash -lc 'cd ~/oracle && setsid nohup bash -c \"
+      .venv/bin/python evaluate.py --backend transformers --model artifacts/sft-adapter-general/checkpoint-136 --name sft-general --out data/eval_sft_general.jsonl
+      .venv/bin/python evaluate.py --backend transformers --model artifacts/sft-adapter-general/checkpoint-136 --heldout data/detect_eval.jsonl --limit 1000 --name sft-general-1k --out data/detect_sft_general.jsonl
+      .venv/bin/python evaluate.py --backend transformers --model artifacts/sft-adapter-general/checkpoint-136 --heldout data/cvefixes_eval.jsonl --limit 1000 --name cve-general --out data/cve_sft_general.jsonl
+      echo EVAL_GENERAL_DONE
+    \" > eval_general.log 2>&1 < /dev/null &'"
 
-Short of 480 with the watchdog alive means it is still working — leave it. Short
-of 480 with nothing running means the watchdog died: restart it with
-`setsid nohup ./label_watch.sh >> label_watch.log 2>&1 < /dev/null &`, from a
-shell that does not also contain a `pkill` pattern (see the self-match trap
-below).
+1. **Write up the ablation comparison** in RESULTS.md against the
+   checkpoint-204 table (already there). This decides whether the guard
+   corpus was worth the ~2.75 days of budget it cost, and whether the paper's
+   "guard corpus" framing holds.
 
-1. **Build the SFT from both corpora.** This is the merge the whole labelling
-   effort was for:
+2. **Commit the uncommitted files** (see above) — the per-language cap fix
+   is worth keeping regardless of the ablation's outcome.
 
-       cat data/labelled_multilang.jsonl data/labelled_guards.jsonl \
-         > data/labelled_all.jsonl
-       .venv/bin/python -m dataset_builder.build_sft_data \
-         --jsonl data/labelled_all.jsonl \
-         --langs go typescript javascript java php rust python ruby \
-         --out data/sft_multilang8.jsonl
+3. **DPO on the winning adapter**, `./finish_training.sh` (~1-3h) — picks
+   whichever of checkpoint-204 / checkpoint-general the ablation favors, or
+   204 by default if the ablation is a wash (it has the guard-class signal
+   the paper's defect story turns on, per RESULTS "Guard share by category").
 
-   Expect roughly 1,005 + ~450 = **~1,450 examples**. Two gates before any GPU
-   spend, both printed by the build:
-   - **repeated assistant turns must stay ~0%** — the build refuses to train on
-     a corpus that memorised one answer.
-   - **findings count must jump.** Pass 1 gave 251 of 1,005 with findings. The
-     guard corpus is buggy by construction, so nearly all ~450 should carry a
-     finding; if they do not, the teacher is not seeing the guard class and that
-     is a prompt problem to fix *before* 10 hours of GPU time. **Early warning:
-     the first 37 guard records carried a finding only 22 times (59%).** n=37,
-     so it may be noise — but re-measure at ~100 records rather than waiting for
-     480, because a 59% finding rate at 480 means the phase bought much less
-     than it cost.
-
-2. **Re-check the guard-class share** on the merged corpus — the reason the
-   guard corpus exists. `guard_share.py` (written 18 Aug) is that one script:
-
-       .venv/bin/python guard_share.py data/labelled_multilang.jsonl \
-         data/labelled_guards.jsonl
-
-   **Pass-1 baseline: 78 of 275 findings, 28.4%.** The guard corpus has to beat
-   it. Any 20.7% in older notes is superseded — that ad-hoc regex matched
-   `null (pointer|deref)` with a literal space and so missed all 24
-   `null-dereference` findings. Note that 57 of the 78 are the two categories
-   (`input-validation`, `null-dereference`) that are guard-flavoured by
-   definition; only 21 of the other 197 findings describe a missing check, and
-   that is the number the targeted corpus is trying to move.
-
-   First 37 guard records read 22 findings, 8 guard-flavoured (36.4%) — right
-   direction, far too small to conclude from.
-
-3. **Power the GPU box on**, `scp data/sft_multilang8.jsonl` over, `./serve.sh
-   stop` (it is not running, but check), then launch QLoRA SFT (~10h). Nothing
-   else can proceed in parallel on that box.
-
-4. **Eval the small goal** against `checkpoint-220` as the incumbent: grounding,
-   category accuracy, `cve_quality` against human CVE text, per-language
-   separation (TS was -16.7pp on the old corpus), and re-test the divide-by-zero
-   Go case that motivated the guard mining. Run `count_control.py` beside every
-   detection number.
+4. **Eval the small goal** end to end: grounding, category accuracy,
+   `cve_quality` against human CVE text, per-language separation (TS was
+   -16.7pp on the old corpus), and re-test the divide-by-zero Go case that
+   motivated the guard mining. Run `count_control.py` beside every detection
+   number.
 
 5. **Serve + TUI on a mined repo**, then the cascade measurement: gate/LLM
    disagreement rate on `detect_eval`.
-
-If the guard phase came up short and the budget is spent, the fallback is to let
-it run another day rather than to train on a partial guard corpus — step 1's
-findings gate is the point of the exercise. Dropped general-corpus pass 2 (the
-775 remaining commits) stays dropped; that decision is in the section above.
 
 # Operational notes
 
 - Local venv `.venv/bin/python`, always. Keys: `~/.zshrc` exports
   `GROQ_API_KEY1..6` and `DEEPSEEK_API_KEY`; `/tmp/opencode/keys.env` holds
-  the same exports for background launches.
-- `pkill` self-match trap: patterns must use the `[.]` trick AND must not share
-  a shell with the launching command — `pgrep` matches the tool wrapper's own
-  cmdline, and `llm_explainer[.]serve` once killed its own launcher.
-- Editing `label_watch.sh` while it runs: write a temp file and `mv` it into
-  place, never `sed -i`, then restart the watchdog — a running bash re-reads its
-  script by byte offset.
-- `label_watch.log` is event-based: silence means no kills, which means healthy.
-  Stuck flags in the dashboard use 15-minute windows.
-- The `N/959` line in `label_multilang.log` resets on every process restart and
-  is meaningless — count the output file. Same for the guard phase's `N/480`.
-- `--limit` applies to the commits not yet labelled at launch, not to the
-  cumulative total, so a resumed run overshoots the limit. Pass 1 ended at 1,013
-  attempts against a 959 limit for this reason.
-- `dashboard.sh` must NOT take its denominator from the log's "N commits to
-  label": that N is what was left at the last relaunch, while the bar's
-  numerator counts the whole output file. Mixing them once read 924/829 = 111%.
+  the same exports for background launches. Labelling is done, so these
+  mostly don't matter anymore for the small goal.
+- `pkill`/`pgrep` self-match trap: a remote command whose own cmdline contains
+  the search pattern (e.g. `ssh ... "pgrep -af evaluate.py"`) matches itself.
+  Prefer `nvidia-smi --query-compute-apps=...` to check whether the GPU is
+  actually busy, it doesn't have this problem.
+- Editing a script while it runs on the GPU box: write a temp file and `mv` it
+  into place, never `sed -i` — a running bash re-reads its script by byte
+  offset.
 - A failed input redirect cannot be muted by `2>/dev/null` on the same command
   (`wc -l < "$MISSING" 2>/dev/null`) — the shell reports it before that redirect
   takes effect. Wrap it: `{ wc -l < "$F"; } 2>/dev/null`.
 - Run `count_control.py` beside every detection number.
+- Long GPU jobs: launch with `setsid nohup ... < /dev/null &` from the GPU box
+  shell so they survive the local machine disconnecting or shutting down —
+  confirmed working for the ablation eval, session's local device was shut
+  down mid-run without affecting it.

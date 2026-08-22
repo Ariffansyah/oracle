@@ -284,6 +284,26 @@ def verify(analysis: Analysis, buggy: bool, hinted: bool = True) -> tuple[bool, 
     return True, "ok"
 
 
+
+def cap_per_language(pool, per_language, already):
+    """Take up to per_language records of each language, counting what is
+    already labelled towards the quota.
+
+    Seeding the counter with `already` is the whole point: a restart re-samples
+    from the unlabelled remainder, so a fresh counter grows the corpus by
+    per_language * languages on every relaunch.
+    """
+    seen: Counter = Counter(already)
+    capped = []
+    for r in pool:
+        lang = r.get("language", "")
+        if seen[lang] >= per_language:
+            continue
+        seen[lang] += 1
+        capped.append(r)
+    return capped, seen
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -328,8 +348,13 @@ def main(argv=None) -> int:
 
     records = [json.loads(l) for l in open(args.inp) if l.strip()]
     done = set()
+    done_langs: Counter = Counter()
     if args.out.exists():
-        done = {json.loads(l)["commit_id"] for l in open(args.out) if l.strip()}
+        for line in open(args.out):
+            if line.strip():
+                rec = json.loads(line)
+                done.add(rec["commit_id"])
+                done_langs[rec.get("language", "")] += 1
         print(f"{len(done)} already labelled, skipping those")
 
     # Balanced by the SZZ label. Taking the first N gave 3 buggy to 17 clean,
@@ -345,14 +370,7 @@ def main(argv=None) -> int:
         import random as _random
 
         _random.Random(args.seed).shuffle(pool)
-        seen: Counter = Counter()
-        capped = []
-        for r in pool:
-            lang = r.get("language", "")
-            if seen[lang] >= args.per_language:
-                continue
-            seen[lang] += 1
-            capped.append(r)
+        capped, seen = cap_per_language(pool, args.per_language, done_langs)
         print(f"capped at {args.per_language}/language: {len(pool)} -> "
               f"{len(capped)}  {dict(seen.most_common())}")
         pool = capped
@@ -522,6 +540,15 @@ if __name__ == "__main__":
     three = [Finding(category="other", explanation="x" * 40) for _ in range(3)]
     assert not verify(Analysis(summary="s", findings=three), buggy=False,
                       hinted=False)[0]
+    # The per-language cap must count what is already labelled, or a restart
+    # samples a fresh quota and the corpus overshoots by 480 every relaunch.
+    pool = [{"language": "go"}] * 5 + [{"language": "rust"}] * 5
+    capped, _ = cap_per_language(pool, 3, Counter())
+    assert len(capped) == 6, capped
+    capped, _ = cap_per_language(pool, 3, Counter({"go": 3, "rust": 1}))
+    assert [r["language"] for r in capped] == ["rust", "rust"], capped
+    assert cap_per_language(pool, 3, Counter({"go": 9, "rust": 9}))[0] == []
+
     # Rate-limit pacing: the header parser and the refill arithmetic.
     assert _duration("3") == 3.0
     assert _duration("9.202s") == 9.202

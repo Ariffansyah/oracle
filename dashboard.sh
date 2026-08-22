@@ -76,7 +76,13 @@ else
   LAB_PHASE="pass 2 — guard corpus"
   LAB_FILE=data/labelled_guards.jsonl
   LAB_LOG=label_guards.log
-  LAB_TOTAL=480
+  # 60 per language over eight languages. Restarts before the cap counted
+  # what was already on disk overshot several languages past 60, and those
+  # labels are kept, so the target is the cap or the overshoot, per language.
+  LAB_TOTAL=$(awk -F'"language": *"' 'NF>1{split($2,a,"\""); c[a[1]]++}
+    END{t=0; n=0; for(k in c){n++; t += c[k]>60 ? c[k] : 60} print t + (8-n)*60}' \
+    data/labelled_guards.jsonl 2>/dev/null)
+  [ -z "$LAB_TOTAL" ] && LAB_TOTAL=480
 fi
 LAB_DONE=0; [ -f "$LAB_FILE" ] && LAB_DONE=$(wc -l < "$LAB_FILE")
 # Do NOT take the total from the log's "N commits to label": that N is what was
@@ -140,7 +146,7 @@ sec "training (on $H)"
 for probe in sft dpo; do
   state=$(R "pgrep -f \"fine_tuning[.]train_$probe\" >/dev/null && echo green || echo yellow")
   if [ "$state" = green ]; then
-    detail=$(R "tr \"\r\" \"\n\" < \$(ls -t ~/oracle/$probe*.log 2>/dev/null | head -1) 2>/dev/null | grep -E '[0-9]+/[0-9]+ \[' | tail -1")
+    detail=$(R "tr \"\r\" \"\n\" < \$(ls -t ~/oracle/$probe*.log 2>/dev/null | head -1) 2>/dev/null | grep -E \"^[[:space:]]*[0-9]+%\\|\" | tail -1")
     job "$probe" green "running   ${detail:0:60}"
   else
     job "$probe" yellow "idle"
@@ -163,7 +169,7 @@ EV=$(R 'ps -eo etimes,args | grep "[e]valuate.py" | head -1' | sed 's/^[[:space:
 if [ -n "$EV" ]; then
   ELAPSED=${EV%% *}
   MODEL=$(printf '%s' "$EV" | sed -n 's/.*--model \([^ ]*\).*/\1/p')
-  PROG=$(R 'tr "\r" "\n" < "$(ls -t ~/oracle/detect*.log ~/oracle/cve*.log 2>/dev/null | head -1)" 2>/dev/null | grep -E "^  [0-9]+/[0-9]+ " | tail -1')
+  PROG=$(R 'tr "\r" "\n" < "$(ls -t ~/oracle/detect*.log ~/oracle/cve*.log ~/oracle/eval*.log 2>/dev/null | head -1)" 2>/dev/null | grep -E "^  [0-9]+/[0-9]+ " | tail -1')
   DONE=$(printf '%s' "$PROG" | sed -n 's|^ *\([0-9]*\)/.*|\1|p')
   TOTAL=$(printf '%s' "$PROG" | sed -n 's|^ *[0-9]*/\([0-9]*\).*|\1|p')
   job eval green "$MODEL   $(bar "${DONE:-0}" "${TOTAL:-1}")   ${DONE:-0}/${TOTAL:-1}"

@@ -643,3 +643,77 @@ finding rate that settles near 59% rather than near 100% means the teacher is
 not seeing the guard class, and that is a prompt problem to fix *before* ten
 hours of GPU time. Re-measure with `guard_share.py` at ~100 records — early
 enough to change the prompt without burning the phase — and again at 480.
+
+### Guard corpus finished, checkpoint-204 trained and evaluated (19–21 Aug)
+
+The guard phase ran to completion over 19–20 Aug (not captured turn-by-turn —
+no session was open) and landed at **662 kept / 662 attempted, 0 dropped, 0
+failed** — overshot the 480 target the same way pass 1 overshot 959, but for a
+distinct reason this time: `--per-language 60` capped against *this run's*
+sample, not against records already on disk from earlier relaunches, so each
+restart re-capped 60-per-language on top of what was already kept. `guard_share.py`
+on the finished corpus:
+
+    .venv/bin/python guard_share.py data/labelled_multilang.jsonl data/labelled_guards.jsonl
+
+    data/labelled_guards.jsonl
+      662 records, 322 findings, 109 guard-flavoured (33.9%)
+        logic-error           144  guard   23
+        error-handling         51  guard    5
+        null-dereference       38  guard   38
+        input-validation       33  guard   33
+        api-misuse             22  guard    1
+        security               14  guard    6
+        concurrency             9  guard    1
+        off-by-one              6  guard    2
+        resource-leak           4  guard    0
+        other                   1  guard    0
+
+**33.9% beats the pass-1 baseline of 28.4%** — the guard corpus did what it was
+mined for, and the extra 182 commits over budget bought more of that signal
+rather than diluting it. `corpus/label.py`'s per-language cap was fixed after
+the fact (`cap_per_language()`, seeded with counts already in the output file)
+so a future relaunch stops at the true 60/language instead of re-capping on
+top of prior kept records — not yet committed, see "Uncommitted at handoff"
+below.
+
+Merged and built the SFT set:
+
+    cat data/labelled_multilang.jsonl data/labelled_guards.jsonl > data/labelled_all.jsonl   # 1,673 records
+    .venv/bin/python -m dataset_builder.build_sft_data --jsonl data/labelled_all.jsonl \
+      --langs go typescript javascript java php rust python ruby --out data/sft_multilang8.jsonl
+    # -> 1,667 examples
+
+Trained on `oracle-gpu` (`sft_multilang8.log`, finished 21 Aug 07:41) ->
+`artifacts/sft-adapter/checkpoint-204`. Evaluated the same day across all
+three heldout sets (`evaluate.py`, log `eval_204.log`):
+
+| eval | commits | detection P/R/F1 | acc | grounded | category match | findings |
+|---|---|---|---|---|---|---|
+| `sft-204` (`labelled_heldout.jsonl`, default) | 200 | 0.42/0.22/0.29 | 0.50 | 100.0% | 5.9% | 57 |
+| `sft-204-1k` (`detect_eval.jsonl`, ApacheJIT) | 1000 | 0.52/0.29/0.37 | 0.51 | 99.0% | — | 309 |
+| `cve-204` (`cvefixes_eval.jsonl`, human text) | 1000 | 0.59/0.51/0.55 | 0.58 | 91.5% | 20.8% | 531 |
+
+checkpoint-204 (merged corpus, guard-augmented) beats checkpoint-220's old
+numbers on the CVE set specifically — the set with human ground truth, the
+strongest evidence available. Category match on the smaller two evals (5.9%,
+n/a) is noisy at 200 commits and not the number to trust; cve-204's 20.8% is
+the one comparable to the 27% figure ROADMAP flags as stuck.
+
+### Ablation: general-only vs guard-augmented SFT (21–22 Aug)
+
+To isolate whether the guard corpus actually earned its ~2.75 days of Groq
+budget, rather than the merged corpus just having more data, built a
+same-size control from pass 1 alone (no guard commits):
+
+    .venv/bin/python -m dataset_builder.build_sft_data --jsonl data/labelled_multilang.jsonl \
+      --langs go typescript javascript java php rust python ruby --out data/sft_general.jsonl
+    # -> 1,005 examples, same corpus build as the original pass-1 measurement
+
+Trained on `oracle-gpu` (`sft_general.log`, finished 22 Aug 04:52) ->
+`artifacts/sft-adapter-general/checkpoint-136`. **Evaluation launched 22 Aug**,
+same three-stage sequence as checkpoint-204 (`eval_general.log`, background via
+`setsid nohup`, ~12.5h total by checkpoint-204's timing) — in progress at
+session handoff, not yet landed. Compare against the checkpoint-204 table
+above once it does; `cve-general`'s category match and grounded% are the
+numbers that answer the guard corpus's actual worth.

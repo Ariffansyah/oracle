@@ -711,9 +711,49 @@ same-size control from pass 1 alone (no guard commits):
     # -> 1,005 examples, same corpus build as the original pass-1 measurement
 
 Trained on `oracle-gpu` (`sft_general.log`, finished 22 Aug 04:52) ->
-`artifacts/sft-adapter-general/checkpoint-136`. **Evaluation launched 22 Aug**,
-same three-stage sequence as checkpoint-204 (`eval_general.log`, background via
-`setsid nohup`, ~12.5h total by checkpoint-204's timing) — in progress at
-session handoff, not yet landed. Compare against the checkpoint-204 table
-above once it does; `cve-general`'s category match and grounded% are the
-numbers that answer the guard corpus's actual worth.
+`artifacts/sft-adapter-general/checkpoint-136`. Evaluated 22 Aug across the
+same three heldout sets as checkpoint-204 (`evaluate.py`, log
+`eval_general.log`, 11:07–20:43):
+
+| eval | commits | detection P/R/F1 | acc | grounded | category match | findings |
+|---|---|---|---|---|---|---|
+| `sft-general` (`labelled_heldout.jsonl`, default) | 200 | 0.53/0.25/0.34 | 0.56 | 100.0% | 5.9% | 53 |
+| `sft-general-1k` (`detect_eval.jsonl`, ApacheJIT) | 1000 | 0.49/0.25/0.33 | 0.49 | 99.6% | — | 278 |
+| `cve-general` (`cvefixes_eval.jsonl`, human text) | 1000 | 0.63/0.57/0.59 | 0.61 | 94.9% | 21.0% | 545 |
+
+Head to head against checkpoint-204 (guard-augmented, 1,667 examples vs the
+control's 1,005):
+
+| eval | metric | general (136) | guard-augmented (204) | delta |
+|---|---|---|---|---|
+| ApacheJIT 1k | F1 | 0.33 | 0.37 | **-0.04 for general** |
+| ApacheJIT 1k | recall | 0.25 | 0.29 | -0.04 |
+| CVEfixes 1k | F1 | 0.59 | 0.55 | **+0.04 for general** |
+| CVEfixes 1k | recall | 0.57 | 0.51 | +0.06 |
+| CVEfixes 1k | grounded | 94.9% | 91.5% | +3.4pp |
+| CVEfixes 1k | category match | 21.0% | 20.8% | +0.2pp (tie) |
+| 200-commit heldout | F1 | 0.34 | 0.29 | +0.05 (noisy at n=200) |
+
+**Verdict: the guard corpus did not earn its budget.** The guard-augmented
+adapter wins only on ApacheJIT — the in-distribution set whose teacher labels
+come from the same pipeline that mined the guard commits — and loses on
+CVEfixes, the only set with human ground truth, on every metric that matters
+there. Category match, the number this ablation was built to move, is a tie
+(21.0% vs 20.8%, within noise at n=1000). The control reached it with 40%
+fewer training examples, so the merged corpus's extra data bought nothing that
+transfers off-distribution.
+
+Two caveats on how hard to read this:
+
+- Per §4, `cvefixes_eval.jsonl` cannot carry a *detection* claim (the counting
+  baseline scores 0.934 on it), so the F1/recall deltas on that row are weak
+  evidence. Grounded% and category match are the usable signals there, and
+  those are +3.4pp and a tie.
+- Neither run was seed-repeated. A 0.04 F1 gap on a single seed is not a
+  result; both directions of the ApacheJIT/CVE split could move under a rerun.
+
+What this changes: the paper cannot claim the guard corpus improves
+detection or explanation quality. It can still claim the guard *mining* raised
+the guard-class share of the corpus from 28.4% to 33.9% (see "Guard share by
+category") — a corpus-composition result, not a model result. Keep the two
+claims separate.

@@ -1,0 +1,114 @@
+diff --git a/main.go b/main.go
+index fc27945..6188a19 100644
+--- a/main.go
++++ b/main.go
+@@ -2,87 +2,38 @@ package main
+ 
+ import (
+     "fmt"
+-    "log"
+-    "os"
+-    "os/exec"
+-    "strings"
++    "sync"
+ )
+ 
+-func main() {
+-    // 1. Get commit hash from arguments (default to HEAD)
+-    commitHash := "HEAD"
+-    if len(os.Args) > 1 {
+-        commitHash = os.Args[1]
+-    }
++type OrderManager struct {
++    totalProcessed int
++    failedOrders   []string
++}
+ 
+-    fmt.Printf("🔍 Analyzing Commit: %s\n", commitHash)
++func (m *OrderManager) ProcessOrder(orderID string, wg *sync.WaitGroup) {
++    defer wg.Done()
+ 
+-    // 2. Extract Commit Message
+-    msgCmd := exec.Command("git", "log", "-1", "--pretty=format:%B", commitHash)
+-    msgOut, err := msgCmd.Output()
+-    if err != nil {
+-        log.Fatalf("❌ Failed to get commit message. Are you in a Git repository? Error: %v", err)
++    if orderID == "" {
++        m.failedOrders = append(m.failedOrders, orderID)
++        return
+     }
+-    message := strings.TrimSpace(string(msgOut))
+ 
+-    // 3. Extract Commit Diff (The code changes)
+-    diffCmd := exec.Command("git", "show", commitHash, "--patch", "--format=")
+-    diffOut, err := diffCmd.Output()
+-    if err != nil {
+-        log.Fatalf("❌ Failed to get commit diff: %v", err)
+-    }
+-    diff := string(diffOut)
++    m.totalProcessed++
++}
+ 
+-    // 4. Extract Commit Stats (Files changed, insertions, deletions)
+-    statCmd := exec.Command("git", "show", commitHash, "--shortstat", "--format=")
+-    statOut, err := statCmd.Output()
+-    if err != nil {
+-        log.Fatalf("❌ Failed to get commit stats: %v", err)
+-    }
+-    stats := strings.TrimSpace(string(statOut))
++func main() {
++    manager := &OrderManager{}
++    var wg sync.WaitGroup
+ 
+-    // 5. Basic JIT Heuristics (Similar to Commit Guru)
+-    isFix := false
+-    lowerMsg := strings.ToLower(message)
+-    if strings.Contains(lowerMsg, "fix") || strings.Contains(lowerMsg, "bug") || strings.Contains(lowerMsg, "patch") {
+-        isFix = true
+-    }
++    orders := []string{"ORD-001", "ORD-002", "", "ORD-003", "", "ORD-004"}
+ 
+-    diffLines := strings.Split(diff, "\n")
+-    addedLines := 0
+-    deletedLines := 0
+-    for _, line := range diffLines {
+-        if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+-            addedLines++
+-        } else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+-            deletedLines++
+-        }
++    for _, order := range orders {
++        wg.Add(1)
++        go manager.ProcessOrder(order, &wg)
+     }
+ 
+-    // 6. Print the Analysis Report
+-    fmt.Println(strings.Repeat("=", 50))
+-    fmt.Printf("📝 Message  : %s\n", message)
+-    fmt.Printf("📊 Stats    : %s\n", stats)
+-    fmt.Printf("🛠️  Is Fix?  : %t (Based on commit message keywords)\n", isFix)
+-    fmt.Printf("📈 Entropy  : %d additions, %d deletions\n", addedLines, deletedLines)
+-    fmt.Println(strings.Repeat("=", 50))
++    wg.Wait()
+ 
+-    // 7. Generate LLM Prompt for JIT Defect Prediction
+-    fmt.Println("\n🤖 [LLM Defect Prediction Prompt generated below]")
+-    fmt.Println(strings.Repeat("-", 50))
+-
+-    prompt := fmt.Sprintf(`You are an expert Software Engineer and AI code reviewer.
+-Perform a Just-In-Time (JIT) defect prediction on the following git commit.
+-Analyze the commit message and the code diff. Identify any potential bugs, edge cases, or security vulnerabilities introduced by these changes.
+-
+-Commit Message:
+-%s
+-
+-Git Diff:
+-%s
+-
+-Please provide your risk assessment (Low, Medium, High) and explain any potential defects.`, message, diff)
+-
+-    fmt.Println(prompt)
+-    fmt.Println(strings.Repeat("-", 50))
++    fmt.Printf("Processed: %d\n", manager.totalProcessed)
++    fmt.Printf("Failed: %d\n", len(manager.failedOrders))
+ }

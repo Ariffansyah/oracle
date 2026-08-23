@@ -24,10 +24,35 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import (Footer, Header, Input, Label, ListItem,
                              ListView, Static)
 
-from config import (BACKEND, BASE_MODEL, MERGED_MODEL_DIR, OLLAMA_MODEL,
-                    OLLAMA_NUM_CTX)
+from config import (BACKEND, BASE_MODEL, MERGED_MODEL_DIR, OLLAMA_HOST,
+                    OLLAMA_MODEL, OLLAMA_NUM_CTX)
 from dataset_builder.schema import Analysis
 from ui.commands import CommandError, build_registry, run_command
+from variance import VARIANTS
+
+
+def model_label(backend: str, model_path: Path, ollama_model: str,
+                host: str = OLLAMA_HOST) -> str:
+    """What is answering: the backend, the model, and where it runs.
+
+    A served model can sit behind a tunnel on another machine, so the host is
+    part of the model's identity - "oracle-merged" alone does not say which
+    box's oracle-merged.
+    """
+    if backend == "transformers":
+        return f"transformers:{model_path.name}"
+    return f"ollama:{ollama_model} @ {host.split('//', 1)[-1]}"
+
+
+def served_note(claimed: str, served: list[str]) -> str:
+    """Header suffix confirming the server really has the model we name."""
+    if not served:
+        return "  (no model served)"
+    # Ollama reports "name:tag"; the config names the model without the tag.
+    if any(n == claimed or n.split(":")[0] == claimed for n in served):
+        return "  ✓"
+    return f"  (server has {served[0]})"
+
 
 _CATEGORY_STYLE = {
     "security": "bold red", "concurrency": "bold red",
@@ -150,6 +175,9 @@ class OracleTUI(App):
         self.ollama_model = OLLAMA_MODEL
         self.num_ctx = OLLAMA_NUM_CTX
         self.with_context = True
+        # Which rendering of the diff to send. "off" is the real one; the rest
+        # re-render the same change to show whether the verdict survives it.
+        self.perturb = "off"
         self.limit = 50
         self.registry = build_registry(self)
         self._history: list[str] = []
@@ -178,15 +206,21 @@ class OracleTUI(App):
 
     def on_mount(self) -> None:
         self.title = "ORACLE"
-        which = (self.model_path.name if self.backend == "transformers"
-                 else self.ollama_model)
-        self.sub_title = f"{self.repo or 'mock commits'} · {which}"
+        self._refresh_subtitle()
+        self._probe_model()
         self._select(0)
         self.query_one("#sidebar", ListView).focus()
         self._status("[s] commits · [j/k] move · [a] analyze · [:] command "
                      "(:help lists them)")
 
     # --- rendering ---------------------------------------------------------
+    def _refresh_subtitle(self, note: str = "") -> None:
+        label = model_label(self.backend, self.model_path, self.ollama_model)
+        # A perturbed answer must never be mistaken for the model's real one.
+        rendering = "" if self.perturb == "off" else f" · rendering:{self.perturb}"
+        self.sub_title = (f"{self.repo or 'mock commits'} · {label}"
+                          f"{rendering}{note}")
+
     def _status(self, msg: str, style: str = "dim") -> None:
         self.query_one("#status", Static).update(Text(msg, style=style))
 
@@ -289,6 +323,28 @@ class OracleTUI(App):
             self._syncing = False
 
     # --- workers -----------------------------------------------------------
+    @work(thread=True, group="probe")
+    def _probe_model(self) -> None:
+        """Ask the server what it actually serves before the header claims it.
+
+        The name in the config is a request, not a fact: the server may hold a
+        different model, or be down behind a tunnel that still accepts writes.
+        """
+        if self.backend != "ollama":
+            return
+        import json
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=3) as r:
+                served = [m.get("name", "")
+                          for m in json.load(r).get("models", [])]
+        except Exception:
+            self.call_from_thread(self._refresh_subtitle, "  (unreachable)")
+            return
+        self.call_from_thread(self._refresh_subtitle,
+                              served_note(self.ollama_model, served))
+
     @work(thread=True, exclusive=True)
     def _run_analysis(self, commit: Commit) -> None:
         from llm_explainer.client import InferenceError, OracleClient
@@ -302,7 +358,16 @@ class OracleTUI(App):
                 "yellow")
 
         try:
-            if self.repo and not commit.sha.startswith("mock"):
+            if self.perturb != "off":
+                # Re-render the same change and ask again. The perturbations
+                # touch git metadata only, so a different answer here is the
+                # model reading punctuation - the whole point of :perturb.
+                # Goes through analyze() because analyze_commit() re-fetches
+                # the diff from git and would undo the edit.
+                analysis = client.analyze(VARIANTS[self.perturb](commit.diff),
+                                          subject=commit.subject,
+                                          progress=progress)
+            elif self.repo and not commit.sha.startswith("mock"):
                 # Fetches `git show -U50` plus post-commit file bodies, so a
                 # guard is judged against the control it protects.
                 analysis = client.analyze_commit(self.repo, commit.sha,
@@ -418,6 +483,10 @@ class OracleTUI(App):
         except Exception as e:  # a command must never take the app down
             self._status(f"{type(e).__name__}: {e}", "red")
             return
+        # :model, :backend and :repo all move what the header names, so one
+        # refresh here covers every command instead of three call sites.
+        self._refresh_subtitle()
+        self._probe_model()
         if message:
             self._status(message, "green")
 

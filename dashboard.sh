@@ -117,6 +117,11 @@ if pgrep -f "label_watch[.]sh" >/dev/null; then
   # healthy. Liveness = the watchdog process itself; health = records advance
   # (checked above on the labelling row).
   job watchdog green "alive (event log: silence = no kills = good)"
+elif [ "$LAB_DONE" -ge "${LAB_TOTAL:-0}" ] 2>/dev/null; then
+  # A finished corpus needs no watchdog. Leaving this red meant the panel cried
+  # wolf for days after labelling completed, which is how a real red gets
+  # ignored.
+  job watchdog yellow "not needed (corpus complete)"
 else
   job watchdog red "DOWN — labelling will stop silently"
 fi
@@ -141,12 +146,42 @@ if pgrep -f "mine[.]py" >/dev/null; then
 else
   job mining yellow "idle"
 fi
+# Variance runs here, not on the box: it drives the served model through the
+# tunnel, so it dies with the tunnel rather than with the GPU. Total comes from
+# the run's own header line, so changing --limit does not lie about progress.
+VAR_TOTAL=$(sed -n 's/.* = \([0-9]*\) calls$/\1/p' variance.log 2>/dev/null | tail -1)
+VAR_DONE=$(grep -cE "^  \[[0-9]+/[0-9]+\]" variance.log 2>/dev/null)
+if pgrep -f "variance[.]py" >/dev/null; then
+  VF=$(fresh data/variance_results.jsonl)
+  # One call is ~60s on the 6GB card; several minutes of silence means the
+  # tunnel dropped, and every later row would be an error row.
+  if [ "$VF" -gt 400 ]; then
+    job variance red "running but STUCK ($((VF/60))m since last row — tunnel dropped?)"
+  else
+    job variance green "running   $(bar "${VAR_DONE:-0}" "${VAR_TOTAL:-1}")   ${VAR_DONE:-0}/${VAR_TOTAL:-1}"
+  fi
+elif [ -n "$VAR_DONE" ] && [ "$VAR_DONE" -gt 0 ]; then
+  job variance yellow "idle   ${VAR_DONE}/${VAR_TOTAL:-?} calls done"
+else
+  job variance yellow "idle"
+fi
+# The agreement rate is the whole point of the run, so show it while it climbs
+# rather than only at the end. --score reads the streamed rows and imports no
+# model code, so this stays cheap enough for a 10s refresh.
+[ -s data/variance_results.jsonl ] && .venv/bin/python variance.py \
+    --score data/variance_results.jsonl 2>/dev/null \
+  | grep -E "verdict agreement|category agreement|commits unanimous" \
+  | sed "s/^ */    $DIM/;s/$/$OFF/"
 
 sec "training (on $H)"
 for probe in sft dpo; do
   state=$(R "pgrep -f \"fine_tuning[.]train_$probe\" >/dev/null && echo green || echo yellow")
   if [ "$state" = green ]; then
-    detail=$(R "tr \"\r\" \"\n\" < \$(ls -t ~/oracle/$probe*.log 2>/dev/null | head -1) 2>/dev/null | grep -E \"^[[:space:]]*[0-9]+%\\|\" | tail -1")
+    # Not anchored at the line start: TRL prefixes its bars with the phase
+    # ("Computing reference log probs for train dataset:  5%|..."), and that
+    # prefix is the useful half - it says whether DPO is still precomputing
+    # reference log-probs or actually training.
+    detail=$(R "tr \"\r\" \"\n\" < \$(ls -t ~/oracle/$probe*.log 2>/dev/null | head -1) 2>/dev/null | grep -E \"[0-9]+%\\|\" | tail -1")
     job "$probe" green "running   ${detail:0:60}"
   else
     job "$probe" yellow "idle"
@@ -159,6 +194,13 @@ if [ "$enc_state" = green ]; then
 else
   job encoder yellow "idle"
 fi
+# What the training actually produced. A merged model older than the DPO
+# adapter means the last run died before the merge, which is exactly what an
+# OOM at step 0 looks like: the process is gone and every artifact is stale.
+R 'cd ~/oracle/artifacts 2>/dev/null && stat -c "%n %y" \
+     sft-adapter/adapter_model.safetensors dpo-adapter/adapter_model.safetensors \
+     sft-merged/model.safetensors oracle-merged/model.safetensors 2>/dev/null' \
+  | awk '{printf "    %-44s %s %s\n", $1, $2, substr($3,1,5)}'
 
 sec "gpu (on $H)"
 R 'nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader 2>/dev/null | sed "s/^/  /"' \
@@ -185,12 +227,24 @@ for f in data/labelled.jsonl data/labelled_multilang.jsonl data/multilang_commit
 done
 
 sec "serving"
-curl -s -m 5 http://localhost:8111/api/tags >/dev/null 2>&1 \
-  && job serve green "up on localhost:8111 (TUI ready)" \
-  || job serve yellow "down (box off or ./serve.sh stop)"
+# Name the model, not just the port. A tunnel that answers says nothing about
+# which weights are behind it - swapping oracle-merged for sft-merged to run an
+# A/B leaves the port identical, and a run started against the wrong one looks
+# exactly like a run started against the right one.
+SERVED=$(curl -s -m 5 http://localhost:8111/api/tags 2>/dev/null \
+  | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
+if [ -n "$SERVED" ]; then
+  job serve green "up on localhost:8111 — serving $SERVED"
+else
+  job serve yellow "down (box off or ./serve.sh stop)"
+fi
 
 sec "errors (on $H)"
-R 'grep -hE "^[A-Za-z]*Error|Traceback" ~/oracle/sft.log ~/oracle/dpo.log 2>/dev/null | tail -2 | sed "s/^/  /"'
+# `^[A-Za-z]*Error` missed the one that mattered: torch.OutOfMemoryError is
+# dotted, so a DPO run that died on VRAM showed a clean error panel for hours.
+R 'grep -hE "^[A-Za-z_.]+Error|Traceback|OutOfMemory" \
+     ~/oracle/sft.log ~/oracle/dpo.log ~/oracle/eval*.log 2>/dev/null \
+   | tail -2 | cut -c1-100 | sed "s/^/  /"'
 
 printf '\n'
 }

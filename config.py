@@ -55,8 +55,9 @@ BNB_DOUBLE_QUANT = _env("BNB_DOUBLE_QUANT", True)
 LORA_R = _env("LORA_R", 64)
 LORA_ALPHA = _env("LORA_ALPHA", 128)
 LORA_DROPOUT = _env("LORA_DROPOUT", 0.05)
-LORA_TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj",
-                       "gate_proj", "up_proj", "down_proj"]
+LORA_TARGET_MODULES = _env(
+    "LORA_TARGET_MODULES",
+    "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj").split(",")
 
 # --- Training --------------------------------------------------------------
 # Measured on the real corpus: prompts run 414 tokens median, 476 at p90, 795

@@ -757,3 +757,81 @@ detection or explanation quality. It can still claim the guard *mining* raised
 the guard-class share of the corpus from 28.4% to 33.9% (see "Guard share by
 category") — a corpus-composition result, not a model result. Keep the two
 claims separate.
+
+### Rendering variance: the same commit, four ways (23 Aug)
+
+Every number above is a single greedy pass over one exact rendering of each
+commit. That is only meaningful if the model reads a *commit* rather than a
+rendering of one. A Go commit with an unambiguous data race (verified with
+`go run -race`: 4 warnings, and 1 run in 20 silently loses a record) was
+reported as `concurrency` on one rendering of its diff and `null-dereference`
+on another that differed only in blob hashes and where git grouped a blank
+line — same model, same greedy decode, same code shown.
+
+So `variance.py` measures the noise floor directly: perturb the diff without
+touching a single line of code, re-ask, and count how often the answer moves.
+The three perturbations edit git metadata only, so any disagreement is the
+model reacting to text it should ignore.
+
+| rendering | what changes | applied to |
+|---|---|---|
+| `base` | nothing (reference) | — |
+| `no_index` | drops the `index <sha>..<sha>` line | 40/40 |
+| `rehash` | rotates the blob hashes, keeps the mode | 40/40 |
+| `bare_hunk` | strips the function name after the `@@` | 34/40 |
+
+Run against `oracle-merged` (post-DPO) on the first 40 held-out commits,
+160 calls, zero failures:
+
+    .venv/bin/python variance.py --limit 40 --backend ollama \
+      --model-name oracle-merged --host http://localhost:8111
+    # -> data/variance_results.jsonl; re-report with --score
+
+    verdict agreement    87.7%   (100/114)
+    category agreement   85.1%   (97/114)
+    commits unanimous    72.5%   (29/40)
+
+Detection on the *same 40 commits* with the *same model*, per rendering:
+
+| rendering | F1 | prec | recall | tp/fp/fn/tn |
+|---|---|---|---|---|
+| `base` | 0.154 | 0.222 | 0.118 | 2/7/15/16 |
+| `no_index` | 0.276 | 0.333 | 0.235 | 4/8/13/15 |
+| `rehash` | 0.080 | 0.125 | 0.059 | 1/7/16/16 |
+| `bare_hunk` | 0.312 | 0.333 | 0.294 | 5/10/12/13 |
+
+**F1 spread 0.080–0.312 = 0.233 from cosmetic edits alone.** The
+guard-corpus ablation above turns on a 0.04 F1 gap. That gap is roughly six
+times smaller than what deleting a blob hash moves the same model on the same
+data.
+
+The flips have a direction — removing metadata git puts in the header makes
+the model report *more*, not randomly different:
+
+    bare_hunk   +7 / -1     (more findings / fewer)
+    no_index    +3 / -0
+    rehash      +1 / -2
+
+How hard to read this, honestly:
+
+- n=40, and it is the *first* 40 of the heldout, not a random sample. The
+  absolute F1 here (base 0.154) is far below the 0.34 this checkpoint scores
+  on the full 200 — which is itself a demonstration of how small-n these
+  numbers are. Only the *spread within the same 40 commits* is the
+  measurement; the absolute values are not comparable to the tables above.
+- 17 of the 40 are buggy, so one tp swing moves F1 hard. That inflates the
+  spread relative to what 200 commits would show.
+- One model, three perturbation types. Says nothing yet about whether SFT is
+  more or less stable than DPO.
+
+What this changes: §4's "neither run was seed-repeated" caveat stops being a
+footnote. Until the 200-commit version of this run exists, no single-seed gap
+smaller than the rendering spread can be reported as a result — including the
+guard-corpus verdict. The ablation's *direction* may well survive; its
+magnitude is currently unqualified.
+
+Reproduce a single flip interactively: `:perturb bare_hunk` in the TUI, then
+`a`. The header shows `rendering:<name>` while it is active so a perturbed
+verdict cannot be mistaken for the model's real one. A commit that does not
+flip proves nothing (72.5% were unanimous) — it is a spot check, not the
+measurement.

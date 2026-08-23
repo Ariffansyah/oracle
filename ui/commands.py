@@ -77,6 +77,25 @@ def build_registry(app) -> dict[str, Command]:
         return (f"full-file context {'on' if app.with_context else 'off'} "
                 f"— off reviews the bare diff")
 
+    def cmd_perturb(args):
+        """Send a cosmetically different rendering of the same diff.
+
+        Measured on 40 held-out commits, verdicts survived these edits only
+        87.7% of the time and per-rendering F1 ranged 0.08-0.31. This makes
+        that visible on one commit: analyze, switch rendering, analyze again.
+        """
+        from variance import VARIANTS
+
+        name = (args[0] if args else "").lower()
+        allowed = ("off",) + tuple(k for k in VARIANTS if k != "base")
+        if name not in allowed:
+            raise CommandError(f"use :perturb {' | '.join(allowed)}")
+        app.perturb = name
+        if name == "off":
+            return "rendering → the real diff"
+        return (f"rendering → {name} (same change, different text; "
+                f"a new verdict here is noise, not a finding)")
+
     def cmd_ctx_size(args):
         raw = need(args, "a token count, e.g. :numctx 16384")
         try:
@@ -126,6 +145,7 @@ def build_registry(app) -> dict[str, Command]:
 
     def cmd_info(args):
         return (f"model={app.ollama_model} backend={app.backend} "
+                f"rendering={app.perturb} "
                 f"context={'on' if app.with_context else 'off'} "
                 f"num_ctx={app.num_ctx} repo={app.repo or 'mock'} "
                 f"commits={len(app.commits)}")
@@ -152,6 +172,8 @@ def build_registry(app) -> dict[str, Command]:
         Command(("context", "ctx"), "<on|off>", "send full-file context",
                 cmd_context),
         Command(("numctx",), "<tokens>", "model context window", cmd_ctx_size),
+        Command(("perturb", "p"), "<off|no_index|rehash|bare_hunk>",
+                "re-render the diff to test verdict stability", cmd_perturb),
         Command(("analyze", "a"), "", "analyze the selected commit", cmd_analyze),
         Command(("copy", "y"), "[diff|analysis|all]", "copy to clipboard", cmd_copy),
         Command(("write", "w"), "[path]", "write the report to a file", cmd_write),
@@ -182,12 +204,20 @@ def run_command(registry: dict[str, Command], line: str) -> str:
 
 
 if __name__ == "__main__":
+    # Run standalone, sys.path[0] is ui/, so the root-level modules the
+    # commands reach for (variance) are not importable without this.
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
     class FakeApp:
         def __init__(self):
             self.ollama_model = "qwen2.5-review"
             self.backend = "ollama"
             self.repo = "/tmp/x"
             self.with_context = True
+            self.perturb = "off"
             self.num_ctx = 16384
             self.limit = 50
             self.commits = []
@@ -212,6 +242,14 @@ if __name__ == "__main__":
     assert app.with_context is False
     run_command(reg, ":numctx 32768")
     assert app.num_ctx == 32768
+    assert "bare_hunk" in run_command(reg, ":perturb bare_hunk")
+    assert app.perturb == "bare_hunk"
+    assert run_command(reg, ":p off") and app.perturb == "off"
+    try:
+        run_command(reg, ":perturb sideways")
+        raise AssertionError("an unknown rendering must be refused")
+    except CommandError:
+        pass
     run_command(reg, ":analyze")
     assert app.analyzed
 

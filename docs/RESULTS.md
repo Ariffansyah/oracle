@@ -835,3 +835,146 @@ Reproduce a single flip interactively: `:perturb bare_hunk` in the TUI, then
 verdict cannot be mistaken for the model's real one. A commit that does not
 flip proves nothing (72.5% were unanimous) — it is a spot check, not the
 measurement.
+
+### Rendering variance at n=200 (24 Aug)
+
+The 200-commit version of the run above, same model (`oracle-merged`), same
+three perturbations, 800 calls, **zero dropped**:
+
+    .venv/bin/python variance.py --limit 200 --backend ollama \
+      --model-name oracle-merged --host http://localhost:8111 \
+      --out data/variance200.jsonl --name "oracle-merged, 200 x 4"
+    .venv/bin/python variance.py --score data/variance200.jsonl
+
+| | n=40 | n=200 |
+|---|---|---|
+| verdict agreement | 87.7% (100/114) | 89.2% (522/585) |
+| category agreement | 85.1% (97/114) | 85.3% (499/585) |
+| commits unanimous | 72.5% (29/40) | 77.5% (155/200) |
+
+585 comparisons, not 600: 15 perturbations did not apply and are skipped
+rather than scored as agreement. 63 commits flipped verdict on at least one
+rendering.
+
+Detection on the same 200 commits, per rendering:
+
+| rendering | F1 | prec | recall | tp/fp/fn |
+|---|---|---|---|---|
+| `base` | 0.375 | 0.441 | 0.326 | 30/38/62 |
+| `no_index` | 0.329 | 0.394 | 0.283 | 26/40/66 |
+| `rehash` | 0.352 | 0.418 | 0.304 | 28/39/64 |
+| `bare_hunk` | 0.417 | 0.461 | 0.380 | 35/41/57 |
+
+**F1 spread 0.088**, down from 0.233 at n=40. Both branches predicted for this
+run were half-right:
+
+- The n=40 spread *was* mostly small-sample noise. With 17 buggy commits in
+  that sample a single tp swing moved F1 by ~0.06, and the 0.233 figure should
+  not be quoted again.
+- The effect did *not* vanish. 0.088 is still **2.2x the 0.04 F1 gap** the
+  guard-corpus ablation turns on, so §4's conclusion stands unchanged: that
+  ablation cannot be reported as a result without a variance column beside it.
+
+`bare_hunk` remains the most permissive rendering and `no_index` the least, the
+same ordering as n=40, so the direction is stable even though the magnitude
+shrank. Absolute F1 (base 0.375) is now in line with the 0.34 this checkpoint
+scores on the full heldout, which is the expected correction from the biased
+first-40 sample.
+
+### DPO retrain: the clipping hypothesis, eliminated (24 Aug)
+
+The 23 Aug DPO run logged `grad_norm` 11.8–20.1 against HF's default
+`max_grad_norm=1.0` and produced output byte-identical to SFT. The standing
+explanation was that clipping every step 10–20x had driven the effective
+learning rate far below the 5e-6 schedule. **That explanation is wrong.**
+
+`max_grad_norm` is now a knob (`config.py:93`, `DPO_MAX_GRAD_NORM`, default
+25.0, env `ORACLE_DPO_MAX_GRAD_NORM`) and the run was repeated with it set
+above the observed gradient range — one variable changed, everything else
+identical:
+
+| step | grad_norm 23 Aug | grad_norm 24 Aug | loss 23 Aug | loss 24 Aug | margins 23 Aug | margins 24 Aug |
+|---|---|---|---|---|---|---|
+| 5 | 18.3 | 17.75 | 1.863 | 1.862 | 0.007 | 0.008 |
+| 10 | 20.1 | 19.38 | 1.754 | 1.753 | 0.105 | 0.105 |
+| 15 | 13.1 | 12.75 | 1.743 | 1.748 | 0.264 | 0.253 |
+| 20 | 11.8 | 11.56 | 1.575 | 1.585 | 0.589 | 0.560 |
+
+Removing the clip changed the loss curve by less than a rounding error,
+because `paged_adamw_8bit` normalises the update by `g/sqrt(v)`. Adam is
+scale-invariant to a uniform rescaling of the gradient: clipping changes the
+gradient's magnitude, not the step Adam takes from it. Gradient clipping was
+never the lever.
+
+Output comparison, `data/go_race_case.diff`, greedy, `INFERENCE_SAMPLES=1`,
+`sft-merged` run twice as a determinism control:
+
+    sft_a  md5=5bb2c1a4d335c82ca94094869553129b
+    sft_b  md5=5bb2c1a4d335c82ca94094869553129b   <- control: deterministic
+    dpo1   md5=5bb2c1a4d335c82ca94094869553129b   (oracle-merged, 23 Aug)
+    dpo2   md5=5bb2c1a4d335c82ca94094869553129b   (oracle-merged-v2, 24 Aug)
+
+All four identical. Both DPO checkpoints and the SFT model they came from
+produce the same bytes, and all three miss the verified data race.
+
+A methods note that cost an hour to learn: **`INFERENCE_SAMPLES=3` is not a
+deterministic path.** `client.py:453` runs sample 0 greedy and samples 1..n at
+`INFERENCE_SAMPLE_TEMPERATURE=0.6`. A first pass at the comparison above showed
+all three checkpoints "differing", and the entire difference was the
+`(N finding(s) appeared in a minority of 3 samples and were dropped.)` clause
+moving between 3 and 1. Any checkpoint A/B must set `INFERENCE_SAMPLES=1` or it
+measures the sampler.
+
+### Why real preference pairs do not fit this card (24 Aug)
+
+`from_labelled()` builds pairs from the teacher-labelled corpus, keeping only
+findings that `grounded()` can trace to text actually in the diff. Run over all
+1,673 records:
+
+    source records            1673
+    pairs after grounded()     525  (31.4%)
+
+                              min    med    p90    p95    max
+    prompt                    509   1235   1935   2100   2552
+    chosen                     78    144    191    220    426
+    rejected                   24     24     24     24     24
+    prompt+max(answer)        615   1386   2093   2270   2713
+
+| max_length | pairs kept |
+|---|---|
+| 512 (current) | 0 (0.0%) |
+| 768 | 40 (7.6%) |
+| 1024 | 122 (23.2%) |
+| 1536 | 322 (61.3%) |
+| 2048 | 468 (89.1%) |
+
+**Not "most do not fit" — none do.** The shortest real pair is 615 tokens
+against a 512 budget. The mock pairs that trained all three DPO runs have a
+414-token median prompt; the real ones have 1235. The templates were never a
+scaled-down version of the real distribution, they were a different one.
+Keeping a useful 61% needs `max_length=1536`, and `config.py` records a
+measured OOM at 768 on this 6GB card — a factor of two past where the hardware
+already failed.
+
+A second blocker is independent of memory:
+
+    1 unique rejected string(s) across 525 pairs
+    '{"summary": "This change looks like a small, safe adjustment; no defects
+      found.", "findings": []}'
+
+Every rejected side is the same hardcoded sentence, so the objective reduces to
+"do not emit this exact string" — the same degenerate signal that saturates
+`rewards/accuracies` at 1.00 by step 10 on the mock set. Fixing the fit would
+not fix the signal. Working DPO needs both: real pairs at `max_length>=1536` on
+a >=16GB card, and a rejected side generated per-example from the model's own
+wrong answers.
+
+`from_labelled()` is also unreachable from the CLI — `build_dpo_data.main()`
+wires only `--mock`, `--reviews` and `--from-eval` — which is presumably why
+this wall was not hit earlier.
+
+**What this supports.** Three DPO runs agree the stage moves nothing
+measurable, and the audit gives two independent reasons this card cannot
+resolve. The null is reportable as-is: preference alignment on 180 synthetic
+pairs does not move a 3B reviewer. It is not evidence that DPO cannot help
+here, only that it was never given a signal.

@@ -1,11 +1,11 @@
 Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first (every
-measurement plus the command that reproduces it; the latest section is
-"Rendering variance: the same commit, four ways", which qualifies every other
-number in the file), then `docs/ROADMAP.md`.
+measurement plus the command that reproduces it; the rendering-variance
+sections qualify every other number in the file — the n=200 one supersedes the
+n=40 one), then `docs/ROADMAP.md`.
 
-**First action this session:** run the 200-commit variance job — see
-"Next steps", step 1. Nothing else in the results is safe to report until it
-lands.
+**First action this session:** commit the working tree — see "Next steps",
+step 3. Seven files have been uncommitted across three sessions, including two
+finished measurements.
 
 # The project
 
@@ -16,7 +16,7 @@ verifies and explains. Base model Qwen2.5-Coder-3B-Instruct, QLoRA SFT on
 teacher-labelled data (gpt-oss-120b on Groq is the teacher, the 3B is the
 student). Do NOT use "Explainable JIT" — taken by PyExplainer / JITLine.
 
-# Current state (23 Aug 2026, 17:00)
+# Current state (24 Aug 2026, 12:00)
 
 **DPO is DONE.** Third attempt succeeded: 23/23 steps in 1h25m, no OOM,
 merged 23 Aug 11:46 to `artifacts/oracle-merged` on the box. The stale 13 Aug
@@ -67,16 +67,33 @@ DPO loss at the four logging points (steps 5/10/15/20):
 `rewards/chosen` stays positive and climbs while rejected falls — the
 `sigmoid,sft` anchor did its job (the classic DPO failure is both dropping
 together). Entropy and `mean_token_accuracy` are flat, so JSON format
-adherence did not degrade. Two things not to gloss over: `rewards/accuracies`
+adherence did not degrade. The thing not to gloss over: `rewards/accuracies`
 hits 1.00 by step 15, which says the mock preference pairs are close to
-trivially separable; and `grad_norm` runs 11.8–20.1 against HF's default
-`max_grad_norm=1.0`, so nearly every step was clipped 10–20×. The effective
-learning rate was well below the 5e-6 schedule.
+trivially separable.
 
-**DPO changed almost nothing measurable.** On a hand-checked Go commit, SFT
-(`sft-merged`) and DPO (`oracle-merged`) produced *byte-identical* output.
-That is consistent with 23 heavily-clipped steps on a 15M-parameter adapter.
-Do not assume DPO moved the numbers until step 2 below says so.
+**Correction to the previous handoff.** It claimed the clipped `grad_norm`
+(11.8–20.1 against HF's default `max_grad_norm=1.0`) had pushed the effective
+learning rate below the 5e-6 schedule. **That was wrong and is disproved.**
+`max_grad_norm` is now a knob (`DPO_MAX_GRAD_NORM`, default 25.0) and the run
+was repeated above the observed gradient range: the loss curve moved by less
+than a rounding error. `paged_adamw_8bit` normalises by `g/sqrt(v)`, so Adam is
+scale-invariant to a uniform gradient rescale. Clipping was never the lever.
+Full table in RESULTS.md, "DPO retrain: the clipping hypothesis, eliminated".
+
+**DPO changed nothing measurable — confirmed three times.** Greedy output
+(`INFERENCE_SAMPLES=1`) from `sft-merged`, `oracle-merged` (23 Aug) and
+`oracle-merged-v2` (24 Aug) is byte-identical on `data/go_race_case.diff`,
+with `sft-merged` run twice as a determinism control. All three miss the
+verified data race.
+
+**Real preference pairs do not fit this card.** `from_labelled()` over all
+1,673 records yields 525 grounded pairs, of which **0 fit under
+`DPO_MAX_LENGTH=512`** — the shortest is 615 tokens, the median prompt 1235
+against the mock set's 414. 61% would need `max_length=1536`; the card OOMs at
+768. Independently, all 525 pairs share one hardcoded rejected string, so the
+objective is degenerate even if it fit. `from_labelled()` is not wired into
+`build_dpo_data.main()` at all. **Recommendation: stop spending on DPO** and
+report the null. Details in RESULTS.md.
 
 **The headline finding: the model's verdict is unstable to cosmetic
 reformatting.** Full writeup in RESULTS.md; the short version:
@@ -100,47 +117,30 @@ before the perturbation test showed the real answer.
 Everything else, unchanged from the last handoff: labelling done both corpora
 (1,011 + 662 = 1,673 records); the ablation verdict stands (guard corpus did
 not earn its budget, guard *mining* raised guard-class share 28.4% → 33.9%,
-keep the two claims separate); gate AUC **0.8293**; `INFERENCE_SAMPLES=3`;
-on-policy DPO still does not fit this card (0 of 115 real pairs fit under 460
-tokens).
+keep the two claims separate); gate AUC **0.8293**; `INFERENCE_SAMPLES=3`
+(but see Operational notes — that path is *not* deterministic); DPO does not
+fit this card on real pairs, from either source (0 of 115 on-policy under 460
+tokens, 0 of 525 `from_labelled` under 512).
 
 # Next steps, in order
 
-**1. The 200-commit variance run. Do this first, it gates everything else.**
+**~~1. The 200-commit variance run.~~ DONE (24 Aug).** 800/800 rows in
+`data/variance200.jsonl`, zero dropped. Verdict agreement **89.2%**, commits
+unanimous **77.5%**, per-rendering **F1 spread 0.088** (0.329 `no_index` to
+0.417 `bare_hunk`). The n=40 spread of 0.233 was mostly small-sample noise and
+should not be quoted again — but 0.088 is still 2.2x the 0.04 guard-corpus gap,
+so the variance column is still mandatory and §4's conclusion is unchanged.
+Re-report anytime with `variance.py --score data/variance200.jsonl` (no GPU).
 
-Needs the server up on the box and the tunnel open:
+**~~2. Evaluate the DPO model.~~ DONE (24 Aug), null confirmed.** A retrain
+with the clipping fix (`artifacts/oracle-merged-v2`) produces greedy output
+byte-identical to both `oracle-merged` and `sft-merged`. See the corrected DPO
+section above; the clipping hypothesis is disproved and real pairs do not fit
+this card. **Do not spend more GPU on DPO** without a >=16GB card and a
+non-degenerate rejected side.
 
-    ./serve.sh start          # if the tunnel does not come up, see Operational notes
-    .venv/bin/python variance.py --limit 200 --backend ollama \
-      --model-name oracle-merged --host http://localhost:8111 \
-      --out data/variance200.jsonl --name "oracle-merged, 200 x 4"
-
-800 calls at ~60s ≈ **13h**. Drop `rehash` from `VARIANTS` in `variance.py`
-to make it ~7h — it was the weakest perturbation (3 flips of 14). Rows stream
-to `--out`, so a killed run keeps its work and
-`variance.py --score data/variance200.jsonl` reports on whatever landed.
-Launch it with `setsid nohup … < /dev/null &` and watch it on `./dashboard.sh`,
-which has a `variance` row with the live agreement rate.
-
-What the result decides:
-
-- If the spread stays large, no single-seed gap smaller than it can be
-  reported — including the guard-corpus verdict — and the paper needs a
-  variance column beside every F1.
-- If it collapses at n=200, the n=40 spread was small-sample noise (only 17 of
-  those 40 are buggy, so one tp swing moves F1 hard) and the existing tables
-  stand as written.
-
-Either way it is a publishable methods contribution: nobody reports rendering
-variance for LLM code review, and it is cheap to measure.
-
-**2. Evaluate the DPO model** against checkpoint-204's table in RESULTS.md —
-same three sets, same commands as the ablation. Watch precision (should rise),
-recall (must not collapse), findings count. Given the clipped gradients and
-the byte-identical output above, expect little movement; a null result here is
-a real finding, not a failed run.
-
-**3. Commit the working tree** (see "Uncommitted at handoff").
+**3. Commit the working tree** (see "Uncommitted at handoff"). This is now the
+first action of the session.
 
 **4. Smoke-test and pull the merged model** if you want it locally:
 
@@ -160,28 +160,34 @@ disagreement rate on `detect_eval`.
 
 # Uncommitted at handoff
 
-- `variance.py` (new) — the rendering-variance harness. `python variance.py`
-  with no args runs its self-check (repo convention from `guard_share.py`).
-  `--score <file>` re-reports without re-running. Perturbations that cannot
-  apply are *skipped*, not scored as agreement; failed calls are *dropped*, so
-  a dropped tunnel cannot be reported as the model changing its mind.
-- `test_model_label.py` (new) — asserts for the TUI header helpers.
+Only these six, all modified, nothing untracked. The previous handoff also
+listed `variance.py`, `test_model_label.py`, `ui/tui_app.py` and
+`ui/commands.py` here — those were committed in `d8d20aa` and the list was
+stale.
+
 - `config.py` — `LORA_TARGET_MODULES` now reads `ORACLE_LORA_TARGET_MODULES`
-  (was a hardcoded list). Default unchanged.
-- `ui/tui_app.py` — header now names backend, model **and host**, verified
-  against `/api/tags` in a worker (`✓`, `(server has X)`, `(no model served)`,
-  `(unreachable)`). Previously it computed the name once in `on_mount`, so
-  `:model foo` left a stale header all session. Plus `:perturb` support.
-- `ui/commands.py` — `:perturb (p) <off|no_index|rehash|bare_hunk>` re-renders
-  the diff to test verdict stability, validated against `variance.VARIANTS` so
-  the TUI and the eval cannot drift on what a rendering is. Also in `:info`.
+  (was a hardcoded list, default unchanged), plus `DPO_MAX_GRAD_NORM`
+  (default 25.0) at line 93.
+- `fine_tuning/train_dpo.py` — `--max-grad-norm` flag, passed to `DPOConfig`.
+  Previously unset, so HF's default of 1.0 applied silently.
 - `dashboard.sh` — new `variance` row (progress + live agreement rate, own
   stall check for a dropped tunnel); `serve` row now names the served model,
   not just the port; `sft-merged` added to the artifact timestamps; watchdog
   row no longer shows red once the corpus is complete (it cried wolf for days,
   which is how a real red gets ignored). Plus the three earlier fixes from the
-  last handoff, still uncommitted.
-- `docs/RESULTS.md` — the variance section.
+  last handoff, still uncommitted. Note its stall check still cannot tell a
+  finished run from a dead one — see Operational notes.
+- `evaluate.py` — carried over from the previous handoff, still uncommitted.
+- `docs/RESULTS.md` — the variance section, plus three new ones (24 Aug):
+  n=200 variance, the eliminated clipping hypothesis, and the real-pair
+  token audit.
+- `next-session.md` — this file.
+
+New artifacts on the box, not synced locally: `artifacts/dpo-adapter-v2` and
+`artifacts/oracle-merged-v2` (6.2 GB). `oracle-merged` was deliberately *not*
+overwritten — the 200-commit variance numbers were measured on it and must stay
+reproducible. Also on the box: `run_dpo2.sh`, `cmp3.sh`, `cmp_greedy.sh`,
+throwaway launchers, delete when convenient.
 
 # Known-stale comments worth fixing
 
@@ -234,6 +240,22 @@ In `fine_tuning/train_dpo.py`:
   offset.
 - A failed input redirect cannot be muted by `2>/dev/null` on the same command.
   Wrap it: `{ wc -l < "$F"; } 2>/dev/null`.
+- **The remote shell on `oracle-gpu` is fish.** `VAR=val cmd` prefixes and
+  `$!` do not parse there, so the 23 Aug launch command recorded in this file
+  fails with exit 127 if pasted through `ssh`. Either write a `bash` script and
+  `rsync` it over, or pipe with `ssh oracle-gpu bash -s <<'EOF'`.
+- **Three status checks in this repo report intent, not observed state**, and
+  all three lied during the 24 Aug session:
+  `dashboard.sh` called a *completed* variance run "STUCK" (its stall check
+  reads mtime and cannot tell finished from dead); `serve.sh stop` printed
+  `tunnel closed` while leaving the local forwarder listening on 8111, which
+  then made the next `serve.sh start` fail with `Address already in use`; and
+  `serve.sh start` printed "server started" on the launch command returning,
+  not on the server answering. Worth one fix pass.
+- **`INFERENCE_SAMPLES=3` is not deterministic.** `client.py:453` runs sample 0
+  greedy and samples 1..n at `INFERENCE_SAMPLE_TEMPERATURE=0.6`. Any A/B of two
+  checkpoints must set `INFERENCE_SAMPLES=1` or it measures the sampler, not
+  the model.
 - Local venv `.venv/bin/python`, always. Keys: `~/.zshrc` exports
   `GROQ_API_KEY1..6` and `DEEPSEEK_API_KEY`. Labelling is done, so these mostly
   do not matter for the small goal.

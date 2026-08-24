@@ -116,7 +116,14 @@ Nothing else is worth doing until the corpus is clean.
       0.87 and is the real ceiling for everything downstream.
 - [ ] Rebuild SFT data, retrain (~14h GPU).
 - [ ] Re-evaluate at n=1000 against stock (~12h GPU).
-- [ ] Build on-policy DPO pairs via `--from-eval`, train, re-evaluate.
+- [x] ~~Build on-policy DPO pairs via `--from-eval`, train, re-evaluate.~~
+      **Blocked on hardware, 24 Aug.** Three DPO runs move nothing measurable
+      and the token audit says why: 0 of 115 on-policy pairs fit under 460
+      tokens, 0 of 525 `from_labelled` pairs under 512 (shortest is 615, median
+      prompt 1235). 61% would need `max_length=1536`; the 6GB card OOMs at 768.
+      Independently, every `from_labelled` pair shares one hardcoded rejected
+      string, so the objective is degenerate even if it fit. Needs a >=16GB card
+      and a per-example rejected side. See RESULTS.md.
 
 **Exit:** acceptance criteria 1–3 answered with real numbers, pass or fail.
 

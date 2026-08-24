@@ -146,33 +146,6 @@ if pgrep -f "mine[.]py" >/dev/null; then
 else
   job mining yellow "idle"
 fi
-# Variance runs here, not on the box: it drives the served model through the
-# tunnel, so it dies with the tunnel rather than with the GPU. Total comes from
-# the run's own header line, so changing --limit does not lie about progress.
-VAR_TOTAL=$(sed -n 's/.* = \([0-9]*\) calls$/\1/p' variance.log 2>/dev/null | tail -1)
-VAR_DONE=$(grep -cE "^  \[[0-9]+/[0-9]+\]" variance.log 2>/dev/null)
-if pgrep -f "variance[.]py" >/dev/null; then
-  VF=$(fresh data/variance_results.jsonl)
-  # One call is ~60s on the 6GB card; several minutes of silence means the
-  # tunnel dropped, and every later row would be an error row.
-  if [ "$VF" -gt 400 ]; then
-    job variance red "running but STUCK ($((VF/60))m since last row — tunnel dropped?)"
-  else
-    job variance green "running   $(bar "${VAR_DONE:-0}" "${VAR_TOTAL:-1}")   ${VAR_DONE:-0}/${VAR_TOTAL:-1}"
-  fi
-elif [ -n "$VAR_DONE" ] && [ "$VAR_DONE" -gt 0 ]; then
-  job variance yellow "idle   ${VAR_DONE}/${VAR_TOTAL:-?} calls done"
-else
-  job variance yellow "idle"
-fi
-# The agreement rate is the whole point of the run, so show it while it climbs
-# rather than only at the end. --score reads the streamed rows and imports no
-# model code, so this stays cheap enough for a 10s refresh.
-[ -s data/variance_results.jsonl ] && .venv/bin/python variance.py \
-    --score data/variance_results.jsonl 2>/dev/null \
-  | grep -E "verdict agreement|category agreement|commits unanimous" \
-  | sed "s/^ */    $DIM/;s/$/$OFF/"
-
 sec "training (on $H)"
 for probe in sft dpo; do
   state=$(R "pgrep -f \"fine_tuning[.]train_$probe\" >/dev/null && echo green || echo yellow")
@@ -218,6 +191,45 @@ if [ -n "$EV" ]; then
 else
   job eval yellow "idle"
 fi
+
+sec "variance (on $H)"
+# Variance runs on the box, not here: 800 calls at ~75s is 16h, and a run
+# tunnelled from a laptop dies with the laptop. Everything below therefore
+# comes from one remote call — state, totals, row age and the live agreement
+# rate — because a per-field ssh would cost four round trips every refresh.
+#
+# The results path is read out of the run's own header rather than hardcoded:
+# --out changed from variance_results.jsonl to variance200.jsonl, and a
+# hardcoded path would have shown a finished 40-commit run as live progress.
+VAR=$(R "cd ~/oracle && { pgrep -f variance[.]py >/dev/null && echo RUN || echo IDLE; };
+  sed -n \"s/.* = \\([0-9]*\\) calls\$/\\1/p\" variance.log 2>/dev/null | tail -1;
+  grep -cE \"^  \\[[0-9]+/[0-9]+\\]\" variance.log 2>/dev/null;
+  F=\$(sed -n \"s/^backend.*->  *//p\" variance.log 2>/dev/null | tail -1);
+  if [ -n \"\$F\" ] && [ -f \"\$F\" ]; then echo \$(( \$(date +%s) - \$(stat -c %Y \"\$F\") )); else echo -1; fi;
+  [ -s \"\$F\" ] && .venv/bin/python variance.py --score \"\$F\" 2>/dev/null |
+    grep -E \"verdict agreement|category agreement|commits unanimous\"")
+VAR_STATE=$(sed -n 1p <<<"$VAR")
+VAR_TOTAL=$(sed -n 2p <<<"$VAR")
+VAR_DONE=$(sed -n 3p <<<"$VAR")
+VAR_AGE=$(sed -n 4p <<<"$VAR")
+if [ -z "$VAR_STATE" ]; then
+  job variance yellow "box unreachable"
+elif [ "$VAR_STATE" = RUN ]; then
+  # One call is ~75s on the 6GB card; several minutes of silence means the
+  # server died under it, and every later row would be an error row.
+  if [ "${VAR_AGE:-0}" -gt 400 ]; then
+    job variance red "running but STUCK ($((VAR_AGE/60))m since last row — server died?)"
+  else
+    job variance green "running   $(bar "${VAR_DONE:-0}" "${VAR_TOTAL:-1}")   ${VAR_DONE:-0}/${VAR_TOTAL:-1}"
+  fi
+elif [ -n "$VAR_DONE" ] && [ "$VAR_DONE" -gt 0 ]; then
+  job variance yellow "idle   ${VAR_DONE}/${VAR_TOTAL:-?} calls done"
+else
+  job variance yellow "idle"
+fi
+# The agreement rate is the whole point of the run, so show it while it climbs
+# rather than only at the end.
+sed -n '5,$p' <<<"$VAR" | sed "s/^ */    $DIM/;s/$/$OFF/"
 
 sec "local corpus"
 for f in data/labelled.jsonl data/labelled_multilang.jsonl data/multilang_commits.jsonl \

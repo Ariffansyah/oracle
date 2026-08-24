@@ -1,0 +1,11 @@
+{
+  "id": "js-var-capture",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "var"
+  ],
+  "note": "var is function-scoped, so every closure captures the final i"
+}

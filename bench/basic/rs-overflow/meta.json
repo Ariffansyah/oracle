@@ -1,0 +1,11 @@
+{
+  "id": "rs-overflow",
+  "language": "rust",
+  "ext": "rs",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "overflow"
+  ],
+  "note": "u8 200 + 100 overflows; checked_add handled it, plain + panics"
+}

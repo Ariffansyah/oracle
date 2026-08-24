@@ -1,0 +1,11 @@
+{
+  "id": "php-slice-end",
+  "language": "php",
+  "ext": "php",
+  "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [
+    "array_slice"
+  ],
+  "note": "array_slice length is n - 1, one element short"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "py-extract-helper",
+  "language": "python",
+  "ext": "py",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "extract a helper, same output"
+}

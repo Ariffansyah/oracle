@@ -1,0 +1,11 @@
+{
+  "id": "c-strcpy-bound",
+  "language": "c",
+  "ext": "c",
+  "buggy": true,
+  "category": "buffer-overflow",
+  "must_mention": [
+    "strcpy"
+  ],
+  "note": "strcpy of a 11-byte string into an 8-byte buffer overflows"
+}

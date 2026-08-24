@@ -1,0 +1,11 @@
+{
+  "id": "php-loose-compare",
+  "language": "php",
+  "ext": "php",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "==="
+  ],
+  "note": "=== became ==, so \"0\" and 0 now compare equal"
+}

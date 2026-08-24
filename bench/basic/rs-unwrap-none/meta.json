@@ -1,0 +1,11 @@
+{
+  "id": "rs-unwrap-none",
+  "language": "rust",
+  "ext": "rs",
+  "buggy": true,
+  "category": "error-handling",
+  "must_mention": [
+    "unwrap"
+  ],
+  "note": "unwrap() on an empty slice's first() panics"
+}

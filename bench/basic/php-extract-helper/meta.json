@@ -1,0 +1,9 @@
+{
+  "id": "php-extract-helper",
+  "language": "php",
+  "ext": "php",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "extract a helper, same output"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "rb-nil-guard",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": true,
+  "category": "error-handling",
+  "must_mention": [
+    "nil"
+  ],
+  "note": "the nil check is gone, so size_of(nil) raises NoMethodError"
+}

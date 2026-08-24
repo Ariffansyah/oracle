@@ -1,0 +1,11 @@
+{
+  "id": "php-concat-operator",
+  "language": "php",
+  "ext": "php",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "concat"
+  ],
+  "note": "+ is arithmetic in PHP; concatenating strings with it is a TypeError"
+}

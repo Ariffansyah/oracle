@@ -1,0 +1,11 @@
+{
+  "id": "rs-index-bound",
+  "language": "rust",
+  "ext": "rs",
+  "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [
+    "len"
+  ],
+  "note": "0..=xs.len() indexes one past the end; Rust panics"
+}

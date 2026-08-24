@@ -1,0 +1,5 @@
+fn main() {
+    let a: u8 = 200;
+    let b: u8 = 100;
+    println!("{}", a + b);
+}

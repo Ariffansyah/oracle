@@ -1,0 +1,9 @@
+{
+  "id": "js-rename-param",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "rename a parameter consistently, same output"
+}

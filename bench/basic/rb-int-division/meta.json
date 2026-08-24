@@ -1,0 +1,11 @@
+{
+  "id": "rb-int-division",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "to_f"
+  ],
+  "note": "dropping to_f makes / integer division, so the mean truncates"
+}

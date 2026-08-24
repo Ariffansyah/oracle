@@ -1,0 +1,11 @@
+{
+  "id": "ts-sort-in-place",
+  "language": "typescript",
+  "ext": "ts",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "sort"
+  ],
+  "note": "sort() mutates; dropping the copy reorders the caller's array"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "ts-reduce-empty",
+  "language": "typescript",
+  "ext": "ts",
+  "buggy": true,
+  "category": "error-handling",
+  "must_mention": [
+    "reduce"
+  ],
+  "note": "reduce with no initial value throws on an empty array"
+}

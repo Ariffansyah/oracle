@@ -1,0 +1,11 @@
+{
+  "id": "go-nil-map",
+  "language": "go",
+  "ext": "go",
+  "buggy": true,
+  "category": "error-handling",
+  "must_mention": [
+    "map"
+  ],
+  "note": "a nil map reads fine but panics on assignment"
+}

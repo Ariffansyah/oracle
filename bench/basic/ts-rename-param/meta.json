@@ -1,0 +1,9 @@
+{
+  "id": "ts-rename-param",
+  "language": "typescript",
+  "ext": "ts",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "rename a parameter consistently, same output"
+}

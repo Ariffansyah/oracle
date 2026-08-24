@@ -1,0 +1,11 @@
+{
+  "id": "php-divzero-guard",
+  "language": "php",
+  "ext": "php",
+  "buggy": true,
+  "category": "error-handling",
+  "must_mention": [
+    "count"
+  ],
+  "note": "the empty-array guard is gone, so avg([]) throws DivisionByZeroError"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "ts-nullish-default",
+  "language": "typescript",
+  "ext": "ts",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "nullish"
+  ],
+  "note": "?? only replaces null/undefined; || also replaces the empty string"
+}

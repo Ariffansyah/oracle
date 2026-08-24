@@ -1,0 +1,11 @@
+{
+  "id": "java-concurrent-modify",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "remove"
+  ],
+  "note": "removing inside a for-each throws ConcurrentModificationException"
+}

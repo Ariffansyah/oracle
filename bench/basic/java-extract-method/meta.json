@@ -1,0 +1,9 @@
+{
+  "id": "java-extract-method",
+  "language": "java",
+  "ext": "java",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "extract a helper, same output"
+}

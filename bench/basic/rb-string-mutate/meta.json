@@ -1,0 +1,11 @@
+{
+  "id": "rb-string-mutate",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "dup"
+  ],
+  "note": "without dup, << mutates the caller's string"
+}

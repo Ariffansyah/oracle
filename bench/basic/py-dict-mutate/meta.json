@@ -1,0 +1,11 @@
+{
+  "id": "py-dict-mutate",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "dict"
+  ],
+  "note": "deleting from a dict while iterating it raises RuntimeError"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "rs-rename-local",
+  "language": "rust",
+  "ext": "rs",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "rename a local binding, same output"
+}

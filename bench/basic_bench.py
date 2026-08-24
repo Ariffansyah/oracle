@@ -33,11 +33,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 ROOT = Path(__file__).resolve().parent / "basic"
 
-RUN = {
-    "go":         lambda f: (["go", "run", f.name], True),
-    "javascript": lambda f: (["node", f.name], False),
-    "python":     lambda f: ([sys.executable, f.name], False),
-    "c":          lambda f: (None, False),  # compiled below
+# Languages that run a source file directly. Anything needing a compile or a
+# module file gets an explicit branch in _run().
+INTERP = {
+    "javascript": ["node"],
+    "python":     [sys.executable],
+    # Deno runs .ts without a tsconfig or a tsc install, and `deno run` does
+    # not type-check, so this measures runtime behaviour like every other case.
+    "typescript": ["deno", "run", "-q"],
+    "ruby":       ["ruby"],
+    "php":        ["php"],
+    # Java 11+ single-file source launcher: no javac step, no class-name match.
+    "java":       ["java"],
 }
 
 
@@ -63,14 +70,28 @@ def _run(case: dict, which: str) -> tuple[int, str]:
         elif lang == "go":
             (tmp / "go.mod").write_text("module bench\ngo 1.21\n")
             cmd = ["go", "run", str(work)]
-        elif lang == "javascript":
-            cmd = ["node", str(work)]
-        elif lang == "python":
-            cmd = [sys.executable, str(work)]
+        elif lang == "rust":
+            # No -O: debug assertions are on by default, which is what turns a
+            # silent integer overflow into a visible panic.
+            exe = tmp / "a.out"
+            comp = subprocess.run(["rustc", "-o", str(exe), str(work)],
+                                  capture_output=True, text=True)
+            if comp.returncode != 0:
+                return comp.returncode, comp.stdout + comp.stderr
+            cmd = [str(exe)]
+        elif lang in INTERP:
+            cmd = [*INTERP[lang], str(work)]
         else:
             raise SystemExit(f"no runner for {lang}")
-        p = subprocess.run(cmd, capture_output=True, text=True,
-                           cwd=tmp, timeout=90)
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True,
+                               cwd=tmp, timeout=90)
+        except FileNotFoundError as e:
+            # No runtime for this language on this machine. Say which one
+            # instead of dumping a traceback from inside the verifier.
+            raise SystemExit(
+                f"{case['id']}: {lang} needs {e.filename!r}, which is not "
+                f"installed here") from None
         return p.returncode, (p.stdout + p.stderr).strip()
 
 

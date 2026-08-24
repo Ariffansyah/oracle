@@ -1,0 +1,11 @@
+{
+  "id": "ts-slice-end",
+  "language": "typescript",
+  "ext": "ts",
+  "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [
+    "slice"
+  ],
+  "note": "slice(0, n - 1) returns one element too few"
+}

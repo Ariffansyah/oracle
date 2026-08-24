@@ -1,0 +1,11 @@
+{
+  "id": "rs-int-division",
+  "language": "rust",
+  "ext": "rs",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "integer"
+  ],
+  "note": "the cast moved after the division, so the mean truncates"
+}

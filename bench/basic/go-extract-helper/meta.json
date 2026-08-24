@@ -1,0 +1,9 @@
+{
+  "id": "go-extract-helper",
+  "language": "go",
+  "ext": "go",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "extract a helper, same output"
+}

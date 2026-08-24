@@ -1,0 +1,9 @@
+{
+  "id": "rb-rename-var",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "rename a local, same output"
+}

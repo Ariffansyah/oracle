@@ -1,0 +1,11 @@
+{
+  "id": "java-null-guard",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "error-handling",
+  "must_mention": [
+    "null"
+  ],
+  "note": "the null check is gone, so len(null) throws NullPointerException"
+}

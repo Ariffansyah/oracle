@@ -1,0 +1,11 @@
+{
+  "id": "java-string-equals",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "equals"
+  ],
+  "note": "== compares references, so two equal Strings compare false"
+}

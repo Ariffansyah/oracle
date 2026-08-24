@@ -11,6 +11,7 @@ Five measures, chosen because each answers a question a reviewer will ask:
   grounding        does every finding cite a file that is actually in the diff
   category match   does it pick the same defect class as the teacher
   fix agreement    does the finding name what the real repair actually changed
+                   (inert: no dataset in data/ carries `fix_diff` yet)
 
 The last one is the interesting one. For a commit SZZ flagged, a later commit
 repaired those lines - so the fix's own diff is an objective answer key for the
@@ -63,14 +64,26 @@ def files_in_diff(diff: str) -> set[str]:
 
 
 def grounded(finding: dict, diff: str) -> bool:
-    """A finding is grounded when what it talks about appears in the diff.
+    """A finding is grounded when what it talks about appears in the changed code.
 
-    Either it names a file that the diff touches, or it cites identifiers that
-    occur in the changed lines. A finding that shares no vocabulary with the
-    code it reviews is describing something else.
+    It must cite identifiers occurring in the diff's changed lines. A finding
+    that shares no vocabulary with the code it reviews is describing something
+    else.
+
+    Naming a touched file used to be sufficient on its own. That made this a
+    no-op: on a single-file commit every finding names the only file, so all of
+    them passed. Measured on 597 corpus findings, 108 (18.1%) qualified by
+    filename alone while citing no changed identifier at all, and on live model
+    output the shortcut passed 69 of 69 findings. The filename is still
+    necessary when given - a finding about a file the commit does not touch is
+    not about this commit - but it is no longer sufficient.
+
+    Deleted lines still count. A commit that removes a guard is a real defect
+    and the finding legitimately cites the removed code; only 27 of 597 corpus
+    findings (4.5%) rest on deleted lines alone.
     """
-    if finding.get("file") and finding["file"] in files_in_diff(diff):
-        return True
+    if finding.get("file") and finding["file"] not in files_in_diff(diff):
+        return False
     changed = "\n".join(l for l in diff.splitlines()
                         if l.startswith(("+", "-")) and not l.startswith(("+++", "---")))
     cited = identifiers(finding.get("explanation", ""))
@@ -179,6 +192,12 @@ def score(results: list[dict]) -> dict:
                     for r in usable if r.get("analysis", {}).get("findings")]
     cat_match = sum(1 for t, p in teacher_cats if t & p)
 
+    # No dataset in data/ carries `fix_diff`, so this is currently always
+    # empty. ApacheJIT's `fix` column is a boolean ("is this a fix commit"),
+    # not a hash, and the CVEfixes pairs are exact reverses of each other -
+    # using the paired record as the repair would make this tautological,
+    # since the "fix" holds the same identifiers with +/- swapped. Reported
+    # as unavailable rather than hidden; see report().
     agreements = [fix_agreement(f, r.get("fix_diff", "")) for f, r in findings]
     agreements = [a for a in agreements if a == a]  # drop NaN
 
@@ -191,6 +210,7 @@ def score(results: list[dict]) -> dict:
         "grounded": grounded_n / max(len(findings), 1),
         "category_match": cat_match / max(len(teacher_cats), 1) if teacher_cats else float("nan"),
         "fix_agreement": sum(agreements) / len(agreements) if agreements else float("nan"),
+        "fix_agreement_n": len(agreements),
         "median_seconds": (sorted(r["seconds"] for r in results)[len(results) // 2]
                            if results else float("nan")),
         "categories": dict(Counter(f["category"] for f, _ in findings).most_common(6)),
@@ -253,7 +273,12 @@ def report(name: str, s: dict) -> None:
     if s["category_match"] == s["category_match"]:
         print(f"  category match     {s['category_match']:.1%}  (vs teacher)")
     if s["fix_agreement"] == s["fix_agreement"]:
-        print(f"  fix agreement      {s['fix_agreement']:.1%}  (vs the real repair)")
+        print(f"  fix agreement      {s['fix_agreement']:.1%}  "
+              f"(vs the real repair, n={s['fix_agreement_n']})")
+    else:
+        # Silence here read as "fine"; it meant the measure never ran.
+        print("  fix agreement      unavailable — no `fix_diff` on these "
+              "records, so the explanation is unscored")
     print(f"  median latency     {s['median_seconds']:.1f}s")
     print(f"  categories         {s['categories']}")
 
@@ -368,6 +393,15 @@ if __name__ == "__main__":
     vague = {"category": "other", "file": "",
              "explanation": "something somewhere may be wrong"}
     assert not grounded(vague, diff), "a finding citing nothing is not grounded"
+    # The regression this function existed to catch and did not: naming the
+    # touched file while citing nothing in it.
+    named = {"category": "other", "file": "auth/session.py",
+             "explanation": "something somewhere may be wrong"}
+    assert not grounded(named, diff), "a filename alone does not ground a finding"
+    # A finding about a file the commit never touched is not about this commit.
+    elsewhere = {"category": "other", "file": "other/module.py",
+                 "explanation": "token.expires_at now admits the boundary"}
+    assert not grounded(elsewhere, diff), "wrong file is not grounded"
 
     fix = "-        if token.expires_at >= now():\n+        if token.expires_at > now():\n"
     assert fix_agreement(good, fix) > 0.3, fix_agreement(good, fix)

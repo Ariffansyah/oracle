@@ -978,3 +978,157 @@ measurable, and the audit gives two independent reasons this card cannot
 resolve. The null is reportable as-is: preference alignment on 180 synthetic
 pairs does not move a 3B reviewer. It is not evidence that DPO cannot help
 here, only that it was never given a signal.
+
+### The gate was trained on its own evaluation set (24 Aug)
+
+`train_gate.py` defaults to `--jsonl data/apachejit_commits.jsonl`. That file
+contains **all 200** commits of `data/labelled_heldout.jsonl`. Every gate number
+ever measured on the held-out set is train-on-test.
+
+Retraining with `--exclude data/labelled_heldout.jsonl` costs nothing on the
+gate's own chronological split (AUC 0.823 against the published 0.8293) and
+changes the held-out numbers completely:
+
+| gate | prec | rec | F1 | AUC |
+|---|---|---|---|---|
+| `gate.joblib` (leaked) | 1.000 | 0.641 | 0.781 | 0.9638 |
+| `gate_noleak.joblib` (clean) | 0.800 | 0.174 | 0.286 | 0.7530 |
+
+The leak was worth **0.495 F1 and 0.21 AUC**. Labels agree 200/200 between the
+two files, so this is not a labelling artifact.
+
+The clean run also exposes that `GATE_THRESHOLD` does not transfer. Tuned to
+0.047 for 95.1% recall on 27.5%-buggy chronological ApacheJIT, it yields 17.4%
+recall on the 46%-buggy held-out set: it forwards 20 of 200 commits to Stage 2
+and drops 76 of 92 defects. At its shipped setting the cascade front-end is
+worse than no gate at all.
+
+Operating points on the held-out set, clean gate:
+
+| threshold | tp | fp | fn | prec | rec | F1 | sent to Stage 2 |
+|---|---|---|---|---|---|---|---|
+| 0.047 (trained) | 16 | 4 | 76 | 0.800 | 0.174 | 0.286 | 20/200 |
+| 0.006 (best F1) | 79 | 55 | 13 | 0.590 | 0.859 | **0.699** | 134/200 |
+| 0.001 (95% recall) | 92 | 103 | 0 | 0.472 | 1.000 | 0.641 | 195/200 |
+
+0.699 is tuned on the evaluation set and is therefore an upper bound; the
+95%-recall point, which is not tuned for F1, still clears the trivial baseline.
+
+### Where Stage 2 actually sits (24 Aug)
+
+All on the same 200 held-out commits:
+
+| | prec | rec | F1 |
+|---|---|---|---|
+| always-buggy baseline | 0.460 | 1.000 | **0.630** |
+| clean gate, retuned | 0.590 | 0.859 | 0.699 |
+| teacher, gpt-oss-120b unhinted | 0.563 | 0.435 | 0.491 |
+| student, 3B `oracle-merged` | 0.441 | 0.326 | 0.375 |
+
+Distillation cannot lift Stage 2 past 0.491, and 0.491 is below the trivial
+baseline. Optimising Stage 2 for detection is optimising the weaker component
+toward a lower ceiling. Stage 1 detects; Stage 2 should be measured on
+explanation.
+
+### The evaluation was out of domain (24 Aug)
+
+The number above is worse than it looks, because the model was never trained on
+anything resembling the test set.
+
+    heldout  (200)  ~85% Java, 100% Apache: camel 42, cassandra 23, ignite 19,
+                    hbase 19, activemq 18, groovy 16, hadoop 16, hive 16, ...
+    training (1673) 21 non-Apache web/infra projects: laravel 201, caddy 150,
+                    hugo 149, netty 140, express 119, sinatra 119, axios 115,
+                    gin 111, flask 104, fastify 102, tokio 88, ...
+                    java share: 192/1673 = 11.5%
+
+Zero project overlap, and Java is 11.5% of training against ~85% of the
+evaluation. **F1 0.375 is an out-of-domain measurement.** Two consequences:
+
+- The gate-vs-Stage-2 comparison above is not like-for-like. The gate trained
+  on ApacheJIT, the same domain as the test set; the LLM did not. Some of the
+  0.699 vs 0.375 gap is domain, not architecture.
+- Student-vs-teacher (0.375 vs 0.491) is still clean: the teacher ran unhinted
+  on the same held-out commits.
+
+The rendering-variance result is unaffected - it holds the model and the
+commits fixed and varies only the rendering.
+
+Fixed by splitting `labelled_all.jsonl` by **project** (`split_by_project.py`),
+holding out gin, fastapi, axios, clap and spring-boot: 1332 train / 341 held
+out, every language present on both sides. Those 5 projects appear in neither
+the new training set nor the gate's (`labelled_all` shares 0 commits with
+`apachejit_commits.jsonl`), making `data/ml8_heldout.jsonl` the first slice in
+this project clean for **both** stages, and the cascade measurable at last.
+
+### grounded() never rejected anything (24 Aug)
+
+`grounded()` returned True as soon as a finding named a file the diff touched.
+On a single-file commit every finding names the only file, so the check was a
+no-op: it passed **69 of 69** live findings and **597 of 597** corpus findings.
+Every "grounded: N%" in this file before today was 100% by construction.
+
+The filename is now necessary but not sufficient. Deleted lines still ground a
+finding, since removing a guard is a real defect class and only 27 of 597
+corpus findings (4.5%) rest on deleted lines alone.
+
+    live model output   69/69  (100%)  -> 54/69  (78.3%)
+    training corpus    597/597 (100%)  -> 489/597 (81.9%)   108 rejected
+    all-grounded records  525/1673     -> 425/1673
+
+Filtering on it at inference was measured and rejected: it costs 0.065 F1 for
+no precision gain (0.441 -> 0.440), because detection F1 is blind to whether a
+finding is correct. A finding inventing a defect on a commit that happens to be
+buggy scores as a true positive.
+
+`fix_agreement()` has never executed. It reads `r["fix_diff"]`, which no dataset
+in `data/` provides, so it returned NaN and the report's NaN guard printed
+nothing - the output looked complete while one of its five advertised measures
+had never run once. It now prints "unavailable" with the reason. Making it real
+is not plumbing: ApacheJIT's `fix` column is a boolean, not a hash, and all 500
+CVEfixes pairs are exact reverses of each other, so the paired record as
+"repair" would make the metric tautological.
+
+### Two species of hallucination (24 Aug)
+
+| species | example | grounding catches it |
+|---|---|---|
+| cites nothing | Makefile finding claims `CFLAGS` was removed; it is on line 1 of a new file | yes - 21.7% of live findings |
+| cites real tokens, states a falsehood | heap.js finding predicts `RangeError: Index out of range`, which JS cannot raise for `arr[0]`; verified with node that removing the guard is behaviour-preserving | **no** |
+
+A third failure is the plain miss: the Go data race (`data/go_race_case.diff`,
+4 `-race` warnings, 4% of runs lose a record) reported as clean by every
+checkpoint.
+
+Species two is the dangerous one and nothing in this repo measures it.
+Grounding passes it, detection F1 rewards it, `fix_agreement` never runs. All
+three examples above were settled by *executing* the code, which is what
+`bench/basic_bench.py` was built to do.
+
+### Basic-algorithm benchmark (24 Aug)
+
+`bench/basic/`, 12 cases (8 buggy, 4 clean) in go, javascript, python and c,
+each small enough to run. Ground truth is proved rather than inferred: buggy
+means post misbehaves where pre does not, clean means both produce identical
+output, re-verified on every invocation.
+
+    python bench/basic_bench.py --verify        # 12/12 verified, ~40s, no GPU
+
+`oracle-merged`, greedy, `INFERENCE_SAMPLES=1`:
+
+| grading | score |
+|---|---|
+| automated (locus: does it name the faulty construct) | 11/12, 0 hallucinated |
+| hand (mechanism: is the explanation right) | **8/12**, 1 inverted, 2 wrong-mechanism, 1 miss |
+
+The two numbers measure different things and the gap is the point: the model
+finds the right line in 11 of 12 cases and explains it correctly in 8. The
+automated scorer cannot see an inverted claim - `go-accum-reset` names `total`
+correctly while describing a hoisted accumulator as newly added inside the
+loop - so treat it as a floor.
+
+Against the same model's 0.375 on Apache Java, this is a different regime.
+Basic algorithmic code across the 8 corpus languages is near the training
+distribution and is where the useful target (8/10 with no hallucination) is
+realistic. 12 cases is too few to claim a rate; ruby, php, rust and typescript
+are not covered yet.

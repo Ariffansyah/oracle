@@ -113,6 +113,12 @@ def main(argv=None) -> int:
     ap.add_argument("--target-recall", type=float, default=GATE_TARGET_RECALL)
     ap.add_argument("--train-frac", type=float, default=0.8)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--exclude", type=Path,
+                    help="drop commits whose commit_id appears in this jsonl. "
+                         "The eval set belongs here: gate.joblib was trained "
+                         "on apachejit_commits.jsonl, which contains all 200 "
+                         "of labelled_heldout.jsonl, so every gate number "
+                         "measured on that set was leaked.")
     ap.add_argument("--ablate", action="store_true",
                     help="also train metrics-only and embeddings-only variants")
     ap.add_argument("--no-embeddings", action="store_true",
@@ -124,6 +130,15 @@ def main(argv=None) -> int:
                          f"  python -m corpus.fetch --limit 2500")
 
     rows = load_records(args.jsonl)
+    if args.exclude:
+        drop = {json.loads(l)["commit_id"]
+                for l in open(args.exclude) if l.strip()}
+        before = len(rows)
+        rows = [r for r in rows if r.get("commit_id") not in drop]
+        print(f"excluded {before - len(rows)} of {before} commits found in "
+              f"{args.exclude} ({len(drop)} ids)")
+        if not rows:
+            raise SystemExit("--exclude removed every commit")
     y = np.array([bool(r.get("buggy")) for r in rows], dtype=int)
     diffs = [r["diff"] for r in rows]
     metrics = metrics_matrix(rows)

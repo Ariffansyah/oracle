@@ -1,8 +1,10 @@
 Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first (every
 measurement plus the command that reproduces it), then `docs/ROADMAP.md`.
 
-**First action this session:** check whether the SFT retrain finished — see
-"Running right now". Everything else in "Next steps" is ordered after that.
+**First action this session:** nothing is running and the GPU box is free —
+see "Nothing is running". The SFT retrain was stopped at 2/154 steps and is
+staged to relaunch, but read step 3 in "Next steps" before spending 9.5 hours
+on it.
 
 # The project
 
@@ -19,26 +21,29 @@ languages to **8/10 correct with no hallucination**. That is a narrower and
 much more achievable target than beating a baseline on Apache Java, and
 `bench/basic_bench.py` is the instrument for it.
 
-# Running right now (started 24 Aug ~13:00)
+# Nothing is running — the box is free
 
-**SFT retrain on `oracle-gpu`.** 154 steps, 220.9 s/step, **ETA ~9h25m**
-(finishes roughly 22:30 the same day).
+The SFT retrain was launched 24 Aug ~13:00 and **stopped at 2/154 steps** at the
+user's request; they wanted `oracle-gpu` for something else. No checkpoint was
+written and nothing was lost but ~7 minutes. `artifacts/sft-ml8-grounded` does
+not exist.
 
-    log        ~/oracle/sft_ml8.log
-    output     artifacts/sft-ml8-grounded
-    train      data/sft_ml8_grounded.jsonl   1286 examples
-    launcher   ~/oracle/run_sft_ml8.sh
+**Everything it needs is already staged**, so relaunching is one command:
 
-Check it with:
+    ssh oracle-gpu 'setsid nohup bash ~/oracle/run_sft_ml8.sh \
+        > ~/oracle/sft_ml8.log 2>&1 < /dev/null &'
 
-    ssh oracle-gpu 'cd ~/oracle && tr "\r" "\n" < sft_ml8.log | grep -E "^ *[0-9]+%" | tail -1'
+    train      data/sft_ml8_grounded.jsonl   1286 examples   (on the box)
+    heldout    data/ml8_heldout.jsonl         341 records    (on the box)
+    control    data/sft_ml8_base.jsonl       1332 examples   (unused, see step 5)
+    cost       154 steps at ~221 s/step = ~9h30m
 
-`checkpoint-204`, `sft-adapter` and `oracle-merged` are untouched. The GPU box
-holds the card, so **the inference server and the TUI are down** until this
-finishes. Bring them back with `./serve.sh start`, then open the tunnel by hand
-(see Operational notes — `serve.sh` does not manage it reliably).
+It needs the whole card, so stop the inference server first
+(`./serve.sh stop`) and expect the TUI to be down for the duration.
 
-To kill the run: `ssh oracle-gpu 'pkill -f train_sft'`.
+Before relaunching, consider step 3 below — scoring the base model on
+`bench/basic_bench.py` takes ten minutes and may show this retrain is pointed
+the wrong way.
 
 # What this session established
 

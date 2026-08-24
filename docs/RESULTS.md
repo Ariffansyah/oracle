@@ -1132,3 +1132,61 @@ Basic algorithmic code across the 8 corpus languages is near the training
 distribution and is where the useful target (8/10 with no hallucination) is
 realistic. 12 cases is too few to claim a rate; ruby, php, rust and typescript
 are not covered yet.
+
+### Base vs fine-tuned on the basic-algorithm benchmark (25 Aug)
+
+The open question from the 24 Aug handoff: the SFT trains on messy real-world
+commits, so does it *help* or *hurt* the basic-algorithm slice the project now
+targets? Answer: it helps, clearly.
+
+The base model was served straight from the HF cache, so nothing but the
+weights differs from the `oracle-merged` run:
+
+    # on the GPU box
+    ln -sfn ~/.cache/huggingface/hub/models--Qwen--Qwen2.5-Coder-3B-Instruct/\
+snapshots/488639f1ff808d1d3d0ba301aef8c11461451ec5 ~/oracle/artifacts/base-3b
+    .venv/bin/python -m llm_explainer.serve --model artifacts/base-3b --port 8111
+
+    # on the laptop, through the tunnel
+    INFERENCE_SAMPLES=1 python bench/basic_bench.py --backend ollama \
+        --model-name base-3b --host http://localhost:8111 \
+        --out data/basic_bench_base.jsonl
+
+Both columns are the automated locus scorer at `INFERENCE_SAMPLES=1`, greedy,
+re-scored with the current `identified()` so they are directly comparable:
+
+| | base Qwen2.5-Coder-3B-Instruct | `oracle-merged` |
+|---|---|---|
+| verdict correct | 10/12 | 11/12 |
+| fully correct (locus) | **9/12** | **11/12** |
+| hallucinated | **2/12** | **0/12** |
+| false alarms on the 4 clean cases | 1 (`js-extract-helper`) | 0 |
+
+Hand-graded for mechanism rather than locus, the base model scores **7/12**
+against the fine-tuned model's 8/12. The locus gap is the larger and the more
+reliable of the two: the base model finds the right line in 9 cases, the
+fine-tuned one in 11.
+
+Where the base model fails:
+
+| case | failure |
+|---|---|
+| `js-extract-helper` | clean case; claims `report` changed from returning a string to a number. False alarm. |
+| `js-reverse-index` | "changed the loop condition from `i >= 0` to `i >= 0`" — a tautology, no claim made. Misses that the loop starts at `arr.length`. |
+| `py-mutable-default` | describes the `None` -> `[]` change correctly, then concludes "does not introduce any defects". Miss. |
+| `go-offbyone` | right locus, wrong mechanism: blames the empty-array case; `i <= len(xs)` panics for any input. |
+| `py-range-bound` | right locus, wrong mechanism: says the sum is wrong "for `n` equal to 1"; it is wrong for every `n`. |
+
+**Consequence for the roadmap:** fine-tuning is not damaging the slice the user
+cares about, so the `sft-ml8-grounded` retrain is pointed the right way. The
+remaining gap on this benchmark is mechanism, not localisation.
+
+#### Scorer fix: `identified()` was hyphen-brittle
+
+`must_mention` was matched as a plain lowercase substring, so the case asking
+for `"out of bounds"` scored the base model's `"out-of-bounds"` — a fully
+correct C array-bound explanation — as a **hallucination**. `identified()` now
+flattens `-` and `_` to spaces on both sides. This moved the base model from
+8/12 to 9/12 and from 3 hallucinations to 2. Every future number on this
+benchmark depends on it; the two runs in the table above were both re-scored
+under the fixed version.

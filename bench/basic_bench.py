@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -112,6 +113,11 @@ def diff_of(case: dict) -> str:
                .replace(str(d / f"post.{case['ext']}"), name))
 
 
+def _flat(text: str) -> str:
+    """Lowercase, and treat - and _ as spaces so "out-of-bounds" == "out of bounds"."""
+    return re.sub(r"[-_]+", " ", text.lower())
+
+
 def identified(case: dict, said: dict) -> bool:
     """Does the answer cite the identifiers the real defect lives in.
 
@@ -123,12 +129,17 @@ def identified(case: dict, said: dict) -> bool:
     go-accum-reset described the hoisted accumulator as newly added inside the
     loop, cited the right identifier, and passed. Cases still need eyeballing;
     this number is a floor, not a verdict.
+
+    Hyphens and underscores are flattened to spaces on both sides: the base 3B
+    wrote "out-of-bounds" where the case asks for "out of bounds", and a plain
+    substring test graded that correct answer a hallucination.
     """
-    must = [m.lower() for m in case.get("must_mention", [])]
+    must = [_flat(m) for m in case.get("must_mention", [])]
     if not must:
         return False
-    blob = " ".join([said.get("summary", "")]
-                    + [f.get("explanation", "") for f in said.get("findings") or []]).lower()
+    blob = _flat(" ".join([said.get("summary", "")]
+                          + [f.get("explanation", "")
+                             for f in said.get("findings") or []]))
     return all(m in blob for m in must)
 
 

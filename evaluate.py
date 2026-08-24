@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import ROOT
+from corpus.mine import CLONE_DIR, clone
 
 HELDOUT = ROOT / "data" / "labelled_heldout.jsonl"
 
@@ -103,24 +104,58 @@ def confusion(pairs: list[tuple[bool, bool]]) -> dict:
             "accuracy": (tp + tn) / max(len(pairs), 1)}
 
 
-def run(records: list[dict], client, progress=None) -> list[dict]:
-    """Ask the model about each held-out commit, keep what it said."""
+def commit_context(repos: Path, rec: dict) -> tuple[str, str] | None:
+    """The `-U50` diff and post-commit file bodies for one held-out record.
+
+    Held-out records carry only `project` + `commit_id` + the plain diff, so the
+    surrounding code has to come from a local clone. Returns None when the repo
+    is not cloned or the commit is not in its history (`--single-branch` clones
+    miss commits that never landed on the default branch), which is what lets a
+    partial set of clones degrade to the bare-diff path per record instead of
+    failing the run.
+    """
+    from llm_explainer.context import gather
+
+    repo = repos / rec["project"].replace("/", "__")
+    if not (repo / ".git").exists():
+        return None
+    ctx = gather(str(repo), rec["commit_id"])
+    if not ctx.diff.strip():
+        return None
+    blocks = (ctx.context_block(), ctx.framework_block())
+    return ctx.expanded_diff or ctx.diff, "\n".join(b for b in blocks if b)
+
+
+def run(records: list[dict], client, progress=None,
+        repos: Path | None = None) -> list[dict]:
+    """Ask the model about each held-out commit, keep what it said.
+
+    With `repos`, each commit is reviewed against its surrounding code, the way
+    the TUI and `main.py analyze --commit` do. Without it the model sees the
+    bare diff, which is what every number published before this flag existed
+    measured. `context_chars` records which path each record actually took, so
+    a half-cloned repo set cannot quietly average the two.
+    """
     out = []
     for i, rec in enumerate(records, 1):
         started = time.time()
+        diff, context = rec["diff"], ""
+        if repos and (found := commit_context(repos, rec)):
+            diff, context = found
         try:
             # chunked=False on purpose: the teacher labelled the whole commit in
             # one prompt and the SFT targets were built the same way. Per-file
             # review is a different task, and scoring it against these labels
             # would measure the chunker rather than the model.
-            analysis = client.analyze(rec["diff"], subject=rec.get("subject", ""),
+            analysis = client.analyze(diff, subject=rec.get("subject", ""),
                                       files=", ".join(rec.get("files", [])),
-                                      chunked=False)
+                                      chunked=False, context=context)
             said = analysis.model_dump()
             error = None
         except Exception as e:
             said, error = {"summary": "", "findings": []}, f"{type(e).__name__}: {e}"
         out.append({**rec, "predicted": said, "error": error,
+                    "context_chars": len(context),
                     "seconds": time.time() - started})
         if progress:
             progress(i, len(records), out[-1])
@@ -149,6 +184,7 @@ def score(results: list[dict]) -> dict:
 
     return {
         "n": len(results),
+        "with_context": sum(1 for r in results if r.get("context_chars")),
         "valid_json": len(usable) / max(len(results), 1),
         **conf,
         "findings_total": len(findings),
@@ -205,6 +241,9 @@ def paired_bootstrap(a: list[dict], b: list[dict], iters: int = 10000,
 def report(name: str, s: dict) -> None:
     print(f"\n=== {name} ===")
     print(f"  commits            {s['n']}")
+    print(f"  with context       {s['with_context']}/{s['n']}"
+          + ("   (bare diff — the pre-2026 published setting)"
+             if not s["with_context"] else "   (-U50 + file bodies)"))
     print(f"  valid JSON         {s['valid_json']:.1%}")
     print(f"  detection          P={s['precision']:.2f} R={s['recall']:.2f} "
           f"F1={s['f1']:.2f}  acc={s['accuracy']:.2f}")
@@ -231,6 +270,13 @@ def main(argv=None) -> int:
     ap.add_argument("--host", help="served host, e.g. http://localhost:8111")
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "eval_results.jsonl")
     ap.add_argument("--name", default="model")
+    ap.add_argument("--context", action="store_true",
+                    help="review against -U50 and full file bodies from local "
+                         "clones, the way the TUI does (default: bare diff)")
+    ap.add_argument("--repos", type=Path, default=CLONE_DIR,
+                    help="where the clones live, for --context")
+    ap.add_argument("--clone", action="store_true",
+                    help="clone the projects --context needs, then continue")
     ap.add_argument("--compare", nargs="+", type=Path,
                     help="score existing result files instead of running a model")
     ap.add_argument("--paired", nargs=2, type=Path, metavar=("A", "B"),
@@ -259,6 +305,27 @@ def main(argv=None) -> int:
     print(f"{len(records)} held-out commits "
           f"({sum(r['buggy'] for r in records)} buggy)")
 
+    repos = None
+    if args.context:
+        wanted = sorted({r["project"] for r in records})
+        if args.clone:
+            for slug in wanted:
+                clone(slug, args.repos)
+        have = [s for s in wanted
+                if (args.repos / s.replace("/", "__") / ".git").exists()]
+        # Fail here rather than after 200 slow calls: without clones every
+        # record silently falls back to the bare diff and the run reports a
+        # no-context number under a --context banner.
+        if not have:
+            raise SystemExit(
+                f"--context needs clones in {args.repos}; none of "
+                f"{len(wanted)} projects are there. Re-run with --clone.")
+        if len(have) < len(wanted):
+            print(f"  WARNING: {len(wanted) - len(have)} of {len(wanted)} "
+                  f"projects not cloned; those commits fall back to the bare "
+                  f"diff (see `with context` in the report)")
+        repos = args.repos
+
     from llm_explainer.client import OracleClient
 
     kwargs = {"backend": args.backend}
@@ -276,7 +343,7 @@ def main(argv=None) -> int:
         if i % 10 == 0 or i == 1:
             print(f"  {i}/{n}  findings={mark}  ({row['seconds']:.0f}s)", flush=True)
 
-    results = run(records, client, progress)
+    results = run(records, client, progress, repos=repos)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w") as fh:
         for r in results:
@@ -310,5 +377,38 @@ if __name__ == "__main__":
     c = confusion([(True, True), (True, False), (False, True), (False, False)])
     assert (c["tp"], c["fp"], c["fn"], c["tn"]) == (1, 1, 1, 1)
     assert abs(c["f1"] - 0.5) < 1e-9
+    # The context path is the difference between a published number and a
+    # different published number, so it gets a check too.
+    import subprocess, tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        repos = Path(tmp)
+        target = repos / "acme__widget"
+        target.mkdir(parents=True)
+        run_git = lambda *a: subprocess.run(["git", "-C", str(target), *a],
+                                            check=True, capture_output=True)
+        run_git("init", "-q")
+        run_git("config", "user.email", "t@t")
+        run_git("config", "user.name", "t")
+        body = "\n".join(f"line {i}" for i in range(80))
+        (target / "widget.py").write_text(body + "\nvalue = 1\n")
+        run_git("add", "-A")
+        run_git("commit", "-qm", "seed")
+        (target / "widget.py").write_text(body + "\nvalue = 2\n")
+        run_git("add", "-A")
+        run_git("commit", "-qm", "bump")
+        rev = subprocess.run(["git", "-C", str(target), "rev-parse", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+
+        rec = {"project": "acme/widget", "commit_id": rev}
+        got = commit_context(repos, rec)
+        assert got is not None, "a cloned repo must yield context"
+        wide, context = got
+        assert "line 40" in wide, "-U50 must reach well past the changed line"
+        assert "value = 2" in context, "context block must carry the file body"
+
+        assert commit_context(repos, {**rec, "project": "acme/absent"}) is None
+        assert commit_context(repos, {**rec, "commit_id": "0" * 40}) is None
+
     print("scoring functions ok")
     raise SystemExit(main())

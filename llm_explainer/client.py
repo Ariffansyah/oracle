@@ -446,15 +446,22 @@ class OracleClient:
         from collections import Counter
 
         analyses = []
+        last: InferenceError | None = None
         for i in range(INFERENCE_SAMPLES):
             try:
                 analyses.append(self._analyze_single(
                     diff, subject, files, retries, context,
                     temperature=0.0 if i == 0 else INFERENCE_SAMPLE_TEMPERATURE))
-            except InferenceError:
+            except InferenceError as e:
+                last = e
                 continue
         if not analyses:
-            raise InferenceError(f"no valid answer in {INFERENCE_SAMPLES} samples")
+            # Without the cause this reads as a model problem when it is
+            # usually a transport one - a stopped server and unparseable JSON
+            # produced the same message.
+            raise InferenceError(
+                f"no valid answer in {INFERENCE_SAMPLES} samples; last error: "
+                f"{last}")
         if len(analyses) == 1:
             return analyses[0]
 

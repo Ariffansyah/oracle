@@ -23,7 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import (BASE_MODEL, BATCH_SIZE, DPO_ADAPTER_DIR, DPO_BETA,
                     DPO_DATASET, DPO_EPOCHS, DPO_LOSS_TYPE, DPO_LR, GRAD_ACCUM,
-                    DPO_BATCH_SIZE, DPO_MAX_LENGTH, LOAD_IN_4BIT,
+                    DPO_BATCH_SIZE, DPO_MAX_LENGTH, DPO_MAX_GRAD_NORM,
+                    LOAD_IN_4BIT,
                     DPO_SFT_WEIGHT, MERGED_MODEL_DIR, SFT_ADAPTER_DIR)
 from fine_tuning.qlora import (gpu_report, load_base, lora_config,
                                merge_adapter, precision_flags, require_torch)
@@ -55,6 +56,9 @@ def parse_args(argv=None) -> argparse.Namespace:
                          "(max 60); logits over Qwen's 152k vocab dominate "
                          "memory, so every token costs ~0.6MB of gradient")
     ap.add_argument("--warmup-steps", type=int, default=20)
+    ap.add_argument("--max-grad-norm", type=float, default=DPO_MAX_GRAD_NORM,
+                    help="gradient clipping; HF defaults to 1.0, which clipped "
+                         "every step of the 23 Aug run 10-20x")
     ap.add_argument("--merge", action="store_true",
                     help="merge the adapter into the base weights when done")
     ap.add_argument("--merged-dir", type=Path, default=Path(MERGED_MODEL_DIR))
@@ -145,6 +149,7 @@ def main(argv=None) -> None:
             learning_rate=args.lr,
             lr_scheduler_type="cosine",
             warmup_steps=args.warmup_steps,
+            max_grad_norm=args.max_grad_norm,
             beta=args.beta,
             loss_type=loss_type,
             **({"loss_weights": [1.0, args.sft_weight]}

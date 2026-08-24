@@ -86,6 +86,11 @@ DPO_LR = _env("DPO_LR", 5e-6)          # preference tuning needs a small one
 DPO_LOSS_TYPE = _env("DPO_LOSS_TYPE", "sigmoid,sft")
 DPO_SFT_WEIGHT = _env("DPO_SFT_WEIGHT", 0.5)
 DPO_BETA = _env("DPO_BETA", 0.5)
+# The 23 Aug run logged grad_norm 11.8-20.1 against HF's default max_grad_norm
+# of 1.0, so every step was clipped 10-20x and the effective learning rate was
+# far below the 5e-6 schedule - the run moved nothing. Clip above the observed
+# range instead of inside it.
+DPO_MAX_GRAD_NORM = _env("DPO_MAX_GRAD_NORM", 25.0)
 BATCH_SIZE = _env("BATCH_SIZE", 1)     # 1536 tokens: one at a time
 # DPO processes chosen *and* rejected, so a batch of 2 is really 4 sequences,
 # each carrying logits over a 152k vocab. Measured OOM on 6GB at batch 2.

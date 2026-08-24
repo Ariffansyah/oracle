@@ -100,9 +100,23 @@ def from_csv(path: Path) -> list[dict]:
     return out
 
 
-def from_jsonl(path: Path, langs: set[str] | None = None) -> list[dict]:
-    """Records written by a fetcher: {diff, buggy, subject, files, analysis?}."""
-    out = []
+def from_jsonl(path: Path, langs: set[str] | None = None,
+               drop_ungrounded: bool = False) -> list[dict]:
+    """Records written by a fetcher: {diff, buggy, subject, files, analysis?}.
+
+    With `drop_ungrounded`, findings that cite nothing in the changed code are
+    removed from the target before it is written. The teacher wrote 108 of 597
+    corpus findings (18.1%) that name only a file, and a target the diff does
+    not support is precisely what teaches a student to invent one.
+
+    A buggy record left with no findings is dropped rather than kept: an empty
+    target on a real defect teaches silence, which is the failure mode
+    RESULTS.md records for 17 Aug. Clean records legitimately have no findings
+    and are untouched.
+    """
+    from evaluate import grounded  # local: evaluate imports corpus.mine
+
+    out, dropped_f, dropped_r = [], 0, 0
     with open(path) as fh:
         for line in fh:
             if not line.strip():
@@ -114,12 +128,23 @@ def from_jsonl(path: Path, langs: set[str] | None = None) -> list[dict]:
                 continue
             analysis = (Analysis.model_validate(rec["analysis"])
                         if rec.get("analysis") else None)
+            if drop_ungrounded and analysis and analysis.findings:
+                keep = [f for f in analysis.findings
+                        if grounded(f.model_dump(), rec["diff"])]
+                dropped_f += len(analysis.findings) - len(keep)
+                if not keep and rec.get("buggy"):
+                    dropped_r += 1
+                    continue
+                analysis = Analysis(summary=analysis.summary, findings=keep)
             out.append(to_example(
                 rec["diff"], bool(rec.get("buggy")), analysis,
                 subject=rec.get("subject", ""),
                 files=", ".join(rec.get("files", [])),
                 context=rec.get("context", ""),
             ))
+    if drop_ungrounded:
+        print(f"grounding filter: dropped {dropped_f} ungrounded findings and "
+              f"{dropped_r} buggy records left with none")
     return out
 
 
@@ -174,6 +199,9 @@ def main(argv=None) -> None:
     ap.add_argument("--mock", action="store_true", help="generate synthetic commits")
     ap.add_argument("--n", type=int, default=60, help="how many, with --mock")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--drop-ungrounded", action="store_true",
+                    help="remove teacher findings that cite nothing in the "
+                         "changed code, and drop buggy records left with none")
     ap.add_argument("--langs", nargs="*", default=None,
                     help="keep only records whose `language` field is in this list")
     args = ap.parse_args(argv)
@@ -181,7 +209,9 @@ def main(argv=None) -> None:
     if args.mock:
         rows = build_mock(args.n, args.seed)
     elif args.jsonl:
-        rows = from_jsonl(args.jsonl, langs=set(args.langs) if args.langs else None)
+        rows = from_jsonl(args.jsonl,
+                          langs=set(args.langs) if args.langs else None,
+                          drop_ungrounded=args.drop_ungrounded)
     else:
         csv_path = args.csv or Path(RAW_COMMITS_CSV)
         if not csv_path.exists():

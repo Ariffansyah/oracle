@@ -1,0 +1,11 @@
+{
+  "id": "c-int-division",
+  "language": "c",
+  "ext": "c",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "int"
+  ],
+  "note": "s becomes int so s / n truncates: 2.00 not 2.50"
+}

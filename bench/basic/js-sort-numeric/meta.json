@@ -1,0 +1,11 @@
+{
+  "id": "js-sort-numeric",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "api-misuse",
+  "must_mention": [
+    "sort"
+  ],
+  "note": "default sort is lexicographic: 1,10,20,9"
+}

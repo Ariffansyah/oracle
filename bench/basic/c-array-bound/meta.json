@@ -1,0 +1,11 @@
+{
+  "id": "c-array-bound",
+  "language": "c",
+  "ext": "c",
+  "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [
+    "out of bounds"
+  ],
+  "note": "reads a[5], one past the array"
+}

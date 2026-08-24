@@ -1,0 +1,9 @@
+{
+  "id": "js-extract-helper",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "extract a helper, same output"
+}

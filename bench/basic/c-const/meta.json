@@ -1,0 +1,9 @@
+{
+  "id": "c-const",
+  "language": "c",
+  "ext": "c",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "add const, same behaviour"
+}

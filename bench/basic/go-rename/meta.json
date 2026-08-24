@@ -1,0 +1,9 @@
+{
+  "id": "go-rename",
+  "language": "go",
+  "ext": "go",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "pure rename"
+}

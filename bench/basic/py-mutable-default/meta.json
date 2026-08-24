@@ -1,0 +1,11 @@
+{
+  "id": "py-mutable-default",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "acc"
+  ],
+  "note": "mutable default argument persists across calls"
+}

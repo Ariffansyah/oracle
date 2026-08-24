@@ -1,0 +1,11 @@
+{
+  "id": "go-accum-reset",
+  "language": "go",
+  "ext": "go",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    "total"
+  ],
+  "note": "accumulator hoisted out of the loop; sums become cumulative"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "py-range-bound",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [
+    "range"
+  ],
+  "note": "range(1, n) drops the last term: 10 instead of 15"
+}

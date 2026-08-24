@@ -1,0 +1,11 @@
+{
+  "id": "js-reverse-index",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [
+    "length"
+  ],
+  "note": "starts at arr.length; arr[length] is undefined so the sum is NaN"
+}

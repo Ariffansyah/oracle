@@ -1,0 +1,9 @@
+{
+  "id": "py-comprehension",
+  "language": "python",
+  "ext": "py",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "loop to comprehension, same output"
+}

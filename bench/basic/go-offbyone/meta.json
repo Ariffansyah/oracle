@@ -1,0 +1,11 @@
+{
+  "id": "go-offbyone",
+  "language": "go",
+  "ext": "go",
+  "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [
+    "len"
+  ],
+  "note": "i <= len(xs) indexes one past the end; Go panics"
+}

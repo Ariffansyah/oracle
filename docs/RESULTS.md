@@ -1190,3 +1190,41 @@ flattens `-` and `_` to spaces on both sides. This moved the base model from
 8/12 to 9/12 and from 3 hallucinations to 2. Every future number on this
 benchmark depends on it; the two runs in the table above were both re-scored
 under the fixed version.
+
+### Benchmark expanded to 44 cases, 9 languages (25 Aug)
+
+12 cases over 4 languages was too few to claim a rate, and it covered none of
+ruby, php, rust, typescript or java — between them 708 of the 1332 `ml8`
+training records. The set is now 44 cases, every label still proved by
+execution rather than inferred:
+
+    python bench/basic_bench.py --verify     # 44/44 verified, ~3 min, no GPU
+
+| language | buggy | clean | total |
+|---|---|---|---|
+| c | 3 | 1 | 4 |
+| go | 3 | 2 | 5 |
+| java | 4 | 1 | 5 |
+| javascript | 3 | 2 | 5 |
+| php | 4 | 1 | 5 |
+| python | 3 | 2 | 5 |
+| ruby | 4 | 1 | 5 |
+| rust | 4 | 1 | 5 |
+| typescript | 4 | 1 | 5 |
+| **all** | **32** | **12** | **44** |
+
+The 12 clean cases are the false-alarm half of the target — a finding on any of
+them is a hallucination by definition, and the base model already fails one of
+the original four.
+
+Runtimes, all local, no container: rust compiles with plain `rustc` (no `-O`,
+because debug assertions are what turn a silent integer overflow into a visible
+panic), typescript runs under `deno run` (no tsconfig, and Deno 2 does not
+type-check on `run`, so this measures runtime behaviour like every other case),
+java uses the Java 11+ single-file source launcher (no `javac` step, no
+class-name/filename constraint), ruby and php run their interpreters directly.
+`ruby` and `php` were installed on the laptop for this; the rest were already
+present.
+
+No model has been scored on the full 44 yet — the card is busy with the
+`sft-ml8-grounded` retrain. The base-vs-tuned table above is the 12-case set.

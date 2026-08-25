@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "off-by-one",
   "must_mention": [
-    "len"
+    [
+      "len",
+      "out of bounds",
+      "past the end"
+    ]
   ],
   "note": "0..=xs.len() indexes one past the end; Rust panics"
 }

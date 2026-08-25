@@ -5,7 +5,9 @@
   "buggy": true,
   "category": "error-handling",
   "must_mention": [
-    "null"
+    [
+      "null"
+    ]
   ],
   "note": "the null check is gone, so len(null) throws NullPointerException"
 }

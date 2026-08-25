@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "error-handling",
   "must_mention": [
-    "count"
+    [
+      "count",
+      "empty array",
+      "division by zero",
+      "divisionbyzero"
+    ]
   ],
   "note": "the empty-array guard is gone, so avg([]) throws DivisionByZeroError"
 }

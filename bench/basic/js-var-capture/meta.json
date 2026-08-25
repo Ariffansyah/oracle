@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "var"
+    [
+      "captur",
+      "function scope",
+      "scope",
+      "hoist"
+    ]
   ],
   "note": "var is function-scoped, so every closure captures the final i"
 }

@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "sort"
+    [
+      "sort",
+      "mutat",
+      "in place",
+      "caller"
+    ]
   ],
   "note": "sort() mutates; dropping the copy reorders the caller's array"
 }

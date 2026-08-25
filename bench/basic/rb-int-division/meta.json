@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "to_f"
+    [
+      "to f",
+      "integer division",
+      "truncat",
+      "float"
+    ]
   ],
   "note": "dropping to_f makes / integer division, so the mean truncates"
 }

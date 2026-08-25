@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "dup"
+    [
+      "dup",
+      "mutat",
+      "in place",
+      "caller"
+    ]
   ],
   "note": "without dup, << mutates the caller's string"
 }

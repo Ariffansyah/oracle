@@ -5,7 +5,13 @@
   "buggy": true,
   "category": "off-by-one",
   "must_mention": [
-    "..."
+    [
+      "...",
+      "exclusiv",
+      "exclud",
+      "endpoint",
+      "last element"
+    ]
   ],
   "note": "1...n excludes n, so the sum drops the last term"
 }

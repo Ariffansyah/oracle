@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "off-by-one",
   "must_mention": [
-    "length"
+    [
+      "length",
+      "out of bounds",
+      "past the end",
+      "arrayindexoutofbounds"
+    ]
   ],
   "note": "i <= xs.length reads one past the end; Java throws"
 }

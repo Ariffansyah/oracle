@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "api-misuse",
   "must_mention": [
-    "sort"
+    [
+      "sort",
+      "lexicographic",
+      "comparator"
+    ]
   ],
   "note": "default sort is lexicographic: 1,10,20,9"
 }

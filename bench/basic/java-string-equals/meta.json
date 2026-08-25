@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "equals"
+    [
+      "equals",
+      "reference",
+      "identity"
+    ]
   ],
   "note": "== compares references, so two equal Strings compare false"
 }

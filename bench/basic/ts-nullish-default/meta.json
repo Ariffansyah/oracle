@@ -5,7 +5,13 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "nullish"
+    [
+      "nullish",
+      "null coalescing",
+      "??",
+      "empty string",
+      "falsy"
+    ]
   ],
   "note": "?? only replaces null/undefined; || also replaces the empty string"
 }

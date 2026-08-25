@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "off-by-one",
   "must_mention": [
-    "length"
+    [
+      "length",
+      "undefined",
+      "nan"
+    ]
   ],
   "note": "starts at arr.length; arr[length] is undefined so the sum is NaN"
 }

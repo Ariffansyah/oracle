@@ -5,7 +5,9 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "overflow"
+    [
+      "overflow"
+    ]
   ],
   "note": "u8 200 + 100 overflows; checked_add handled it, plain + panics"
 }

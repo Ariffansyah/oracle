@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "off-by-one",
   "must_mention": [
-    "len"
+    [
+      "len",
+      "out of range",
+      "past the end"
+    ]
   ],
   "note": "i <= len(xs) indexes one past the end; Go panics"
 }

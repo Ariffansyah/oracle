@@ -7,6 +7,7 @@ with ``ORACLE_`` (e.g. ``ORACLE_BASE_MODEL=Qwen/Qwen2.5-Coder-1.5B-Instruct``).
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -17,6 +18,15 @@ ARTIFACTS = ROOT / "artifacts"
 def _env(name: str, default):
     raw = os.getenv(f"ORACLE_{name}")
     if raw is None:
+        # Every name here is also a plausible bare env var, and setting the bare
+        # one does nothing. That silence cost a 44-case GPU run: `INFERENCE_SAMPLES=1
+        # python bench/basic_bench.py` looked like it pinned greedy single-sample
+        # and ran 3-sample consensus instead, at 3x the cost, while the write-up
+        # said otherwise. Say so instead of ignoring it.
+        if os.getenv(name) is not None:
+            print(f"config: ignoring {name}={os.getenv(name)!r} — this setting is "
+                  f"read from ORACLE_{name}, so the bare name has no effect",
+                  file=sys.stderr)
         return default
     if isinstance(default, Path):
         return Path(raw)

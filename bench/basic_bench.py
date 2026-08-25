@@ -105,14 +105,15 @@ def load_cases() -> list[dict]:
 def verify(cases: list[dict]) -> int:
     """Prove each label by execution. Returns the number of bad cases."""
     bad = 0
-    print(f"{'case':<22}{'lang':<12}{'label':<8}{'pre':>6}{'post':>6}  verdict")
+    w = _idw(cases)
+    print(f"{'case':<{w}}{'lang':<12}{'label':<8}{'pre':>6}{'post':>6}  verdict")
     for c in cases:
         rc_pre, out_pre = _run(c, "pre")
         rc_post, out_post = _run(c, "post")
         differs = (rc_pre, out_pre) != (rc_post, out_post)
         ok = differs if c["buggy"] else not differs
         bad += not ok
-        print(f"{c['id']:<22}{c['language']:<12}"
+        print(f"{c['id']:<{w}}{c['language']:<12}"
               f"{'buggy' if c['buggy'] else 'clean':<8}{rc_pre:>6}{rc_post:>6}  "
               f"{'OK' if ok else 'BAD LABEL'}"
               + ("" if ok else f"   pre={out_pre[:40]!r} post={out_post[:40]!r}"))
@@ -134,9 +135,25 @@ def diff_of(case: dict) -> str:
                .replace(str(d / f"post.{case['ext']}"), name))
 
 
+def _idw(cases: list[dict]) -> int:
+    """Width of the case-id column, from the ids themselves.
+
+    This was hardcoded at 22, which is exactly len("java-concurrent-modify"),
+    so that row printed "java-concurrent-modifyjava" with no separating space.
+    Deriving it means a longer id can never fuse the columns again.
+    """
+    return max((len(c["id"]) for c in cases), default=20) + 2
+
+
+# Every dash-like character a model might emit. The 3B wrote "null\u2011coalescing"
+# with a non-breaking hyphen, which an ASCII [-_] class does not match.
+_DASHES = r"[-_\u2010\u2011\u2012\u2013\u2014\u2015\u2212]+"
+
+
 def _flat(text: str) -> str:
-    """Lowercase, and treat - and _ as spaces so "out-of-bounds" == "out of bounds"."""
-    return re.sub(r"[-_]+", " ", text.lower())
+    """Lowercase, and treat any dash or _ as a space, so "out-of-bounds",
+    "out\u2011of\u2011bounds" and "out of bounds" all compare equal."""
+    return re.sub(r"\s+", " ", re.sub(_DASHES, " ", text.lower()))
 
 
 def identified(case: dict, said: dict) -> bool:
@@ -151,44 +168,73 @@ def identified(case: dict, said: dict) -> bool:
     loop, cited the right identifier, and passed. Cases still need eyeballing;
     this number is a floor, not a verdict.
 
-    Hyphens and underscores are flattened to spaces on both sides: the base 3B
+    Dashes and underscores are flattened to spaces on both sides: the base 3B
     wrote "out-of-bounds" where the case asks for "out of bounds", and a plain
     substring test graded that correct answer a hallucination.
+
+    Each `must_mention` entry is a REQUIREMENT; a list is a set of ALTERNATIVES
+    that satisfy it. All requirements must be met, any one alternative meets
+    its own. A bare string is a one-alternative requirement, so old cases still
+    work. Alternatives exist because a correct explanation may paraphrase
+    rather than quote - sft-ml8-grounded said "returns the first n-1 elements
+    instead of the first n" without ever writing `array_slice`, and demanding
+    the token turned that correct answer into a reported hallucination.
     """
-    must = [_flat(m) for m in case.get("must_mention", [])]
+    must = case.get("must_mention", [])
     if not must:
         return False
     blob = _flat(" ".join([said.get("summary", "")]
                           + [f.get("explanation", "")
                              for f in said.get("findings") or []]))
-    return all(m in blob for m in must)
+    return all(
+        any(_flat(alt) in blob
+            for alt in ([req] if isinstance(req, str) else req))
+        for req in must)
 
 
-def grade(case: dict, said: dict) -> tuple[bool, bool, bool, bool]:
-    """Grade one answer. Returns (flagged, verdict_ok, identified, hallucinated).
+def grade(case: dict, said: dict) -> dict:
+    """Grade one answer.
 
     The live run and --score both go through here, so a re-score of stored rows
     can never disagree with the run that produced them.
+
+    Two failures were once folded into one "hallucinated" count, and they are
+    not the same claim:
+
+      false_alarm   a finding on a case whose pre and post produce byte-identical
+                    output. Execution PROVES nothing changed, so the finding is
+                    fabricated. This is the number the goal means by "no
+                    hallucination".
+      unconfirmed   a correct verdict on a buggy case whose explanation did not
+                    name the defect. The scorer could not confirm the locus,
+                    which is weaker than proof of invention - four of these were
+                    correct paraphrases that simply avoided the expected token.
+
+    `hallucinated` stays as their union so stored rows keep their schema, but
+    report the two apart: only false_alarm is evidence of fabrication.
     """
     flagged = bool(said.get("findings"))
     verdict_ok = flagged == case["buggy"]
     ident = identified(case, said) if case["buggy"] else False
-    # A confident finding that is not about the real defect, or any finding on
-    # code that provably did not change behaviour.
-    halluc = (flagged and not case["buggy"]) or (flagged and case["buggy"] and not ident)
-    return flagged, verdict_ok, ident, halluc
+    false_alarm = flagged and not case["buggy"]
+    unconfirmed = flagged and case["buggy"] and not ident
+    return {"flagged": flagged, "verdict_ok": verdict_ok, "identified": ident,
+            "false_alarm": false_alarm, "unconfirmed": unconfirmed,
+            "hallucinated": false_alarm or unconfirmed}
 
 
 def summarise(rows: list[dict], label: str = "") -> None:
     n = len(rows)
     v = sum(r["verdict_ok"] for r in rows)
     fully = sum(r["verdict_ok"] and (r["identified"] or not r["buggy"]) for r in rows)
-    h = sum(r["hallucinated"] for r in rows)
+    fa = sum(r.get("false_alarm", False) for r in rows)
+    un = sum(r.get("unconfirmed", False) for r in rows)
     if label:
         print(f"\n{label}")
     print(f"\n  verdict correct     {v}/{n}   ({100*v/n:.0f}%)")
     print(f"  fully correct       {fully}/{n}   ({100*fully/n:.0f}%)   <- the 8/10 target")
-    print(f"  hallucinated        {h}/{n}   ({100*h/n:.0f}%)   <- must be 0")
+    print(f"  false alarms        {fa}/{n}   ({100*fa/n:.0f}%)   <- findings on code proved unchanged; must be 0")
+    print(f"  locus unconfirmed   {un}/{n}   ({100*un/n:.0f}%)   <- right verdict, defect not named")
 
 
 def rescore(path: Path) -> list[dict]:
@@ -208,9 +254,7 @@ def rescore(path: Path) -> list[dict]:
         c = cases.get(r["id"])
         if c is None:
             continue  # a case deleted since the run; nothing to grade against
-        _, verdict_ok, ident, halluc = grade(c, r["predicted"])
-        out.append({**r, "verdict_ok": verdict_ok, "identified": ident,
-                    "hallucinated": halluc})
+        out.append({**r, **grade(c, r["predicted"])})
     return out
 
 
@@ -231,12 +275,14 @@ def main(argv=None) -> int:
 
     if args.score:
         rows = rescore(args.score)
+        w = _idw(load_cases())
         if not rows:
             raise SystemExit(f"no gradable rows in {args.score}")
         for r in rows:
             mark = ("correct" if (r["verdict_ok"] and (r["identified"] or not r["buggy"]))
-                    else "HALLUCINATION" if r["hallucinated"] else "miss")
-            print(f"  {r['id']:<22}{r['language']:<12}{mark}")
+                    else "FALSE ALARM" if r["false_alarm"]
+                    else "unconfirmed" if r["unconfirmed"] else "miss")
+            print(f"  {r['id']:<{w}}{r['language']:<12}{mark}")
         summarise(rows, f"{args.score.name}   {len(rows)} cases")
         return 0
 
@@ -259,7 +305,8 @@ def main(argv=None) -> int:
     client = OracleClient(args.model, **kw) if args.model else OracleClient(**kw)
 
     rows = []
-    print(f"\n{'case':<22}{'label':<8}{'said':<8}{'findings':>9}  outcome")
+    w = _idw(cases)
+    print(f"\n{'case':<{w}}{'label':<8}{'said':<8}{'findings':>9}  outcome")
     for c in cases:
         diff = diff_of(c)
         try:
@@ -270,13 +317,16 @@ def main(argv=None) -> int:
         except Exception as e:
             said, err = {"summary": "", "findings": []}, f"{type(e).__name__}: {e}"
         fs = said.get("findings") or []
-        flagged, verdict_ok, ident, halluc = grade(c, said)
+        g = grade(c, said)
+        flagged, verdict_ok, ident, halluc = (
+            g["flagged"], g["verdict_ok"], g["identified"], g["hallucinated"])
         rows.append({**{k: c[k] for k in ("id", "language", "buggy", "category")},
+                     "false_alarm": g["false_alarm"], "unconfirmed": g["unconfirmed"],
                      "predicted": said, "error": err, "verdict_ok": verdict_ok,
                      "identified": ident, "hallucinated": halluc})
         mark = ("correct" if (verdict_ok and (ident or not c["buggy"]))
                 else "HALLUCINATION" if halluc else "miss")
-        print(f"{c['id']:<22}{'buggy' if c['buggy'] else 'clean':<8}"
+        print(f"{c['id']:<{w}}{'buggy' if c['buggy'] else 'clean':<8}"
               f"{'buggy' if flagged else 'clean':<8}{len(fs):>9}  {mark}"
               + (f"   [{err}]" if err else ""))
 

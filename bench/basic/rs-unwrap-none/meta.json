@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "error-handling",
   "must_mention": [
-    "unwrap"
+    [
+      "unwrap",
+      "empty slice",
+      "none"
+    ]
   ],
   "note": "unwrap() on an empty slice's first() panics"
 }

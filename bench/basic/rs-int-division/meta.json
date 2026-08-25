@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "integer"
+    [
+      "integer",
+      "truncat",
+      "cast",
+      "f64"
+    ]
   ],
   "note": "the cast moved after the division, so the mean truncates"
 }

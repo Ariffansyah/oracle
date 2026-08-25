@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "error-handling",
   "must_mention": [
-    "reduce"
+    [
+      "reduce",
+      "initial value",
+      "empty array"
+    ]
   ],
   "note": "reduce with no initial value throws on an empty array"
 }

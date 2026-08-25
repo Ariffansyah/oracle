@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "==="
+    [
+      "===",
+      "strict",
+      "loose",
+      "type juggl"
+    ]
   ],
   "note": "=== became ==, so \"0\" and 0 now compare equal"
 }

@@ -5,7 +5,10 @@
   "buggy": true,
   "category": "error-handling",
   "must_mention": [
-    "map"
+    [
+      "nil map",
+      "map"
+    ]
   ],
   "note": "a nil map reads fine but panics on assignment"
 }

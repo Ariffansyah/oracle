@@ -5,7 +5,9 @@
   "buggy": true,
   "category": "error-handling",
   "must_mention": [
-    "nil"
+    [
+      "nil"
+    ]
   ],
   "note": "the nil check is gone, so size_of(nil) raises NoMethodError"
 }

@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "concat"
+    [
+      "concat",
+      "arithmetic",
+      "typeerror"
+    ]
   ],
   "note": "+ is arithmetic in PHP; concatenating strings with it is a TypeError"
 }

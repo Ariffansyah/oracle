@@ -5,7 +5,13 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "acc"
+    [
+      "mutable default",
+      "shared",
+      "persist",
+      "same list",
+      "acc="
+    ]
   ],
   "note": "mutable default argument persists across calls"
 }

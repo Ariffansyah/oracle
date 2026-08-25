@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "dict"
+    [
+      "dict",
+      "changed size",
+      "during iteration",
+      "runtimeerror"
+    ]
   ],
   "note": "deleting from a dict while iterating it raises RuntimeError"
 }

@@ -5,7 +5,13 @@
   "buggy": true,
   "category": "off-by-one",
   "must_mention": [
-    "out of bounds"
+    [
+      "out of bounds",
+      "past the end",
+      "beyond the bounds",
+      "overrun",
+      "a[5]"
+    ]
   ],
   "note": "reads a[5], one past the array"
 }

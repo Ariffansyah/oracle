@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "buffer-overflow",
   "must_mention": [
-    "strcpy"
+    [
+      "strcpy",
+      "buffer overflow",
+      "overrun",
+      "8 byte"
+    ]
   ],
   "note": "strcpy of a 11-byte string into an 8-byte buffer overflows"
 }

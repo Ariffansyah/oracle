@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "remove"
+    [
+      "remove",
+      "concurrentmodification",
+      "modif"
+    ]
   ],
   "note": "removing inside a for-each throws ConcurrentModificationException"
 }

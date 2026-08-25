@@ -5,7 +5,11 @@
   "buggy": true,
   "category": "off-by-one",
   "must_mention": [
-    "range"
+    [
+      "range",
+      "last term",
+      "n 1"
+    ]
   ],
   "note": "range(1, n) drops the last term: 10 instead of 15"
 }

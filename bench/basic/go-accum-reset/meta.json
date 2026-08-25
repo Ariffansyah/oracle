@@ -5,7 +5,12 @@
   "buggy": true,
   "category": "logic-error",
   "must_mention": [
-    "total"
+    [
+      "total",
+      "accumulator",
+      "outside the loop",
+      "hoisted"
+    ]
   ],
   "note": "accumulator hoisted out of the loop; sums become cumulative"
 }

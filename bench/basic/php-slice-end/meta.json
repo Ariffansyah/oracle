@@ -5,7 +5,13 @@
   "buggy": true,
   "category": "off-by-one",
   "must_mention": [
-    "array_slice"
+    [
+      "array slice",
+      "n 1",
+      "one element",
+      "first n",
+      "fewer"
+    ]
   ],
   "note": "array_slice length is n - 1, one element short"
 }

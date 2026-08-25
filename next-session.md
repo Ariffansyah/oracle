@@ -1,9 +1,9 @@
 Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first (every
 measurement plus the command that reproduces it), then `docs/ROADMAP.md`.
 
-**First action this session:** check whether the SFT retrain finished — see
-"A training run is in flight". If it has, the queue in "Next steps" is four
-GPU jobs deep and every one of them is cheap.
+**First action this session:** nothing is running and the GPU box is free.
+Read "Where this landed" — the retrain finished and is a regression, so the
+obvious next move (ship it) is the wrong one.
 
 # The project
 
@@ -20,62 +20,61 @@ languages to **8/10 correct with no hallucination**. That is a narrower and
 much more achievable target than beating a baseline on Apache Java, and
 `bench/basic_bench.py` is the instrument for it.
 
-# A training run is in flight
+# Where this landed
 
-`run_sft_ml8.sh` was relaunched 25 Aug 00:44 WIB and is training normally.
+`sft-ml8-grounded` trained cleanly and is **worse than the checkpoint it was
+meant to replace.** 154/154 steps in 9h27m, finished 25 Aug 10:10 WIB, loss
+1.714 -> 0.418, token accuracy 0.597 -> 0.883, no divergence. The adapter is at
+`artifacts/sft-ml8-grounded` on the box (239 MB, plus checkpoint-77 and -154).
 
-    train      data/sft_ml8_grounded.jsonl   1286 examples
-    heldout    data/ml8_heldout.jsonl         341 records
-    control    data/sft_ml8_base.jsonl       1332 examples   (unused, see step 5)
-    output     artifacts/sft-ml8-grounded    (on the box)
-    cost       154 steps at ~227 s/step = ~9h35m, so ~10:20 WIB
+All three models on the 44-case benchmark, greedy, one sample, fixed scorer:
 
-Check it:
+| | base 3B | `oracle-merged` | `sft-ml8-grounded` |
+|---|---|---|---|
+| fully correct (locus) | 33/44 (75%) | **40/44 (91%)** | 38/44 (86%) |
+| false alarms (proved) | 2 | **1** | 3 |
+
+**`oracle-merged`, the older checkpoint, is the best model this project has.**
+The retrain loses 2 cases and triples the false alarms. Do not ship it.
+
+The one signal worth acting on: **all three of the retrain's false alarms are
+refactor-only clean cases** — `js-extract-helper`, `js-rename-param`,
+`php-extract-helper` — against one for `oracle-merged`. The new checkpoint
+invents defects in code that provably does not change behaviour, which is the
+same failure the 0.088 rendering-variance result points at, moved the wrong
+way. The 12 clean cases are where the "no hallucination" half of the goal is
+decided, and the retrain went backwards on them while going forwards on
+detection.
+
+Do **not** read this as "the grounding filter hurts". `sft-ml8-grounded`
+differs from `oracle-merged` in three ways at once — grounding filter, project
+split, smaller corpus — which is exactly what the control run in step 3 below
+exists to separate.
+
+Serving a checkpoint (one at a time; a second 3B does not fit the 6GB card,
+and an OOM would take a training run with it):
 
     ssh oracle-gpu bash -s <<'EOF'
-    nvidia-smi --query-gpu=memory.used --format=csv,noheader
-    tr '\r' '\n' < ~/oracle/sft_ml8.log | grep -oE '[0-9]+/154 \[[^]]*\]' | tail -1
+    cd ~/oracle && setsid nohup .venv/bin/python -m llm_explainer.serve \
+        --model artifacts/oracle-merged --port 8111 > ~/oracle/serve.log 2>&1 < /dev/null &
     EOF
 
-It holds 4584 MiB of a 6144 MiB card, so **nothing else fits on the GPU while
-it runs** — 1560 MiB free is not enough for a second 3B even in 4-bit, and an
-OOM would take the run with it. Do not try. Relaunch, if it dies:
-
-    ssh oracle-gpu 'setsid nohup bash ~/oracle/run_sft_ml8.sh \
-        > ~/oracle/sft_ml8.log 2>&1 < /dev/null &'
-
-**The user has ruled out CPU inference as a way to fill the wait.** It was
-tried this session (the box has 12 cores and the base weights cached) and
-stopped before any case was scored. Wait for the card instead.
+`serve.py` loads a LoRA adapter directly, so a training checkpoint can be
+scored without merging first.
 
 # What this session established
 
-**1. Fine-tuning helps the basic-algorithm slice — it does not damage it.**
-This was the open question that gated the retrain, and it is now closed. Base
-`Qwen2.5-Coder-3B-Instruct` was served straight from the box's HF cache and run
-on the same 12-case benchmark, greedy, `INFERENCE_SAMPLES=1`:
+**1. Fine-tuning beats the base model on this slice.** 33/44 -> 40/44, +7
+cases. The base model's failures are not subtle: on six buggy cases it
+describes the change correctly and then concludes "This change does not
+introduce any defects", and on `ts-nullish-default` it emitted unescaped quotes
+inside a JSON string and failed schema validation twice.
 
-| | base 3B | `oracle-merged` |
-|---|---|---|
-| locus correct | 9/12 | **11/12** |
-| hallucinated | 2/12 | **0/12** |
-| false alarms on the 4 clean cases | 1 | **0** |
+**2. The retrain is a small regression, not a collapse** — see "Where this
+landed". A first reading said php fell 5/5 -> 1/5; it is 3/5. The difference
+was the scorer, not the model (finding 4).
 
-Hand-graded for mechanism rather than locus: base 7/12 against the tuned
-model's 8/12. The locus gap is the larger and the more reliable of the two.
-Full write-up and the base model's five failures are in `docs/RESULTS.md`.
-
-**2. `identified()` was hyphen-brittle, and it cost a whole case.**
-`must_mention` was a plain lowercase substring test, so a case asking for
-`"out of bounds"` scored the base model's `"out-of-bounds"` — a fully correct C
-array-bound explanation — as a **hallucination**. It now flattens `-` and `_`
-to spaces on both sides. This moved the base model from 8/12 to 9/12 and from 3
-hallucinations to 2. Both runs in the table above were re-scored under the fix.
-Every future number on this benchmark depends on it.
-
-**3. The benchmark is 44 cases across 9 languages, all verified.**
-Was 12 cases over 4 languages, covering none of ruby, php, rust, typescript or
-java — between them 708 of the 1332 `ml8` training records.
+**3. The benchmark is 44 cases across 9 languages, all proved by execution.**
 
     python bench/basic_bench.py --verify     # 44/44 verified, ~3 min, no GPU
 
@@ -92,64 +91,75 @@ java — between them 708 of the 1332 `ml8` training records.
 | typescript | 4 | 1 | 5 |
 | **all** | **32** | **12** | **44** |
 
-The 12 clean cases are the false-alarm half of the target: a finding on any of
-them is a hallucination by definition.
+`ruby` 3.4.10 and `php` 8.5.9 were installed on the laptop for this; java 21,
+deno 2.9, rustc, go, node and gcc were already present.
 
-**No model has been scored on the full 44 yet.** Every basic-bench number in
-the repo is still from the old 12-case set.
+**4. The scorer was counting correct paraphrases as hallucinations.**
+`identified()` demanded every `must_mention` token as a literal substring, and
+`grade()` turned a failed match on a buggy case into a hallucination — the one
+metric the goal says must be zero. Four of the retrain's seven reported
+hallucinations were correct answers that paraphrased (said "removes a
+null-check for an empty array" without ever writing `count`). Fixed three ways:
+alternatives in `must_mention`, proved false alarms reported apart from
+unconfirmed locus, and every dash-like character folded (the 3B wrote U+2011).
+Three entries were also too *loose* and would have passed wrong answers:
+`"int"` matched "print", `"var"` matched "variable", `"acc"` matched "across".
+
+**5. Two bugs made every earlier basic-bench number un-reproducible.**
+`INFERENCE_SAMPLES=1` set nothing — `config.py:18` reads
+`ORACLE_INFERENCE_SAMPLES` — so every earlier run was 3-sample consensus while
+its write-up said greedy. And the three samples were byte-identical anyway,
+because `serve.py` ignores the request's temperature. **`_analyze_consensus`
+has therefore never done anything through `serve.py`**: the "sample several
+times, keep what a majority agrees on" defence is a no-op on the backend where
+every measurement is taken. `_env()` now warns when a bare name is set and the
+prefixed one is not. Full write-up in `docs/RESULTS.md`.
 
 # Next steps, in order
 
-Steps 1–3 all need the GPU and all are cheap. Do them in one sitting once the
-card is free, with the server up the whole time.
+**1. Hand-grade the 44 for mechanism.** The automated scorer checks locus only
+and is a floor, not a verdict — it cannot see an inverted claim. The 8/10 goal
+is a mechanism claim, so it needs the hand pass. ~44 short reads, no GPU. The
+cheapest outstanding item, and it gates any claim about the goal.
 
-**1. Score the three models on the full 44.** `sft-ml8-grounded` first, then
-re-score `oracle-merged` and the base 3B — their existing numbers are from the
-12-case set and are not comparable to anything measured from now on.
+**2. Decide whether `_analyze_consensus` should be made real.** It is a no-op
+through `serve.py` (finding 5), so a designed safeguard does not exist where it
+is measured. Two options, and this is a judgement call rather than a bug fix:
+make `serve.py` honour the request's temperature — which makes every run
+non-deterministic and breaks comparability with everything measured so far — or
+delete the consensus path and say so in the paper. **Do not change it silently
+between benchmark runs.**
 
-    ./serve.sh start          # or serve --model <dir> by hand, see below
-    INFERENCE_SAMPLES=1 python bench/basic_bench.py --backend ollama \
-        --model-name <name> --host http://localhost:8111 \
-        --out data/basic_bench_<name>.jsonl
+**3. The isolating control run**, now clearly worth the GPU time.
+`data/sft_ml8_base.jsonl` is built — same split, same 1332 records, grounding
+filter OFF. `sft-ml8-grounded` differs from `oracle-merged` in three ways at
+once, so this is the only way to attribute the regression to the filter rather
+than to the project split or the smaller corpus. ~9.5h.
 
-To serve a checkpoint other than `oracle-merged`, pass `--model`:
-
-    # on the box; base-3b is a symlink into the HF cache, made this session
-    .venv/bin/python -m llm_explainer.serve --model artifacts/base-3b --port 8111
-    .venv/bin/python -m llm_explainer.serve --model artifacts/sft-ml8-grounded --port 8111
-
-A training checkpoint is a LoRA adapter and `serve.py` loads one directly
-(`serve.py:60`), so `sft-ml8-grounded` can be scored without merging first.
-
-**2. Evaluate `sft-ml8-grounded` on the clean slice.**
+**4. Evaluate `oracle-merged` — not the retrain — on the clean slice.**
 
     data/ml8_heldout.jsonl   341 records, 5 projects
                              gin, fastapi, axios, clap, spring-boot
 
-Those projects are in neither the new training set nor the gate's, so this is
-the first slice clean for **both** stages, and the first honest cascade
-measurement available. Use `INFERENCE_SAMPLES=1` (see Operational notes).
+Those projects are in neither training set nor the gate's, so this is the first
+slice clean for **both** stages, and the first honest cascade measurement
+available. Use `ORACLE_INFERENCE_SAMPLES=1`.
 
-**3. Hand-grade the 44 for mechanism.** The automated scorer checks locus only
-and is a floor, not a verdict — it cannot see an inverted claim. The 8/10 goal
-is a mechanism claim, so it needs the hand pass. ~44 short reads.
+**5. Chase the refactor false alarms.** All three of the retrain's are
+behaviour-preserving refactors, and only 5 of the 44 cases are
+extract-helper/rename shaped. Add more clean refactor cases before drawing a
+rate from them.
 
-**4. Only if 1–3 show the grounding filter mattered:** the isolating control
-run. `data/sft_ml8_base.jsonl` is already built — same split, same 1332
-records, filter OFF. Comparing `sft-ml8-grounded` to `checkpoint-204` confounds
-three changes at once (grounding filter, project split, smaller corpus); this
-run is the only way to attribute a difference to grounding. Another ~9.5h.
-
-**5. Retune the gate threshold on a slice separate from the eval set**, then
+**6. Retune the gate threshold on a slice separate from the eval set**, then
 report an honest Stage 1 number and the cascade disagreement rate.
 
-**6. Measure grounding per-language** before the 78.3% figure goes in a table —
+**7. Measure grounding per-language** before the 78.3% figure goes in a table —
 see the `identifiers()` note under "Known-stale comments".
 
-**Not on the list, deliberately:** more DPO (closed as a null, see below), more
-prompt rules (disproved 17 Aug), context injection (disproved 24 Aug — it
-*suppressed* findings on the race case), and more class mining (guard mining
-moved its class 28.4% -> 33.9% for a 0.04 F1 gap, under the noise floor).
+**Not on the list, deliberately:** more DPO (closed as a null), more prompt
+rules (disproved 17 Aug), context injection (disproved 24 Aug — it *suppressed*
+findings on the race case), and more class mining (guard mining moved its class
+28.4% -> 33.9% for a 0.04 F1 gap, under the noise floor).
 
 # Findings from 24 Aug that still stand
 
@@ -219,33 +229,37 @@ that change no code), the gate trained on its own eval set (0.495 F1), and the
 line-composition leak in paired corpora (AUC 0.934 with no model). That is a
 coherent methods contribution — *how LLM-based JIT defect prediction gets
 measured wrong, and by how much* — and every number in it is reproducible
-today. Worth putting to the professor as an option before spending more GPU on
+today. This session added two more of the same species, both from the
+measurement apparatus rather than the model: a scorer that reported correct
+paraphrases as hallucinations (4 of 7 on one checkpoint), and a sampling
+safeguard that has never executed on the backend where every number is taken. Worth putting to the professor as an option before spending more GPU on
 the original framing.
 
 # Committed this session (25 Aug)
 
-    6e16524  fix(bench): make identified() hyphen-insensitive, score the base model
-    d22cf97  feat(bench): expand basic-algorithm benchmark to 44 cases, 9 languages
+    6d74114  fix(bench): stop scoring correct paraphrases as hallucinations
+    5b5ed81  fix(serve): use bfloat16 when there is no CUDA device
+    05b91ee  fix(dashboard): stop the variance probe matching its own command line
+    c685ee5  docs: hand off with the retrain in flight and the benchmark at 44 cases
     d8b12d8  docs: record the 44-case benchmark, verified in all 9 languages
+    d22cf97  feat(bench): expand basic-algorithm benchmark to 44 cases, 9 languages
+    6e16524  fix(bench): make identified() hyphen-insensitive, and score the base model
 
-**Uncommitted:** `llm_explainer/serve.py` — picks `bfloat16` instead of
-`float16` when there is no CUDA device, because `float16` has no real CPU
-matmul kernel and a 3B model crawls under it. Written for the CPU experiment
-the user then stopped. It is a correct fix and changes nothing on the GPU path
-(`torch.cuda.is_available()` is true there), but it is untested at any scale
-and the user has ruled out the use case it was written for. Commit it or revert
-it; do not leave it dangling a third time. The copy on the box is already
-synced.
+Working tree is clean apart from `docs/RESULTS.md` and this file.
 
 New this session: `bench/basic/` grew from 12 to 44 case directories;
-`data/basic_bench_base.jsonl` (12 rows, the base 3B on the old set);
-`artifacts/base-3b` on the box, a symlink into the HF cache pointing at
+`data/basic_bench_base44.jsonl`, `data/basic_bench_oracle44.jsonl` and
+`data/basic_bench_ml8.jsonl` (44 rows each, the three-way run);
+`data/basic_bench_base.jsonl` and `data/basic_bench_oracle.jsonl` (12 rows
+each, the superseded set — keep them, `--score` still re-grades them).
+`artifacts/base-3b` on the box is a symlink into the HF cache pointing at
 `models--Qwen--Qwen2.5-Coder-3B-Instruct/snapshots/488639f1ff…`.
 
-Still on the box, not synced locally: `artifacts/dpo-adapter-v2`,
-`artifacts/oracle-merged-v2` (6.2 GB, the DPO null), `artifacts/gate_noleak.joblib`.
-Throwaway launchers worth deleting: `run_dpo2.sh`, `cmp3.sh`, `cmp_greedy.sh`,
-`ctx2.py`, `ctx_test.sh`.
+Still on the box, not synced locally: `artifacts/sft-ml8-grounded` (the
+regression — keep it, step 3 compares against it), `artifacts/dpo-adapter-v2`,
+`artifacts/oracle-merged-v2` (6.2 GB, the DPO null),
+`artifacts/gate_noleak.joblib`. Throwaway launchers worth deleting:
+`run_dpo2.sh`, `cmp3.sh`, `cmp_greedy.sh`, `ctx2.py`, `ctx_test.sh`.
 
 # Operational notes
 
@@ -266,10 +280,18 @@ Throwaway launchers worth deleting: `run_dpo2.sh`, `cmp3.sh`, `cmp_greedy.sh`,
 
   `ssh oracle-gpu 'bash -lc "..."'` works only while the inner string contains
   no `$`.
-- **`INFERENCE_SAMPLES=3` is not deterministic.** `client.py:453` runs sample 0
-  greedy and samples 1..n at `INFERENCE_SAMPLE_TEMPERATURE=0.6`. Any A/B of two
-  checkpoints must set `INFERENCE_SAMPLES=1` or it measures the sampler. Every
-  basic-bench number so far was taken at `INFERENCE_SAMPLES=1`, greedy.
+- **Every setting is read as `ORACLE_<NAME>`.** `config.py:18` is
+  `os.getenv(f"ORACLE_{name}")`, so a bare `INFERENCE_SAMPLES=1` sets nothing
+  and the run silently uses the default of 3. `_env()` now prints a warning to
+  stderr when the bare name is set and the prefixed one is not — **if you see
+  that line, the run you just started is not configured the way you think.**
+  Pin comparisons with `ORACLE_INFERENCE_SAMPLES=1`.
+- **`serve.py` ignores the request's temperature**, so through the served
+  backend every sample is greedy and the samples are byte-identical. That makes
+  `INFERENCE_SAMPLES=3` deterministic but 3x the cost, and it makes
+  `_analyze_consensus` a no-op — see step 2 in "Next steps". Results are still
+  not identical to a 1-sample run: `client.py:473` keeps only the first finding
+  per category, so consensus can drop a second finding of the same category.
 - **Four status checks in this repo report intent, not observed state**:
   `dashboard.sh` called a *completed* variance run "STUCK" (its stall check
   reads mtime); `serve.sh stop` printed `tunnel closed` while leaving the
@@ -326,9 +348,11 @@ In `evaluate.py`: `identifiers()` only keeps tokens containing `_`, `.` or
 camelCase, so plain names (`main`, `buf`, `len`) and all-caps macros (`CFLAGS`)
 are invisible to grounding. For C and Makefile diffs this under-counts in both
 directions — it rejects legitimate findings too. Worth measuring grounding
-per-language before the 78.3% goes in a table. Note that `basic_bench.py`'s
-`identified()` hit the mirror-image bug this session and was fixed by
-flattening `-`/`_`; `identifiers()` has not had the same pass.
+per-language before the 78.3% goes in a table. `basic_bench.py`'s
+`identified()` had the same class of bug twice this session and is now fixed
+three ways — any-of alternatives, all dash-like characters folded, and proved
+false alarms reported apart from unconfirmed locus. **`identifiers()` has had
+none of that pass**, and it feeds the grounding number the paper would quote.
 
 # Decisions made (do not relitigate)
 

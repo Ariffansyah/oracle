@@ -1114,7 +1114,13 @@ output, re-verified on every invocation.
 
     python bench/basic_bench.py --verify        # 12/12 verified, ~40s, no GPU
 
-`oracle-merged`, greedy, `INFERENCE_SAMPLES=1`:
+**Superseded by the 44-case three-way run below, and the sampling note here is
+wrong.** `INFERENCE_SAMPLES=1` sets nothing: `config.py:18` reads
+`ORACLE_INFERENCE_SAMPLES`, so this ran 3-sample consensus at the default. See
+"Two bugs that made every earlier basic-bench number un-reproducible". Kept for
+the hand-vs-automated gap, which still holds.
+
+`oracle-merged`, greedy, `INFERENCE_SAMPLES=1` *(as recorded; actually 3)*:
 
 | grading | score |
 |---|---|
@@ -1133,63 +1139,13 @@ distribution and is where the useful target (8/10 with no hallucination) is
 realistic. 12 cases is too few to claim a rate; ruby, php, rust and typescript
 are not covered yet.
 
-### Base vs fine-tuned on the basic-algorithm benchmark (25 Aug)
+### Base vs fine-tuned, 12 cases (25 Aug) — superseded
 
-The open question from the 24 Aug handoff: the SFT trains on messy real-world
-commits, so does it *help* or *hurt* the basic-algorithm slice the project now
-targets? Answer: it helps, clearly.
-
-The base model was served straight from the HF cache, so nothing but the
-weights differs from the `oracle-merged` run:
-
-    # on the GPU box
-    ln -sfn ~/.cache/huggingface/hub/models--Qwen--Qwen2.5-Coder-3B-Instruct/\
-snapshots/488639f1ff808d1d3d0ba301aef8c11461451ec5 ~/oracle/artifacts/base-3b
-    .venv/bin/python -m llm_explainer.serve --model artifacts/base-3b --port 8111
-
-    # on the laptop, through the tunnel
-    INFERENCE_SAMPLES=1 python bench/basic_bench.py --backend ollama \
-        --model-name base-3b --host http://localhost:8111 \
-        --out data/basic_bench_base.jsonl
-
-Both columns are the automated locus scorer at `INFERENCE_SAMPLES=1`, greedy,
-re-scored with the current `identified()` so they are directly comparable:
-
-| | base Qwen2.5-Coder-3B-Instruct | `oracle-merged` |
-|---|---|---|
-| verdict correct | 10/12 | 11/12 |
-| fully correct (locus) | **9/12** | **11/12** |
-| hallucinated | **2/12** | **0/12** |
-| false alarms on the 4 clean cases | 1 (`js-extract-helper`) | 0 |
-
-Hand-graded for mechanism rather than locus, the base model scores **7/12**
-against the fine-tuned model's 8/12. The locus gap is the larger and the more
-reliable of the two: the base model finds the right line in 9 cases, the
-fine-tuned one in 11.
-
-Where the base model fails:
-
-| case | failure |
-|---|---|
-| `js-extract-helper` | clean case; claims `report` changed from returning a string to a number. False alarm. |
-| `js-reverse-index` | "changed the loop condition from `i >= 0` to `i >= 0`" — a tautology, no claim made. Misses that the loop starts at `arr.length`. |
-| `py-mutable-default` | describes the `None` -> `[]` change correctly, then concludes "does not introduce any defects". Miss. |
-| `go-offbyone` | right locus, wrong mechanism: blames the empty-array case; `i <= len(xs)` panics for any input. |
-| `py-range-bound` | right locus, wrong mechanism: says the sum is wrong "for `n` equal to 1"; it is wrong for every `n`. |
-
-**Consequence for the roadmap:** fine-tuning is not damaging the slice the user
-cares about, so the `sft-ml8-grounded` retrain is pointed the right way. The
-remaining gap on this benchmark is mechanism, not localisation.
-
-#### Scorer fix: `identified()` was hyphen-brittle
-
-`must_mention` was matched as a plain lowercase substring, so the case asking
-for `"out of bounds"` scored the base model's `"out-of-bounds"` — a fully
-correct C array-bound explanation — as a **hallucination**. `identified()` now
-flattens `-` and `_` to spaces on both sides. This moved the base model from
-8/12 to 9/12 and from 3 hallucinations to 2. Every future number on this
-benchmark depends on it; the two runs in the table above were both re-scored
-under the fixed version.
+A first pass compared base `Qwen2.5-Coder-3B-Instruct` with `oracle-merged` on
+the 12-case set and concluded fine-tuning helps. **That conclusion survives the
+rerun; the numbers do not.** Both runs were recorded as `INFERENCE_SAMPLES=1`
+and were in fact 3-sample consensus, and the scorer has since been fixed twice.
+The 44-case three-way run below replaces this table entirely.
 
 ### Benchmark expanded to 44 cases, 9 languages (25 Aug)
 
@@ -1226,5 +1182,157 @@ class-name/filename constraint), ruby and php run their interpreters directly.
 `ruby` and `php` were installed on the laptop for this; the rest were already
 present.
 
-No model has been scored on the full 44 yet — the card is busy with the
-`sft-ml8-grounded` retrain. The base-vs-tuned table above is the 12-case set.
+All three models have since been scored on the full 44 — see below.
+
+### Three models on the full 44 (25 Aug)
+
+The first honest run of this benchmark: 44 cases, 9 languages, greedy, one
+sample, scored with the fixed scorer. `sft-ml8-grounded` is the retrain that
+finished 25 Aug 10:10 WIB (154/154 steps, 9h27m, loss 1.714 -> 0.418, token
+accuracy 0.597 -> 0.883).
+
+    # on the box, one model at a time - a second 3B does not fit the 6GB card
+    .venv/bin/python -m llm_explainer.serve --model artifacts/<name> --port 8111
+
+    # on the laptop, through the tunnel. Note the ORACLE_ prefix.
+    ORACLE_INFERENCE_SAMPLES=1 python bench/basic_bench.py --backend ollama \
+        --model-name <name> --host http://localhost:8111 \
+        --out data/basic_bench_<name>.jsonl
+
+| | base 3B | `oracle-merged` | `sft-ml8-grounded` |
+|---|---|---|---|
+| verdict correct | 34/44 (77%) | 40/44 (91%) | 38/44 (86%) |
+| **fully correct (locus)** | 33/44 (75%) | **40/44 (91%)** | 38/44 (86%) |
+| **false alarms** (proved by execution) | 2 | **1** | 3 |
+| locus unconfirmed | 1 | 0 | 0 |
+
+| language | base | `oracle-merged` | `sft-ml8-grounded` |
+|---|---|---|---|
+| c | 4/4 | 4/4 | 4/4 |
+| go | 4/5 | 4/5 | 5/5 |
+| java | 3/5 | 4/5 | 5/5 |
+| javascript | 3/5 | 4/5 | 3/5 |
+| php | 4/5 | 5/5 | 3/5 |
+| python | 3/5 | 5/5 | 4/5 |
+| ruby | 4/5 | 5/5 | 5/5 |
+| rust | 5/5 | 4/5 | 5/5 |
+| typescript | 3/5 | 5/5 | 4/5 |
+| **all** | **33/44** | **40/44** | **38/44** |
+
+Three results, in order of how much they should change what happens next.
+
+**1. Fine-tuning beats the base model, on a slice where the base model is
+already decent.** 33/44 -> 40/44 is +7 cases, and the base model's failures are
+not subtle: it answers "This change does not introduce any defects" on six
+buggy cases it has just described correctly, and on `ts-nullish-default` it
+emitted unescaped quotes inside a JSON string and failed schema validation
+twice. Criterion 3 of the acceptance list is about separation on ApacheJIT, not
+this, but the direction is the same.
+
+**2. The retrain is a regression, and a small one.** `sft-ml8-grounded` loses 2
+cases against `oracle-merged` and triples the false alarms, 1 -> 3. It gains
+java (4/5 -> 5/5), go and rust; it loses php (5/5 -> 3/5), typescript (5/5 ->
+4/5), python and javascript. **Do not ship it, and do not read it as proof that
+the grounding filter hurts** - `sft-ml8-grounded` differs from `oracle-merged`
+in three ways at once (grounding filter, project split, smaller corpus), which
+is exactly what the control run on `data/sft_ml8_base.jsonl` exists to
+separate.
+
+**3. All three of the retrain's false alarms are refactor-only clean cases**:
+`js-extract-helper`, `js-rename-param`, `php-extract-helper`. Against
+`oracle-merged`'s one (`rs-rename-local`). The new checkpoint invents defects
+in code that provably does not change behaviour - the same failure the 0.088
+rendering-variance result points at, moved in the wrong direction. This is the
+single most useful signal on the page: the 12 clean cases are where the "no
+hallucination" half of the goal is decided, and the retrain went backwards on
+them while going forwards on detection.
+
+Every failure across all three runs was read by hand. All 15 are genuine
+after the scorer fixes below; none is a scoring artifact.
+
+### Two bugs that made every earlier basic-bench number un-reproducible (25 Aug)
+
+**`INFERENCE_SAMPLES=1` never set anything.** `config.py:18` is
+`os.getenv(f"ORACLE_{name}")`, so the variable is `ORACLE_INFERENCE_SAMPLES`.
+Every basic-bench run before this one ran 3-sample consensus at the default
+while its write-up said greedy single-sample. `_env()` now prints to stderr when
+the bare name is set and the prefixed one is not:
+
+    config: ignoring INFERENCE_SAMPLES='1' - this setting is read from
+    ORACLE_INFERENCE_SAMPLES, so the bare name has no effect
+
+The warning is in `_env` itself, so it covers every setting in `config.py`, not
+just the one that bit.
+
+**The three samples were byte-identical anyway.** `client.py:453` asks for
+samples 1..n at `INFERENCE_SAMPLE_TEMPERATURE=0.6`, but `serve.py`'s `do_POST`
+reads only `num_predict` from `options` and `generate()` uses the server's own
+`TEMPERATURE`, which is 0.0. Verified against the live server:
+
+    temp=0.0 -> The sea is vast and mysterious, with waves crashing against ...
+    temp=1.8 -> The sea is vast and mysterious, with waves crashing against ...
+
+Consequences, in order of severity:
+
+- **`_analyze_consensus` has never done anything through `serve.py`.** The
+  "sample several times, keep what a majority agrees on" defence - the one
+  designed to catch a defect invented fluently and only once - is a no-op on
+  the served backend. It is not dead code on the local-transformers backend;
+  it has simply never been exercised where every measurement is taken.
+- Every served run costs 3x the GPU time for three copies of one answer.
+- Results are *not* simply equal to greedy: `client.py:473` merges findings by
+  category and keeps the first per category, so a case emitting two findings of
+  one category loses one under consensus. That is why all three models were
+  rerun rather than relabelled.
+
+The 24 Aug note "`INFERENCE_SAMPLES=3` is not a deterministic path" is
+therefore right about the API and wrong about this backend, where it is
+deterministic and merely wasteful. Whether that observation was taken with the
+`ORACLE_` prefix is not recoverable from the logs.
+
+### Scorer: correct paraphrases were being counted as hallucinations (25 Aug)
+
+`identified()` required every `must_mention` token as a literal substring, and
+`grade()` turned a failed match on a buggy case into a hallucination. So an
+explanation that was right but paraphrased scored as a fabrication - the one
+metric the goal says must be zero. Four of `sft-ml8-grounded`'s seven reported
+hallucinations were correct answers:
+
+| case | what the model said | token demanded |
+|---|---|---|
+| `php-divzero-guard` | "removes a null-check for an empty array in avg(), causing a DivisionByZeroError" | `count` |
+| `php-slice-end` | "returns the first n-1 elements instead of the first n" | `array_slice` |
+| `rb-int-division` | "replaces floating-point division with integer division" | `to_f` |
+| `ts-nullish-default` | "replaces a null-coalescing operator with a logical-or" | `nullish` (and it wrote U+2011, not an ASCII hyphen) |
+
+This is why php looked like a collapse to 1/5. It is 3/5.
+
+Three fixes:
+
+1. **A `must_mention` entry is a requirement; a list is a set of alternatives.**
+   All requirements must hold, any one alternative meets its own. A bare string
+   is a one-alternative requirement, so old cases still work. Alternatives use
+   stems (`captur`, `mutat`, `exclud`) because the models inflect - `"captures"`
+   failed against "capture the final loop iteration value".
+2. **`grade()` separates the two failures** that were one `hallucinated` count.
+   A finding on a case whose pre and post produce byte-identical output is
+   *proved* fabricated by execution. An unmatched locus on a buggy case only
+   means the scorer could not confirm it. Only the first is evidence of
+   invention. `hallucinated` survives as their union so stored rows keep their
+   schema.
+3. **`_flat()` folds every dash-like character**, not just ASCII `-` and `_`.
+
+Three entries were too *loose* rather than too strict and would have passed
+wrong answers: `"int"` matched "print" and "point", `"var"` matched "variable",
+`"acc"` matched "across". All three are now alternatives that name the real
+locus.
+
+Re-scoring is free and needs no GPU - `--score` re-grades stored answers
+through the same `grade()` the live run uses:
+
+    python bench/basic_bench.py --score data/basic_bench_oracle44.jsonl
+
+**Never trust a stored row's own `verdict_ok` / `identified` / `hallucinated`
+field.** Scorer fixes land after runs do - twice in one day here - and the
+fields record what the scorer believed at run time. Only `predicted` is
+evidence.

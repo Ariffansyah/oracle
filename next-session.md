@@ -308,8 +308,50 @@ safeguard that has never executed on the backend where every number is taken.
 A third is the grounding rule, where the *obvious* repair would have inflated
 the headline number while grounding a third of findings against unrelated
 commits — the random-pairing control that caught it is itself a contribution,
-since no paper reporting a grounding rate appears to run one. Worth putting to the professor as an option before spending more GPU on
-the original framing.
+since no paper reporting a grounding rate appears to run one.
+
+**Recommendation, 25 Aug: stop treating the pivot as a fallback and put it to
+the professor.** The detection framing is dead — F1 0.64 against a 0.665
+always-buggy baseline, ten days of work that has not moved it, five approaches
+measured and lost in one day. The methods paper is not a consolation prize; it
+is the stronger paper, and it is a reframing of work already done rather than
+new work. Six apparatus findings now support it, each reproducible today:
+
+| finding | magnitude |
+|---|---|
+| gate trained on its own eval set | 0.495 F1, 0.21 AUC |
+| line-composition leak in paired corpora | AUC 0.934 with no model |
+| rendering variance from edits that change no code | F1 spread 0.088 |
+| `grounded()` never rejected anything | 100% by construction |
+| scorer graded correct paraphrases as hallucinations | 4 of 7 on one checkpoint |
+| consensus safeguard never ran on the served backend | silently absent |
+
+The through-line is sharper than the list: **every one was caught by a control,
+and the obvious repair was often worse than the bug.** The grounding fix
+grounded 36% of findings against randomly paired commits until the
+random-pairing control caught it. Papers reporting grounding rates do not run
+that control.
+
+Second contribution: the executable benchmark. Labels proved by running the
+code, so locus separates from mechanism and a false alarm is *proved* rather
+than assumed — which is what showed the refactor failure to be a rendering
+artifact rather than a reasoning failure. An SZZ-labelled corpus cannot produce
+that diagnosis.
+
+**Three gaps to close before submitting, in order:**
+
+1. **The hand-grade** (step 1). The paper would claim explanation quality while
+   measuring locus. 89% is not an explanation number and a reviewer finds that
+   immediately. Free, no GPU.
+2. **A second model.** Every finding is on Qwen2.5-Coder-3B. The apparatus
+   findings generalise by construction, but "does the rendering artifact appear
+   elsewhere" is the first question asked. Running the 46 against any second
+   model, even an API one, closes it cheaply.
+3. **n.** 46 cases is thin for a rate. Lead with the n=200 variance result,
+   which is the strongest number in the project, not with the benchmark.
+
+Venue: MSR, as `ROADMAP.md` already says — negative and methodological results
+publish there.
 
 # Committed this session (25 Aug)
 

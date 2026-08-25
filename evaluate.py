@@ -36,6 +36,8 @@ from corpus.mine import CLONE_DIR, clone
 
 HELDOUT = ROOT / "data" / "labelled_heldout.jsonl"
 
+_TOK = r"[A-Za-z_][A-Za-z0-9_.]{2,}"  # three chars up; `i`, `n`, `xs` stay out
+
 # Words that carry defect meaning; everything else is scaffolding. Used for the
 # overlap measures so "the" and "this" cannot inflate a score.
 _STOP = set("""a an the and or but if then than that this these those is are was
@@ -50,13 +52,27 @@ def content_words(text: str) -> set[str]:
     return {w for w in words if w not in _STOP}
 
 
+def decorated(text: str) -> set[str]:
+    """Names carrying a `_`, a `.` or a camelCase hump - unambiguously code."""
+    return {t.lower().strip(".") for t in re.findall(_TOK, text)
+            if "_" in t or "." in t or re.search(r"[a-z][A-Z]", t)}
+
+
 def identifiers(text: str) -> set[str]:
-    """CamelCase / snake_case / dotted names - the things a real finding cites."""
-    out = set()
-    for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_.]{2,}", text):
-        if "_" in tok or "." in tok or re.search(r"[a-z][A-Z]", tok):
-            out.add(tok.lower().strip("."))
-    return out
+    """Every name in the text: decorated ones, plus plain ones not in _STOP.
+
+    Plain names used to be dropped entirely - only `_`, `.` or camelCase
+    survived - so `main`, `buf`, `len`, `size` and all-caps macros like `CFLAGS`
+    were invisible. In a C or Makefile diff that leaves the changed code with an
+    EMPTY vocabulary, so no finding about it could ever ground, however correct.
+
+    `_STOP` removes English scaffolding and language keywords ("the",
+    "function", "return"): they occur in every diff and are evidence of nothing.
+    That is not enough on its own - see `grounded()`, which decides how many
+    plain matches are worth believing.
+    """
+    return decorated(text) | ({t.lower().strip(".")
+                               for t in re.findall(_TOK, text)} - _STOP)
 
 
 def files_in_diff(diff: str) -> set[str]:
@@ -81,13 +97,35 @@ def grounded(finding: dict, diff: str) -> bool:
     Deleted lines still count. A commit that removes a guard is a real defect
     and the finding legitimately cites the removed code; only 27 of 597 corpus
     findings (4.5%) rest on deleted lines alone.
+
+    One decorated name is enough; plain names need three, unless the changed
+    code has no decorated names at all. Plain names are weak evidence - "value"
+    and "error" appear in most diffs - and the thresholds were measured on three
+    corpora against a control that scores each finding on a RANDOMLY PAIRED
+    commit, which is the only way to tell grounding from shared English:
+
+        rule                          real     mismatched    separation
+        decorated only (old)         79-89%      0.5-1.5%    +78 to +88pp
+        plain admitted freely        96-99%     18-36%       +63 to +72pp
+        this rule                    93-94%      2.8-4.6%    +89 to +91pp
+
+    So this is not a loosening: it finds more real groundings AND separates
+    better than the old rule on every corpus. Admitting plain names without the
+    threshold would ground a third of findings against an unrelated commit.
     """
     if finding.get("file") and finding["file"] not in files_in_diff(diff):
         return False
     changed = "\n".join(l for l in diff.splitlines()
                         if l.startswith(("+", "-")) and not l.startswith(("+++", "---")))
-    cited = identifiers(finding.get("explanation", ""))
-    return bool(cited & identifiers(changed))
+    said = finding.get("explanation", "")
+    if decorated(said) & decorated(changed):
+        return True
+    shared = identifiers(said) & identifiers(changed)
+    if not decorated(changed):
+        # Nothing decorated to match against - C, Makefile, shell. Plain names
+        # are all this diff has, so one is all a finding can cite.
+        return bool(shared)
+    return len(shared) >= 3
 
 
 def fix_agreement(finding: dict, fix_diff: str) -> float:
@@ -402,6 +440,47 @@ if __name__ == "__main__":
     elsewhere = {"category": "other", "file": "other/module.py",
                  "explanation": "token.expires_at now admits the boundary"}
     assert not grounded(elsewhere, diff), "wrong file is not grounded"
+
+    # Plain names were invisible before: this diff carries no `_`, `.` or
+    # camelCase hump, so its vocabulary read as EMPTY and no finding about it
+    # could ever ground, however correct. C and Makefile diffs look like this.
+    cdiff = ("diff --git a/util.c b/util.c\n+++ b/util.c\n@@ -1 +1 @@\n"
+             "-    memcpy(buf, src, len);\n"
+             "+    memcpy(buf, src, size);\n")
+    # grounded() reads only the changed lines, and those carry no decorated
+    # name - the `util.c` in the header does, which is why this checks the code.
+    cbody = "-    memcpy(buf, src, len);\n+    memcpy(buf, src, size);"
+    assert not decorated(cbody), "nothing in this diff's code is decorated"
+    assert identifiers(cbody) >= {"memcpy", "buf", "src", "len", "size"}
+    plain = {"category": "buffer-overflow", "file": "util.c",
+             "explanation": "the copy now uses size rather than len, overrunning buf"}
+    assert grounded(plain, cdiff), "a plain identifier must ground a finding"
+    # ...but English scaffolding and language keywords still must not: they
+    # occur in every diff and are evidence of nothing.
+    assert "the" not in identifiers("the loop")
+    assert "return" not in identifiers("return x")
+    assert identifiers("CFLAGS was dropped") >= {"cflags"}, "all-caps macros count"
+    prose = {"category": "other", "file": "util.c",
+             "explanation": "this change may be wrong in some cases"}
+    assert not grounded(prose, cdiff), "prose alone is not grounding"
+    # Known limit, deliberately kept: the token regex needs three characters, so
+    # `i`, `n` and `xs` stay invisible. Admitting two-character tokens would let
+    # stray prose ("is", "as", "it") ground a finding, which is the failure this
+    # function exists to catch.
+    assert identifiers("i n xs") == set()
+
+    # A diff that DOES carry decorated names needs three plain matches, so one
+    # incidental word in common is not grounding.
+    pydiff = ("+++ b/svc.py\n@@ -1 +1 @@\n"
+              "-    result = client.fetch(size, retries)\n"
+              "+    result = client.fetch(count, retries)\n")
+    assert decorated(pydiff), "this diff has decorated names, so the threshold applies"
+    one = {"category": "other", "file": "svc.py",
+           "explanation": "the result may be wrong"}
+    assert not grounded(one, pydiff), "one plain word in common is not grounding"
+    three = {"category": "logic-error", "file": "svc.py",
+             "explanation": "fetch now takes count where it took size, so retries is unchanged"}
+    assert grounded(three, pydiff), "three plain names shared is grounding"
 
     fix = "-        if token.expires_at >= now():\n+        if token.expires_at > now():\n"
     assert fix_agreement(good, fix) > 0.3, fix_agreement(good, fix)

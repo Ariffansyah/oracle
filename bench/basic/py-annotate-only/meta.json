@@ -1,0 +1,9 @@
+{
+  "id": "py-annotate-only",
+  "language": "python",
+  "ext": "py",
+  "buggy": false,
+  "category": "",
+  "must_mention": [],
+  "note": "type annotations plus an expanded module docstring; behaviour identical"
+}

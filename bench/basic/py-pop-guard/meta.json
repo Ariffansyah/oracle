@@ -1,0 +1,18 @@
+{
+  "id": "py-pop-guard",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "error-handling",
+  "must_mention": [
+    [
+      "indexerror",
+      "attributeerror",
+      "empty list",
+      "none check",
+      "null check",
+      "guard"
+    ]
+  ],
+  "note": "the removed check was not redundant: pop() on an empty list raised IndexError, now it raises AttributeError on None.next"
+}

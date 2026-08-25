@@ -121,13 +121,23 @@ def verify(cases: list[dict]) -> int:
     return bad
 
 
-def diff_of(case: dict) -> str:
+def diff_of(case: dict, word: bool = False) -> str:
+    """Render one case as a diff. `word` switches to --word-diff=plain.
+
+    A unified diff shows an edited line as a removal plus an addition, and the
+    model reads that literally: on the pystruct annotation commit it reported
+    that a docstring line was "removed" when the line was expanded in place.
+    --word-diff marks the change inside the line - [-gone-]{+added+} - which
+    makes an in-place edit unmistakable. It is a representation the model was
+    NOT fine-tuned on, so it is measured, not assumed.
+    """
     d = ROOT / case["id"]
     name = f"{case['id']}.{case['ext']}"
     p = subprocess.run(
-        ["git", "diff", "--no-index", "--no-color",
-         f"--src-prefix=a/", f"--dst-prefix=b/",
-         str(d / f"pre.{case['ext']}"), str(d / f"post.{case['ext']}")],
+        ["git", "diff", "--no-index", "--no-color"]
+        + (["--word-diff=plain"] if word else [])
+        + [f"--src-prefix=a/", f"--dst-prefix=b/",
+           str(d / f"pre.{case['ext']}"), str(d / f"post.{case['ext']}")],
         capture_output=True, text=True)
     # git diff --no-index exits 1 when files differ, which is the normal case
     out = p.stdout
@@ -268,6 +278,8 @@ def main(argv=None) -> int:
     ap.add_argument("--model-name", help="served model name")
     ap.add_argument("--host", help="served host")
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--word-diff", action="store_true",
+                    help="render cases with --word-diff=plain instead of unified")
     ap.add_argument("--score", type=Path, metavar="ROWS.jsonl",
                     help="re-grade a stored run with the current scorer and exit; "
                          "runs no model and needs no language toolchain")
@@ -308,7 +320,7 @@ def main(argv=None) -> int:
     w = _idw(cases)
     print(f"\n{'case':<{w}}{'label':<8}{'said':<8}{'findings':>9}  outcome")
     for c in cases:
-        diff = diff_of(c)
+        diff = diff_of(c, word=args.word_diff)
         try:
             a = client.analyze(diff, subject=f"({c['id']})",
                                files=f"{c['id']}.{c['ext']}", chunked=False)

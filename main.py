@@ -132,7 +132,7 @@ def cmd_analyze(args) -> int:
     try:
         if args.commit:
             analysis = client.analyze_commit(
-                args.repo, args.commit, with_context=not args.no_context,
+                args.repo, args.commit, with_context=args.context,
                 progress=lambda i, n, p: console.print(
                     f"[dim]  file {i}/{n}  {p}[/]"))
         else:
@@ -178,7 +178,8 @@ def cmd_tui(args) -> int:
     from ui.tui_app import run
 
     run(repo=None if args.mock else args.repo, model_path=args.model,
-        backend=args.backend, limit=args.limit, with_gate=not args.no_gate)
+        backend=args.backend, limit=args.limit, with_gate=not args.no_gate,
+        with_context=args.context)
     return 0
 
 
@@ -216,8 +217,6 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--commit", help="git revision to review")
     a.add_argument("--repo", default=".")
     a.add_argument("--json", action="store_true")
-    a.add_argument("--no-context", action="store_true",
-                   help="review the bare diff, without surrounding file context")
     a.add_argument("--no-gate", action="store_true",
                    help="skip stage 1 and always run the validator")
     a.add_argument("--always-review", action="store_true",
@@ -233,6 +232,13 @@ def build_parser() -> argparse.ArgumentParser:
     u.set_defaults(func=cmd_tui)
 
     for p in (a, u):
+        # Opt-in, not opt-out. Sending `git show -U50` plus whole file bodies
+        # has been measured three times and lost every time - see
+        # docs/RESULTS.md, "Context injection breaks this commit pair in BOTH
+        # directions". It is kept because the sample is two commits in one repo
+        # and deserves a proper slice, not because anything favours it.
+        p.add_argument("--context", action="store_true",
+                       help="also send surrounding file context (measured worse)")
         p.add_argument("--model", type=Path, default=None,
                        help=f"model dir (default {config.MERGED_MODEL_DIR})")
         p.add_argument("--backend", choices=("auto", "transformers", "ollama"),

@@ -150,7 +150,8 @@ class OracleTUI(App):
     ]
 
     def __init__(self, commits: list[Commit], repo: str | None,
-                 model_path=None, backend: str = BACKEND, gate=None):
+                 model_path=None, backend: str = BACKEND, gate=None,
+                 with_context: bool = False):
         super().__init__()
         self.commits = commits
         self.repo = repo
@@ -174,7 +175,13 @@ class OracleTUI(App):
         # repo without restarting.
         self.ollama_model = OLLAMA_MODEL
         self.num_ctx = OLLAMA_NUM_CTX
-        self.with_context = True
+        # OFF by default. Context injection has been measured three times and
+        # lost every time: it suppressed the finding on data/go_race_case.diff
+        # (24 Aug), and on the pystruct pair (25 Aug) it flipped BOTH verdicts
+        # against the bare diff - hiding the real defect in 370806c and
+        # inventing one in the clean 9745800, 2/2 -> 0/2. Nothing measured
+        # favours it. Opt back in with `oracle --context` or `:context on`.
+        self.with_context = with_context
         # Which rendering of the diff to send. "off" is the real one; the rest
         # re-render the same change to show whether the verdict survives it.
         self.perturb = "off"
@@ -591,12 +598,14 @@ def load_gate():
 
 
 def run(repo: str | None = None, model_path=None, backend: str = BACKEND,
-        limit: int = 50, with_gate: bool = True) -> None:
+        limit: int = 50, with_gate: bool = True,
+        with_context: bool = False) -> None:
     commits = git_log(repo, limit) if repo else mock_commits()
     if not commits:
         raise SystemExit(f"no commits found in {repo}")
     gate = load_gate() if with_gate else None
-    OracleTUI(commits, repo, model_path, backend, gate).run()
+    OracleTUI(commits, repo, model_path, backend, gate,
+              with_context=with_context).run()
 
 
 if __name__ == "__main__":

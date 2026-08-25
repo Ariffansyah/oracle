@@ -31,7 +31,34 @@ reformulation on benchmarks where prior work has published numbers.
 
 ---
 
-## Where we actually are (measured 2026-08-15, n=997 paired)
+## Where we actually are (2026-08-25)
+
+The goal moved on 24 Aug and this section has not caught up with it. The
+detection numbers below are still reproducible and still the honest ApacheJIT
+picture, but they no longer describe what the project is trying to do.
+
+**The current target** is basic algorithmic code in the 8 corpus languages at
+8/10 correct with no hallucination, measured by `bench/basic_bench.py`, whose
+labels are proved by executing the code rather than inferred from SZZ.
+
+**Where that stands:** `oracle-merged` scores **41/46 (89%) correct locus, 2
+false alarms (4%)**, best of three checkpoints and better than the 25 Aug
+retrain. The locus half of the goal is met; the "correct explanation" half is
+unmeasured, and the "no hallucination" half is 2 cases short. Full write-up and
+the five approaches that were measured and lost are in `RESULTS.md`.
+
+**What this changes for the paper.** Criterion 3 (beats the base model) now has
+a second, cleaner piece of evidence that does not depend on SZZ labels, a
+teacher, or a threshold: 33/46 base -> 41/46 tuned on executable ground truth.
+Criteria 2 and 4 still fail on detection. The *Contingency* pivot below is no
+longer a fallback — it is the better paper, and 25 Aug added three more findings
+of exactly its type (a scorer that reported correct answers as hallucinations, a
+sampling safeguard that never executed, and a grounding rule whose obvious
+repair grounded a third of findings against random commits).
+
+---
+
+## The ApacheJIT detection picture (measured 2026-08-15, n=997 paired)
 
 Both models evaluated on `detect_eval.jsonl` — 1000 ApacheJIT commits, balanced
 500/500, SZZ labels only. Reproduce with
@@ -302,10 +329,10 @@ answers.
 
 ---
 
-## Contingency
+## Contingency — now the recommended path (updated 2026-08-25)
 
-If, after the leak is fixed, detection still fails to beat the trivial baseline
-or the base model, **do not force the "our method works" framing.** Pivot to:
+Detection did not beat the trivial baseline, and ten days of work since has not
+moved it. **Do not force the "our method works" framing.** Pivot to:
 
 > *A task reformulation and evaluation methodology for JIT defect explanation,
 > with an honest baseline study.*
@@ -319,6 +346,19 @@ That paper is defensible with what already exists:
 - The label-leak finding is itself a contribution: teacher distillation for
   defect explanation silently leaks labels, here is the measurement and the
   correction.
+- **The measurement apparatus fails in ways nobody reports.** By 25 Aug this is
+  a series, not an anecdote: a gate trained on its own eval set (0.495 F1), a
+  grounding check that never rejected anything, rendering variance of 0.088 from
+  edits that change no code, a scorer that graded correct paraphrases as
+  hallucinations, a consensus safeguard that has never executed on the backend
+  where every number is taken, and a grounding repair whose obvious form grounded
+  a third of findings against randomly paired commits. Each was caught by a
+  control, and the controls are the contribution.
+- **An executable benchmark for defect explanation.** 46 cases, 9 languages, every
+  label proved by running the code. It separates locus from mechanism and proves
+  false alarms rather than assuming them — neither is possible on an SZZ-labelled
+  corpus, and it is what showed the refactor false alarm to be a rendering
+  artifact rather than a reasoning failure.
 
 Negative and methodological results publish at MSR. A forced positive claim on
 F1 0.60 against a 0.63 baseline does not survive review.

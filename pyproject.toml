@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oracle-jit"
+version = "0.1.0"
+description = "Two-stage JIT defect reviewer: a gate classifier, then a fine-tuned 3B that explains"
+requires-python = ">=3.10"
+
+# Inference and UI only. The training stack (torch, trl, peft, bitsandbytes) is
+# deliberately NOT here: `oracle` talks to a served model over HTTP, and pulling
+# a CPU torch into this environment is how the CUDA wheel on the GPU box got
+# clobbered before. Install those from requirements.txt when fine-tuning.
+dependencies = [
+    "rich>=13.7",
+    "textual>=0.79",
+    "pydantic>=2.7",
+    "requests>=2.31",
+]
+
+[project.scripts]
+oracle = "cli:run"
+
+# Flat layout: the modules live at the repo root, so discovery has to be
+# explicit or setuptools tries to package data/, artifacts/ and docs/ too.
+[tool.setuptools]
+py-modules = ["main", "cli", "config", "evaluate", "variance", "count_control"]
+packages = [
+    "llm_explainer",
+    "ui",
+    "ml_model",
+    "corpus",
+    "dataset_builder",
+    "dpo_pipeline",
+    "fine_tuning",
+]

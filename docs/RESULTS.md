@@ -3,7 +3,37 @@
 Every measurement taken, with the command that reproduces it. Numbers only —
 interpretation lives in `ROADMAP.md`, corpus provenance in `DATASETS.md`.
 
-Status as of 2026-08-18.
+Status as of 2026-08-25.
+
+---
+
+## Where the model actually stands (2026-08-25)
+
+One number is defensible today, and it is not a detection F1:
+
+> **`oracle-merged` scores 41/46 (89%) correct locus with a 4% false-alarm rate
+> on 46 executable cases across 9 languages**, every label proved by running the
+> code rather than inferred from SZZ.
+
+Read that with three qualifications, all measured below:
+
+1. **It is a verdict-and-locus number, not an explanation-correctness number.**
+   The scorer checks whether the answer names the faulty construct, not whether
+   the mechanism it describes is true. Four right-verdict-wrong-prose cases are
+   on record from 25 Aug alone. The project's goal is about the explanation, so
+   the real figure is below 89% and nobody knows by how much. The hand-grade is
+   the only instrument that settles it.
+2. **False alarms are 2, and the target is 0.** Both are behaviour-preserving
+   refactors, and the cause is now known: a unified diff renders an edited line
+   as remove+add, so the model describing a "removed" docstring is reading its
+   input correctly. A rendering artifact, not a reasoning failure.
+3. **`oracle-merged` is the older checkpoint and the best one.** The 25 Aug
+   retrain (`sft-ml8-grounded`) scored worse. Training is not the lever here.
+
+Five approaches were measured and lost on 25 Aug: retraining on the same corpus,
+prompt rules for summary factuality, context injection, word-diff rendering at
+inference, and (earlier) DPO. The one live idea with a mechanism behind it is
+retraining on word-diffs — see the last section.
 
 ---
 
@@ -1076,6 +1106,10 @@ corpus findings (4.5%) rest on deleted lines alone.
     training corpus    597/597 (100%)  -> 489/597 (81.9%)   108 rejected
     all-grounded records  525/1673     -> 425/1673
 
+**Both figures are superseded**: `identifiers()` was under-counting, and the
+rule that replaced it is measured in the next section. Do not quote 78.3% or
+81.9%.
+
 Filtering on it at inference was measured and rejected: it costs 0.065 F1 for
 no precision gain (0.441 -> 0.440), because detection F1 is blind to whether a
 finding is correct. A finding inventing a defect on a commit that happens to be
@@ -1147,14 +1181,19 @@ rerun; the numbers do not.** Both runs were recorded as `INFERENCE_SAMPLES=1`
 and were in fact 3-sample consensus, and the scorer has since been fixed twice.
 The 44-case three-way run below replaces this table entirely.
 
-### Benchmark expanded to 44 cases, 9 languages (25 Aug)
+### Benchmark expanded to 44 cases, then 46, 9 languages (25 Aug)
 
 12 cases over 4 languages was too few to claim a rate, and it covered none of
 ruby, php, rust, typescript or java — between them 708 of the 1332 `ml8`
-training records. The set is now 44 cases, every label still proved by
+training records. The set is now 46 cases, every label still proved by
 execution rather than inferred:
 
-    python bench/basic_bench.py --verify     # 44/44 verified, ~3 min, no GPU
+    python bench/basic_bench.py --verify     # 46/46 verified, ~3 min, no GPU
+
+The last two — `py-annotate-only` and `py-pop-guard` — were added after the
+three-way run below, from a live session against `~/Documents/TestJIT/pystruct`
+where the model failed two real commits. They are the only cases here taken
+from the wild rather than written for the benchmark.
 
 | language | buggy | clean | total |
 |---|---|---|---|
@@ -1163,15 +1202,17 @@ execution rather than inferred:
 | java | 4 | 1 | 5 |
 | javascript | 3 | 2 | 5 |
 | php | 4 | 1 | 5 |
-| python | 3 | 2 | 5 |
+| python | 4 | 3 | 7 |
 | ruby | 4 | 1 | 5 |
 | rust | 4 | 1 | 5 |
 | typescript | 4 | 1 | 5 |
-| **all** | **32** | **12** | **44** |
+| **all** | **33** | **13** | **46** |
 
-The 12 clean cases are the false-alarm half of the target — a finding on any of
-them is a hallucination by definition, and the base model already fails one of
-the original four.
+The 13 clean cases are the false-alarm half of the target — a finding on any of
+them is a hallucination by definition, proved by execution. Every one of them is
+a behaviour-preserving refactor, because that is what makes a case clean:
+extract a helper, rename a local, add type annotations, swap a loop for a
+comprehension. That is also where every model tested so far invents defects.
 
 Runtimes, all local, no container: rust compiles with plain `rustc` (no `-O`,
 because debug assertions are what turn a silent integer overflow into a visible
@@ -1187,7 +1228,10 @@ All three models have since been scored on the full 44 — see below.
 ### Three models on the full 44 (25 Aug)
 
 The first honest run of this benchmark: 44 cases, 9 languages, greedy, one
-sample, scored with the fixed scorer. `sft-ml8-grounded` is the retrain that
+sample, scored with the fixed scorer. **These three columns are a 44-case
+measurement and stay that way** — `py-annotate-only` and `py-pop-guard` were
+added afterwards, and only `oracle-merged` has been run on the full 46 (see
+below). Do not mix the two denominators. `sft-ml8-grounded` is the retrain that
 finished 25 Aug 10:10 WIB (154/154 steps, 9h27m, loss 1.714 -> 0.418, token
 accuracy 0.597 -> 0.883).
 
@@ -1336,3 +1380,320 @@ through the same `grade()` the live run uses:
 field.** Scorer fixes land after runs do - twice in one day here - and the
 fields record what the scorer believed at run time. Only `predicted` is
 evidence.
+
+### Grounding: plain identifiers were invisible, and the fix needed a threshold (25 Aug)
+
+`identifiers()` kept only tokens carrying `_`, `.` or a camelCase hump, so
+`main`, `buf`, `len`, `size` and all-caps macros like `CFLAGS` never counted. In
+a C, Makefile or shell diff that leaves the changed code with an **empty
+vocabulary**, so no finding about it could ground however correct it was:
+
+    -    memcpy(buf, src, len);
+    +    memcpy(buf, src, size);
+
+Not one token there survives the old filter. This is the same class of bug
+`bench/basic_bench.py`'s `identified()` had — a right answer failing because it
+did not phrase itself the way the matcher expected — and it under-counted in
+both directions, shrinking the diff's vocabulary as well as the finding's.
+
+**The obvious fix is worse than the bug.** Admitting plain names filtered
+through `_STOP` moves grounding from 82.5% to 98.9%, which reads as a win until
+it is controlled. The control: score every finding against a **randomly paired
+commit**. A rule that passes those is measuring shared English, not grounding.
+
+    python bench/../evaluate.py          # self-checks, both directions
+
+| rule | real | mismatched | separation |
+|---|---|---|---|
+| decorated only (old) | 79–89% | 0.5–1.5% | +78 to +88pp |
+| plain admitted freely | 96–99% | **18–36%** | +63 to +72pp |
+| **shipped rule** | **93–94%** | **2.8–4.6%** | **+89 to +91pp** |
+
+Ranges are across `labelled_multilang.jsonl` (275 findings),
+`detect_sft220.jsonl` (635) and `cve_sft220.jsonl` (754). Admitting plain names
+freely grounds **more than a third** of findings against a commit they have
+nothing to do with.
+
+The shipped rule, in `grounded()`:
+
+- one **decorated** name shared is enough;
+- otherwise **three** shared names, plain included;
+- unless the changed code carries no decorated name at all — C, Makefile,
+  shell — in which case one plain name is all a finding *can* cite.
+
+It beats the old rule on separation on all three corpora **while finding more
+real groundings**, so it is not a loosening. Separation is the measure §0 of
+this file already commits to, and it is the right one here: a grounding check
+that cannot tell a real pairing from a random one is not measuring grounding.
+
+Grounding on `labelled_multilang.jsonl` moves **82.5% -> 92.7%**:
+
+| language | findings | grounded |
+|---|---|---|
+| go | 98 | 94.9% |
+| javascript | 72 | 93.1% |
+| python | 21 | 100.0% |
+| java | 21 | 90.5% |
+| typescript | 12 | 91.7% |
+| php | 19 | 84.2% |
+| ruby | 20 | 80.0% |
+| rust | 11 | 100.0% |
+| c | 1 | 100.0% |
+| **all** | **275** | **92.7%** |
+
+ruby at 80.0% and php at 84.2% are the low pair, on 20 and 19 findings — too
+few to act on, and worth re-reading before any per-language claim goes in a
+table.
+
+**Known limit, deliberately kept.** The token regex requires three characters,
+so `i`, `n` and `xs` stay invisible. Admitting two-character tokens would let
+stray prose ("is", "as", "it") ground a finding, which is the failure this
+function exists to catch. A finding whose only citation is a one-letter loop
+variable still cannot ground.
+
+### `oracle-merged` on the full 46, including the two wild cases (25 Aug)
+
+`py-annotate-only` and `py-pop-guard` were added after the three-way run, from
+a live TUI session against `~/Documents/TestJIT/pystruct` in which the model
+failed two real commits. Only `oracle-merged` has been scored on the full set,
+so this is a **46-case number and does not belong in the 44-case table above.**
+
+    ORACLE_INFERENCE_SAMPLES=1 python bench/basic_bench.py --backend ollama \
+        --model-name oracle-merged --host http://localhost:8111 \
+        --out data/basic_bench_oracle46.jsonl
+
+| metric | score |
+|---|---|
+| verdict correct | 41/46 (89%) |
+| **fully correct (locus)** | **41/46 (89%)** |
+| **false alarms** (proved by execution) | 2/46 (4%) |
+| locus unconfirmed | 0/46 (0%) |
+
+| language | score |
+|---|---|
+| c | 4/4 |
+| php | 5/5 |
+| ruby | 5/5 |
+| typescript | 5/5 |
+| python | 6/7 |
+| go | 4/5 |
+| java | 4/5 |
+| javascript | 4/5 |
+| rust | 4/5 |
+| **all** | **41/46** |
+
+The five failures:
+
+| case | failure |
+|---|---|
+| `go-nil-map` | miss — "initializing the map lazily... does not alter runtime behavior". A nil map panics on assignment. |
+| `java-concurrent-modify` | miss — "the new logic correctly skips removed elements and does not introduce concurrency issues". It throws `ConcurrentModificationException`. |
+| `js-reverse-index` | miss — "shifts the starting index but does not alter the loop body, so the computed sum remains unchanged". The sum is `NaN`. |
+| `rs-rename-local` | **false alarm** — a consistent rename read as "forgets to update the return value". |
+| `py-annotate-only` | **false alarm** — see below. |
+
+**`py-pop-guard` is correct here.** It names the removed `self.head is None`
+check and the lost `IndexError`, though only partly right on mechanism — it
+predicts pop will "silently succeed... potentially returning None" where it
+actually raises `AttributeError`, so the locus scorer passes it and a mechanism
+hand-grade would not.
+
+**This does NOT explain the miss seen in the TUI on the same commit.** An
+earlier draft of this section blamed a weaker checkpoint; that was wrong.
+`oracle-merged` was serving for both live sessions. The cause is context
+injection — see the next section.
+
+**`py-annotate-only` is the most instructive failure on this page.** It is not
+the base model's error (inventing a removed docstring). `oracle-merged` invents
+a *runtime consequence* for type annotations:
+
+> "insertion_sort, merge, and merge_sort now accept only sequence types and
+> return lists instead of the original iterable type. Callers that pass other
+> iterables (e.g., generators) will receive a TypeError or incorrect result
+> type."
+
+Python does not enforce annotations at runtime, and `insertion_sort` calls
+`list(items)`, which consumes any iterable. One line disproves it:
+
+    generator -> [1, 2, 3]
+    tuple     -> [1, 2, 3]
+    return type: list
+
+This is species two: every token it cites (`insertion_sort`, `merge`,
+`merge_sort`, `TypeError`) is real and on a changed line, so `grounded()` passes
+it while the claim is fabricated. Same shape as the 24 Aug `heap.js` `RangeError`
+case — a confident prediction of an exception the language will not raise.
+
+**Both remaining false alarms are behaviour-preserving refactors**, and both
+checkpoints fail `py-annotate-only` for *different* invented reasons. Counting
+the three from `sft-ml8-grounded`, that is four independent reproductions in one
+day of the same failure: **this system invents defects in code that provably
+does not change behaviour.** It is the clearest and most repeatable finding the
+benchmark has produced, and unlike the detection numbers it does not depend on
+SZZ labels, a teacher model, or a threshold.
+
+### Context injection breaks this commit pair in BOTH directions (25 Aug)
+
+The TUI reviews a revision through `analyze_commit(..., with_context=True)`,
+which sends `git show -U50` plus the post-commit body of every changed file.
+The benchmark sends the bare diff. On the two `pystruct` commits, that single
+difference flips both verdicts — same model, same commit, same sample count:
+
+    ORACLE_INFERENCE_SAMPLES=1 python - <<'PY'
+    from llm_explainer.client import OracleClient
+    cl = OracleClient(backend="ollama", ollama_host="http://localhost:8111")
+    for ctx in (True, False):
+        print(ctx, cl.analyze_commit("~/Documents/TestJIT/pystruct",
+                                     "370806c", with_context=ctx).model_dump())
+    PY
+
+| commit | label | without context | with context (the TUI path) |
+|---|---|---|---|
+| `370806c` drop pop guard | buggy | 1 finding, right locus — **correct** | 0 findings — **miss** |
+| `9745800` add annotations | clean | 0 findings — **correct** | 1 finding — **false alarm** |
+
+Without context the model scores 2/2 on this pair. With context it scores 0/2.
+It is not that context makes the model quieter or noisier: it **suppresses a
+true finding on the buggy commit and invents a false one on the clean commit**,
+which is the worst possible pair of errors and rules out a simple
+threshold/verbosity explanation.
+
+This is the second reproduction of the 24 Aug result that context injection
+suppressed findings on `data/go_race_case.diff`, and the first where the
+opposite error is visible in the same session. **The `with_context=True` default
+in `analyze_commit` (`client.py:290`) is what the TUI ships**, so the
+interactive tool is running the configuration that scores worst here.
+
+Caveat, and it matters: this is **two commits in one small repo**, chosen
+because they failed. It is enough to justify measuring the context path
+properly — the `--context` flag added 24 Aug now has a reason to be run across
+a real slice — and not enough to conclude that context always hurts. The clean
+half of the benchmark is the natural place to measure it, since `bench/basic`
+has no repo and therefore no context path today.
+
+**Consequence for the benchmark.** `bench/basic_bench.py` feeds bare diffs, so
+every number it reports is the *without-context* configuration. `py-pop-guard`
+scoring correct there while the same commit misses in the TUI is not a
+contradiction; it is the two paths disagreeing. Any claim about what a user
+experiences must say which path it measured.
+
+### A summary-factuality prompt rule is a null, and slightly negative (25 Aug)
+
+`oracle-merged` gets the *verdict* right on `pystruct` 9745800 (clean, zero
+findings) while its summary says the commit "removes the stable flag from the
+docstring". The word `stable` appears 0 times before the commit and 1 time
+after — it was added. The scorer cannot see this: for a clean case
+`grade()` computes `false_alarm = flagged and not buggy`, and with no findings
+`flagged` is False, so the case scores **correct** and the summary is never
+read.
+
+The system prompt has hard rules for findings ("Never invent a finding") and
+none for the summary, so appending one looked like the cheap fix. It is not.
+Appending to `SYSTEM_PROMPT`:
+
+    - The summary is held to the same standard as a finding: every claim in it
+      must be visible in the diff. Do not describe an added line as removed, or
+      a removed line as added.
+
+| case | baseline | with the rule |
+|---|---|---|
+| `go-accum-reset` | correct | **miss** |
+| `py-annotate-only` | false alarm | false alarm |
+| `rs-rename-local` | false alarm | false alarm |
+| `c-array-bound` | correct | correct |
+| `js-extract-helper` | correct | correct |
+| `py-pop-guard` | correct | correct |
+
+It fixed no inverted summary and cost a case: `go-accum-reset` was rewritten to
+"replaces a redundant local total variable with a global zero initialization,
+preserving existing logic" — wrong, and now silent. **Do not add summary rules
+to the prompt.** The model was fine-tuned on the exact current prompt, so
+appending to it is a train/test mismatch that is paid for and returns nothing.
+Third independent loss for prompt rules in this repo, after 17 Aug (detection)
+and context injection (twice).
+
+**What this leaves.** Four "right verdict, wrong prose" cases are now on record
+in one session — `go-accum-reset` (inverted), `py-pop-guard` (wrong mechanism),
+real `370806c` (says the change introduces the `IndexError` it removes), real
+`9745800` (says an added line was removed). 41/46 is therefore a
+**verdict-and-locus number, not an explanation-correctness number**, and the
+project's stated goal is about the explanation. The hand-grade is the only
+instrument that measures the gap; nothing automated in this repo can see an
+inverted claim, and two attempts today to build a matcher that could
+(`identified()`, `identifiers()`) produced confidently wrong scores before the
+control caught them.
+
+### The refactor false alarm is a rendering artifact, but word-diff is not the fix (25 Aug)
+
+**The mechanism.** A unified diff renders an edited line as a removal plus an
+addition. On `pystruct` 9745800 the docstring is expanded in place:
+
+    -"""Comparison sorts."""
+    +"""Comparison sorts.
+    +
+    +Both sorts are stable and return a new list; the input is never mutated.
+    +"""
+
+A line containing the docstring genuinely *was* removed, so when the model
+reported that a docstring was removed it was describing the representation it
+was handed, not inventing one. `--word-diff=plain` marks the edit inside the
+line and removes the ambiguity:
+
+    """Comparison [-sorts."""-]{+sorts.+}
+    {+Both sorts are stable and return a new list; the input is never mutated.+}
+
+Asked again with that rendering, the model returns zero findings and an
+accurate summary. **The false alarm is a rendering artifact, not a reasoning
+failure** — which is a far more tractable problem than "the model hallucinates
+on refactors", and it is the same lever as the 0.088 rendering-variance result.
+Note that the three perturbations in `variance.py` (`no_index`, `rehash`,
+`bare_hunk`) are all metadata-only; this is the first one measured that changes
+how the *code* is represented.
+
+**The fix does not survive contact with the benchmark.**
+
+    ORACLE_INFERENCE_SAMPLES=1 python bench/basic_bench.py --word-diff \
+        --backend ollama --model-name oracle-merged --host http://localhost:8111 \
+        --out data/basic_bench_oracle46_word.jsonl
+
+| | unified | word-diff |
+|---|---|---|
+| verdict correct | 40/46 (87%) | 37/46 (80%) |
+| **fully correct (locus)** | **41/46 (89%)** | 36/46 (78%) |
+| **false alarms** | **2** | 4 |
+
+**9 regressions against 4 improvements.**
+
+| case | unified | word-diff |
+|---|---|---|
+| `py-annotate-only` | false alarm | **correct** |
+| `rs-rename-local` | false alarm | **correct** |
+| `go-nil-map` | miss | **correct** |
+| `java-concurrent-modify` | miss | **correct** |
+| `c-array-bound` | correct | **miss** |
+| `rs-index-bound` | correct | **miss** |
+| `php-concat-operator` | correct | **miss** |
+| `rb-int-division` | correct | **miss** |
+| `rb-range-bound` | correct | **unconfirmed** |
+| `c-const` | correct | **false alarm** |
+| `go-extract-helper` | correct | **false alarm** |
+| `php-extract-helper` | correct | **false alarm** |
+| `py-comprehension` | correct | **false alarm** |
+
+Both in-place-edit false alarms are fixed, exactly as the mechanism predicts.
+But three clean cases that were fine under unified acquire invented defects, and
+boundary detection degrades badly — `c-array-bound` and `rs-index-bound`, the
+plainest off-by-one cases in the set, both become misses.
+
+The cause is train/test mismatch: the model was fine-tuned on unified diffs and
+has never seen `[-gone-]{+added+}`, so it reads operators and boundaries less
+reliably in it. **Do not switch the inference rendering.**
+
+**What this points at instead.** The tractable experiment is to train on the
+rendering you want the model to read: regenerate the SFT corpus with word-diffs
+and retrain. Unlike the 25 Aug retrain, that has a mechanism behind it rather
+than a hope — a measured artifact, a rendering that removes it, and a measured
+reason the swap fails at inference only. `data/sft_ml8_base.jsonl` and the
+corpus builders are in place. It is also the one remaining idea today that is
+not already disproved: retraining on the same data lost, prompt rules lost
+three times, context injection lost three times, and DPO is a null.

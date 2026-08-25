@@ -22,3 +22,6 @@ graphify-out/
 .opencode/
 .windsurf/
 .cline/
+
+# packaging (pip install -e .)
+*.egg-info/

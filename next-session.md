@@ -34,8 +34,25 @@ All three models on the 44-case benchmark, greedy, one sample, fixed scorer:
 | fully correct (locus) | 33/44 (75%) | **40/44 (91%)** | 38/44 (86%) |
 | false alarms (proved) | 2 | **1** | 3 |
 
+Two cases were added afterwards from a live TUI session on a real repo, so the
+set is now 46. **Only `oracle-merged` has been run on all 46: 41/46 (89%), 2
+false alarms.** Do not mix the denominators — base and `sft-ml8-grounded` have
+never seen the two new cases.
+
 **`oracle-merged`, the older checkpoint, is the best model this project has.**
 The retrain loses 2 cases and triples the false alarms. Do not ship it.
+
+On the full 46 (only `oracle-merged` has been run on all of them):
+**41/46 (89%) correct locus, 2 false alarms (4%), 0 unconfirmed.** That is the
+one defensible number this project has, and it is not a detection F1 — every
+label is proved by executing the code. It clears the 8/10 bar on locus. It does
+not clear "no hallucination" (2 short), and the "correct explanation" half is
+unmeasured, because the scorer checks locus and not mechanism.
+
+**Training is not the lever.** Five approaches were measured and lost on 25 Aug:
+retraining on the same corpus, prompt rules for summary factuality, context
+injection, word-diff rendering at inference, and DPO before that. The one live
+idea with a mechanism behind it is retraining on word-diffs (step 6).
 
 The one signal worth acting on: **all three of the retrain's false alarms are
 refactor-only clean cases** — `js-extract-helper`, `js-rename-param`,
@@ -74,9 +91,9 @@ inside a JSON string and failed schema validation twice.
 landed". A first reading said php fell 5/5 -> 1/5; it is 3/5. The difference
 was the scorer, not the model (finding 4).
 
-**3. The benchmark is 44 cases across 9 languages, all proved by execution.**
+**3. The benchmark is 46 cases across 9 languages, all proved by execution.**
 
-    python bench/basic_bench.py --verify     # 44/44 verified, ~3 min, no GPU
+    python bench/basic_bench.py --verify     # 46/46 verified, ~3 min, no GPU
 
 | language | buggy | clean | total |
 |---|---|---|---|
@@ -85,11 +102,11 @@ was the scorer, not the model (finding 4).
 | java | 4 | 1 | 5 |
 | javascript | 3 | 2 | 5 |
 | php | 4 | 1 | 5 |
-| python | 3 | 2 | 5 |
+| python | 4 | 3 | 7 |
 | ruby | 4 | 1 | 5 |
 | rust | 4 | 1 | 5 |
 | typescript | 4 | 1 | 5 |
-| **all** | **32** | **12** | **44** |
+| **all** | **33** | **13** | **46** |
 
 `ruby` 3.4.10 and `php` 8.5.9 were installed on the laptop for this; java 21,
 deno 2.9, rustc, go, node and gcc were already present.
@@ -105,7 +122,24 @@ unconfirmed locus, and every dash-like character folded (the 3B wrote U+2011).
 Three entries were also too *loose* and would have passed wrong answers:
 `"int"` matched "print", `"var"` matched "variable", `"acc"` matched "across".
 
-**5. Two bugs made every earlier basic-bench number un-reproducible.**
+**5. The refactor false alarm is a rendering artifact.** A unified diff renders
+an edited line as remove+add, so the model reporting a "removed" docstring was
+describing its input, not inventing. `--word-diff` fixes that case and its twin
+(`rs-rename-local`) — and loses 5 cases overall at inference. See step 6; this
+is the clearest lead the session produced.
+
+**6. Grounding was under-counting, and the obvious fix was worse than the bug.**
+`evaluate.py`'s `identifiers()` kept only `_` / `.` / camelCase tokens, so a C
+or Makefile diff had an *empty* vocabulary and no finding about it could ever
+ground. Admitting plain names naively moves grounding 82.5% -> 98.9% and is a
+trap: scored against **randomly paired commits**, that rule grounds 18–36% of
+findings on a diff they have nothing to do with. The shipped rule — one
+decorated name, or three plain, or one plain when the changed code has no
+decorated names at all — beats the old rule on separation on all three corpora
+while finding more real groundings. Grounding is now **92.7%** on
+`labelled_multilang`; **82.5%, 78.3% and 81.9% are all superseded.**
+
+**7. Two bugs made every earlier basic-bench number un-reproducible.**
 `INFERENCE_SAMPLES=1` set nothing — `config.py:18` reads
 `ORACLE_INFERENCE_SAMPLES` — so every earlier run was 3-sample consensus while
 its write-up said greedy. And the three samples were byte-identical anyway,
@@ -117,10 +151,13 @@ prefixed one is not. Full write-up in `docs/RESULTS.md`.
 
 # Next steps, in order
 
-**1. Hand-grade the 44 for mechanism.** The automated scorer checks locus only
+**1. Hand-grade the 46 for mechanism.** The automated scorer checks locus only
 and is a floor, not a verdict — it cannot see an inverted claim. The 8/10 goal
-is a mechanism claim, so it needs the hand pass. ~44 short reads, no GPU. The
-cheapest outstanding item, and it gates any claim about the goal.
+is a mechanism claim, so it needs the hand pass. ~46 short reads, no GPU. The
+cheapest outstanding item, and it gates any claim about the goal. Two known
+cases where locus passes and mechanism does not: `py-pop-guard` (predicts pop
+"silently succeeds", it raises `AttributeError`) and the real `370806c`
+(says the change *introduces* `IndexError`; it removes it).
 
 **2. Decide whether `_analyze_consensus` should be made real.** It is a no-op
 through `serve.py` (finding 5), so a designed safeguard does not exist where it
@@ -145,20 +182,52 @@ Those projects are in neither training set nor the gate's, so this is the first
 slice clean for **both** stages, and the first honest cascade measurement
 available. Use `ORACLE_INFERENCE_SAMPLES=1`.
 
-**5. Chase the refactor false alarms.** All three of the retrain's are
-behaviour-preserving refactors, and only 5 of the 44 cases are
-extract-helper/rename shaped. Add more clean refactor cases before drawing a
-rate from them.
+**5. Measure the context path. It is what the TUI ships and it scores worst.**
+`analyze_commit` defaults to `with_context=True` (`client.py:290`), sending
+`git show -U50` plus whole post-commit file bodies. On the two `pystruct`
+commits that flips **both** verdicts against the bare-diff path: it suppresses
+the true finding on the buggy commit and invents one on the clean commit, 2/2
+-> 0/2. Second reproduction of the 24 Aug result, first time the opposite error
+is visible too. Two commits in one repo is not a rate — the point is that the
+interactive tool runs the configuration nobody has measured. `bench/basic` has
+no repo, so it cannot test this today; `evaluate.py --context` can.
 
-**6. Retune the gate threshold on a slice separate from the eval set**, then
+**6. Retrain on word-diffs. This is the only live idea not already disproved.**
+The refactor false alarm is a **rendering artifact, not a reasoning failure**: a
+unified diff shows an edited line as remove+add, so when the model said a
+docstring was "removed" it was describing the representation, not inventing.
+`--word-diff=plain` removes the ambiguity and the false alarm with it. Swapping
+the rendering at inference **loses** — 41/46 -> 36/46, 9 regressions against 4
+improvements, because the model was fine-tuned on unified diffs and reads
+boundaries badly in a notation it has never seen (`c-array-bound` and
+`rs-index-bound` both become misses). The experiment that follows from the
+mechanism is to regenerate the SFT corpus with word-diffs and train on them.
+Measured both ways in `docs/RESULTS.md`; `bench/basic_bench.py --word-diff`
+reproduces it.
+
+**7. Chase the refactor false alarms — still the strongest live signal.**
+Every clean case is a behaviour-preserving refactor (that is what makes it
+clean), and refactors are where every model tested invents defects. Four
+independent reproductions on 25 Aug: three in the benchmark, plus
+`py-annotate-only` hit by hand in a TUI session against a real repo. Both
+checkpoints fail that one, for *different* fabricated reasons — the base model
+invents a removed docstring, `oracle-merged` invents a runtime `TypeError` from
+type annotations, which Python does not enforce and which `python` disproves in
+one line. 13 clean cases out of 46 is probably still too few to carry a rate.
+
+**8. Retune the gate threshold on a slice separate from the eval set**, then
 report an honest Stage 1 number and the cascade disagreement rate.
 
-**7. Measure grounding per-language** before the 78.3% figure goes in a table —
-see the `identifiers()` note under "Known-stale comments".
+**9. Re-read the ruby and php grounding findings.** Per-language grounding is
+now measured (see below), and ruby 80.0% / php 84.2% are the low pair — but on
+20 and 19 findings, too few to act on. Read them before any per-language claim
+goes in a table.
 
 **Not on the list, deliberately:** more DPO (closed as a null), more prompt
-rules (disproved 17 Aug), context injection (disproved 24 Aug — it *suppressed*
-findings on the race case), and more class mining (guard mining moved its class
+rules (disproved 17 Aug, and again 25 Aug for summary factuality — the rule
+fixed no inverted summary and cost a case), switching the inference rendering
+to word-diff (measured, loses 5 cases), retraining on the same corpus
+(`sft-ml8-grounded` came out worse), and more class mining (guard mining moved its class
 28.4% -> 33.9% for a 0.04 F1 gap, under the noise floor).
 
 # Findings from 24 Aug that still stand
@@ -202,7 +271,10 @@ All reproducible, full write-ups in `docs/RESULTS.md`.
 7. **`grounded()` never rejected anything.** A finding naming a touched file
    short-circuited the check, so on single-file commits everything passed:
    69/69 live findings, 597/597 corpus. Every "grounded: N%" before 24 Aug was
-   100% by construction. Now 78.3% live, 81.9% corpus.
+   100% by construction. The 78.3% / 81.9% that replaced it are **also
+   superseded** — `identifiers()` was under-counting; grounding is 92.7% on
+   `labelled_multilang` under the rule shipped 25 Aug. Do not quote the old
+   numbers.
 
 8. **`fix_agreement()` has never executed.** It reads a `fix_diff` field no
    dataset provides, returned NaN, and the report's NaN guard printed nothing.
@@ -232,22 +304,35 @@ measured wrong, and by how much* — and every number in it is reproducible
 today. This session added two more of the same species, both from the
 measurement apparatus rather than the model: a scorer that reported correct
 paraphrases as hallucinations (4 of 7 on one checkpoint), and a sampling
-safeguard that has never executed on the backend where every number is taken. Worth putting to the professor as an option before spending more GPU on
+safeguard that has never executed on the backend where every number is taken.
+A third is the grounding rule, where the *obvious* repair would have inflated
+the headline number while grounding a third of findings against unrelated
+commits — the random-pairing control that caught it is itself a contribution,
+since no paper reporting a grounding rate appears to run one. Worth putting to the professor as an option before spending more GPU on
 the original framing.
 
 # Committed this session (25 Aug)
 
-    6d74114  fix(bench): stop scoring correct paraphrases as hallucinations
-    5b5ed81  fix(serve): use bfloat16 when there is no CUDA device
-    05b91ee  fix(dashboard): stop the variance probe matching its own command line
-    c685ee5  docs: hand off with the retrain in flight and the benchmark at 44 cases
-    d8b12d8  docs: record the 44-case benchmark, verified in all 9 languages
-    d22cf97  feat(bench): expand basic-algorithm benchmark to 44 cases, 9 languages
-    6e16524  fix(bench): make identified() hyphen-insensitive, and score the base model
+    e4680b7  fix(evaluate): let plain identifiers ground a finding, with a threshold
+    0391035  docs: correct the basic-bench record and hand off
+    f5e3e69  fix(bench): stop scoring correct paraphrases as hallucinations
+    e181184  fix(serve): use bfloat16 when there is no CUDA device
+    f5ac501  fix(dashboard): stop the variance probe matching its own command line
+    f1e62f5  docs: hand off with the retrain in flight and the benchmark at 44 cases
+    49a3f09  docs: record the 44-case benchmark, verified in all 9 languages
+    ff6bd71  feat(bench): expand basic-algorithm benchmark to 44 cases, 9 languages
+    85c00bf  fix(bench): make identified() hyphen-insensitive, and score the base model
 
-Working tree is clean apart from `docs/RESULTS.md` and this file.
+**These hashes move.** The history was rewritten at least twice during the
+session — every hash above changed once already, and one rewrite silently
+reverted uncommitted work in `evaluate.py` while leaving the rest of the file
+alone. If a fix described in this handoff is not in the code, check the reflog
+before redoing it. Regenerate the list with
+`git log --oneline ae65e2e..HEAD`.
 
-New this session: `bench/basic/` grew from 12 to 44 case directories;
+Uncommitted at handoff: `docs/RESULTS.md` and this file.
+
+New this session: `bench/basic/` grew from 12 to 46 case directories;
 `data/basic_bench_base44.jsonl`, `data/basic_bench_oracle44.jsonl` and
 `data/basic_bench_ml8.jsonl` (44 rows each, the three-way run);
 `data/basic_bench_base.jsonl` and `data/basic_bench_oracle.jsonl` (12 rows
@@ -344,15 +429,14 @@ In `fine_tuning/train_dpo.py`:
   measured DPO set is 414 median, 476 p90, 795 max. `config.py` is correct.
 - `truncation_mode="keep_end"` warns it is deprecated and removed in TRL v2.0.0.
 
-In `evaluate.py`: `identifiers()` only keeps tokens containing `_`, `.` or
-camelCase, so plain names (`main`, `buf`, `len`) and all-caps macros (`CFLAGS`)
-are invisible to grounding. For C and Makefile diffs this under-counts in both
-directions — it rejects legitimate findings too. Worth measuring grounding
-per-language before the 78.3% goes in a table. `basic_bench.py`'s
-`identified()` had the same class of bug twice this session and is now fixed
-three ways — any-of alternatives, all dash-like characters folded, and proved
-false alarms reported apart from unconfirmed locus. **`identifiers()` has had
-none of that pass**, and it feeds the grounding number the paper would quote.
+In `evaluate.py`: **fixed 25 Aug**, `identifiers()` now admits plain names and
+`grounded()` applies a threshold. Left here because the *method* matters more
+than the fix: the obvious version of this fix was worse than the bug, and only
+a control caught it. Scoring each finding against a randomly paired commit
+showed that admitting plain names freely grounds 18–36% of findings against an
+unrelated diff. **Any future change to a matching rule in this repo should be
+measured that way before it ships** — a rule that cannot tell a real pairing
+from a random one is not measuring what it claims to.
 
 # Decisions made (do not relitigate)
 

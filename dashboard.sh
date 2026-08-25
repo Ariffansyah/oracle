@@ -172,6 +172,7 @@ fi
 # OOM at step 0 looks like: the process is gone and every artifact is stale.
 R 'cd ~/oracle/artifacts 2>/dev/null && stat -c "%n %y" \
      sft-adapter/adapter_model.safetensors dpo-adapter/adapter_model.safetensors \
+     sft-ml8-grounded/adapter_model.safetensors \
      sft-merged/model.safetensors oracle-merged/model.safetensors 2>/dev/null' \
   | awk '{printf "    %-44s %s %s\n", $1, $2, substr($3,1,5)}'
 
@@ -201,23 +202,33 @@ sec "variance (on $H)"
 # The results path is read out of the run's own header rather than hardcoded:
 # --out changed from variance_results.jsonl to variance200.jsonl, and a
 # hardcoded path would have shown a finished 40-commit run as live progress.
-VAR=$(R "cd ~/oracle && { pgrep -f variance[.]py >/dev/null && echo RUN || echo IDLE; };
+# The state probe is its OWN ssh call, and it must stay that way. The block
+# below ends with `.venv/bin/python variance.py --score`, so when the pgrep
+# lived in the same string it matched the `bash -lc` process running it and
+# reported RUN forever - which is what printed a red STUCK over a variance run
+# that had been finished for a day. Same self-match trap serve.sh:29 documents.
+VAR_STATE=$(R 'pgrep -f "variance\.py" >/dev/null && echo RUN || echo IDLE')
+VAR=$(R "cd ~/oracle &&
   sed -n \"s/.* = \\([0-9]*\\) calls\$/\\1/p\" variance.log 2>/dev/null | tail -1;
   grep -cE \"^  \\[[0-9]+/[0-9]+\\]\" variance.log 2>/dev/null;
   F=\$(sed -n \"s/^backend.*->  *//p\" variance.log 2>/dev/null | tail -1);
   if [ -n \"\$F\" ] && [ -f \"\$F\" ]; then echo \$(( \$(date +%s) - \$(stat -c %Y \"\$F\") )); else echo -1; fi;
   [ -s \"\$F\" ] && .venv/bin/python variance.py --score \"\$F\" 2>/dev/null |
     grep -E \"verdict agreement|category agreement|commits unanimous\"")
-VAR_STATE=$(sed -n 1p <<<"$VAR")
-VAR_TOTAL=$(sed -n 2p <<<"$VAR")
-VAR_DONE=$(sed -n 3p <<<"$VAR")
-VAR_AGE=$(sed -n 4p <<<"$VAR")
+VAR_TOTAL=$(sed -n 1p <<<"$VAR")
+VAR_DONE=$(sed -n 2p <<<"$VAR")
+VAR_AGE=$(sed -n 3p <<<"$VAR")
 if [ -z "$VAR_STATE" ]; then
   job variance yellow "box unreachable"
 elif [ "$VAR_STATE" = RUN ]; then
   # One call is ~75s on the 6GB card; several minutes of silence means the
   # server died under it, and every later row would be an error row.
-  if [ "${VAR_AGE:-0}" -gt 400 ]; then
+  # A run that has written every row it owes is finishing, not wedged. Judging
+  # on mtime alone printed a red STUCK over a *completed* 800-call run, and a
+  # panel that cries wolf is a panel nobody reads.
+  if [ "${VAR_DONE:-0}" -ge "${VAR_TOTAL:-1}" ] 2>/dev/null; then
+    job variance green "all ${VAR_TOTAL:-?} calls done, finishing up"
+  elif [ "${VAR_AGE:-0}" -gt 400 ]; then
     job variance red "running but STUCK ($((VAR_AGE/60))m since last row — server died?)"
   else
     job variance green "running   $(bar "${VAR_DONE:-0}" "${VAR_TOTAL:-1}")   ${VAR_DONE:-0}/${VAR_TOTAL:-1}"
@@ -229,7 +240,37 @@ else
 fi
 # The agreement rate is the whole point of the run, so show it while it climbs
 # rather than only at the end.
-sed -n '5,$p' <<<"$VAR" | sed "s/^ */    $DIM/;s/$/$OFF/"
+sed -n '4,$p' <<<"$VAR" | sed "s/^ */    $DIM/;s/$/$OFF/"
+
+sec "basic-algorithm benchmark (the 8/10 goal)"
+# This is the instrument the current goal is measured by, so it gets a panel.
+# Scores are re-derived from the stored answers through basic_bench --score,
+# never read off the rows' own verdict fields: scorer fixes land after runs do
+# (the hyphen fix moved the base model a whole case) and a stale field would
+# quietly report the old number forever.
+BENCH_CASES=$(ls -d bench/basic/*/ 2>/dev/null | wc -l)
+BENCH_LANGS=$(sed -n 's/.*"language": *"\([^"]*\)".*/\1/p' bench/basic/*/meta.json 2>/dev/null \
+  | sort -u | wc -l)
+if pgrep -f "basic_bench[.]py" >/dev/null; then
+  BENCH_MODEL=$(pgrep -af "basic_bench[.]py" | sed -n 's/.*--model-name \([^ ]*\).*/\1/p' | head -1)
+  # Progress has to come from the server's log: --out is written once, at the
+  # end, so the output file says nothing while the run is in flight. The count
+  # is generations answered since that server started, which equals cases done
+  # only when one run owns the server - true here, and labelled as "answered"
+  # rather than "done" so it cannot overstate.
+  BENCH_ANS=$(R 'grep -c " -> " "$(ls -t ~/oracle/serve*.log 2>/dev/null | head -1)" 2>/dev/null')
+  job bench green "scoring ${BENCH_MODEL:-?}   $(bar "${BENCH_ANS:-0}" "${BENCH_CASES:-1}")   ~${BENCH_ANS:-0}/$BENCH_CASES answered"
+else
+  job bench yellow "idle   $BENCH_CASES cases, $BENCH_LANGS languages"
+fi
+for f in data/basic_bench_*.jsonl; do
+  [ -f "$f" ] || continue
+  .venv/bin/python bench/basic_bench.py --score "$f" 2>/dev/null \
+    | awk -v n="$(basename "$f" .jsonl | sed 's/^basic_bench_//')" '
+        /fully correct/     {fully=$3; pct=$4}
+        /hallucinated/      {h=$2}
+        END {if (fully != "") printf "    %-20s fully %-8s %-6s halluc %s\n", n, fully, pct, h}'
+done
 
 sec "local corpus"
 for f in data/labelled.jsonl data/labelled_multilang.jsonl data/multilang_commits.jsonl \
@@ -254,8 +295,11 @@ fi
 sec "errors (on $H)"
 # `^[A-Za-z]*Error` missed the one that mattered: torch.OutOfMemoryError is
 # dotted, so a DPO run that died on VRAM showed a clean error panel for hours.
+# Hand-naming the logs missed the one that mattered: the 25 Aug retrain wrote
+# to sft_ml8.log, which was on nobody's list, so a failure in a 9.5h run would
+# have shown a clean error panel. Glob every log the box keeps instead.
 R 'grep -hE "^[A-Za-z_.]+Error|Traceback|OutOfMemory" \
-     ~/oracle/sft.log ~/oracle/dpo.log ~/oracle/eval*.log 2>/dev/null \
+     ~/oracle/*.log 2>/dev/null \
    | tail -2 | cut -c1-100 | sed "s/^/  /"'
 
 printf '\n'

@@ -164,6 +164,56 @@ def identified(case: dict, said: dict) -> bool:
     return all(m in blob for m in must)
 
 
+def grade(case: dict, said: dict) -> tuple[bool, bool, bool, bool]:
+    """Grade one answer. Returns (flagged, verdict_ok, identified, hallucinated).
+
+    The live run and --score both go through here, so a re-score of stored rows
+    can never disagree with the run that produced them.
+    """
+    flagged = bool(said.get("findings"))
+    verdict_ok = flagged == case["buggy"]
+    ident = identified(case, said) if case["buggy"] else False
+    # A confident finding that is not about the real defect, or any finding on
+    # code that provably did not change behaviour.
+    halluc = (flagged and not case["buggy"]) or (flagged and case["buggy"] and not ident)
+    return flagged, verdict_ok, ident, halluc
+
+
+def summarise(rows: list[dict], label: str = "") -> None:
+    n = len(rows)
+    v = sum(r["verdict_ok"] for r in rows)
+    fully = sum(r["verdict_ok"] and (r["identified"] or not r["buggy"]) for r in rows)
+    h = sum(r["hallucinated"] for r in rows)
+    if label:
+        print(f"\n{label}")
+    print(f"\n  verdict correct     {v}/{n}   ({100*v/n:.0f}%)")
+    print(f"  fully correct       {fully}/{n}   ({100*fully/n:.0f}%)   <- the 8/10 target")
+    print(f"  hallucinated        {h}/{n}   ({100*h/n:.0f}%)   <- must be 0")
+
+
+def rescore(path: Path) -> list[dict]:
+    """Re-grade a stored run with the CURRENT scorer.
+
+    Scorer fixes land after runs do - the hyphen fix moved the base model a
+    whole case - and a 44-case GPU run costs half an hour. Re-reading the
+    stored answers costs nothing, so stored rows are never trusted for their
+    own verdict; only `predicted` is.
+    """
+    cases = {c["id"]: c for c in load_cases()}
+    out = []
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        c = cases.get(r["id"])
+        if c is None:
+            continue  # a case deleted since the run; nothing to grade against
+        _, verdict_ok, ident, halluc = grade(c, r["predicted"])
+        out.append({**r, "verdict_ok": verdict_ok, "identified": ident,
+                    "hallucinated": halluc})
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -174,7 +224,21 @@ def main(argv=None) -> int:
     ap.add_argument("--model-name", help="served model name")
     ap.add_argument("--host", help="served host")
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--score", type=Path, metavar="ROWS.jsonl",
+                    help="re-grade a stored run with the current scorer and exit; "
+                         "runs no model and needs no language toolchain")
     args = ap.parse_args(argv)
+
+    if args.score:
+        rows = rescore(args.score)
+        if not rows:
+            raise SystemExit(f"no gradable rows in {args.score}")
+        for r in rows:
+            mark = ("correct" if (r["verdict_ok"] and (r["identified"] or not r["buggy"]))
+                    else "HALLUCINATION" if r["hallucinated"] else "miss")
+            print(f"  {r['id']:<22}{r['language']:<12}{mark}")
+        summarise(rows, f"{args.score.name}   {len(rows)} cases")
+        return 0
 
     cases = load_cases()
     if not cases:
@@ -206,12 +270,7 @@ def main(argv=None) -> int:
         except Exception as e:
             said, err = {"summary": "", "findings": []}, f"{type(e).__name__}: {e}"
         fs = said.get("findings") or []
-        flagged = bool(fs)
-        verdict_ok = flagged == c["buggy"]
-        ident = identified(c, said) if c["buggy"] else False
-        # A confident finding that is not about the real defect, or any finding
-        # on code that provably did not change behaviour.
-        halluc = (flagged and not c["buggy"]) or (flagged and c["buggy"] and not ident)
+        flagged, verdict_ok, ident, halluc = grade(c, said)
         rows.append({**{k: c[k] for k in ("id", "language", "buggy", "category")},
                      "predicted": said, "error": err, "verdict_ok": verdict_ok,
                      "identified": ident, "hallucinated": halluc})
@@ -221,14 +280,7 @@ def main(argv=None) -> int:
               f"{'buggy' if flagged else 'clean':<8}{len(fs):>9}  {mark}"
               + (f"   [{err}]" if err else ""))
 
-    n = len(rows)
-    v = sum(r["verdict_ok"] for r in rows)
-    fully = sum(1 for r in rows
-                if r["verdict_ok"] and (r["identified"] or not r["buggy"]))
-    h = sum(r["hallucinated"] for r in rows)
-    print(f"\n  verdict correct     {v}/{n}   ({100*v/n:.0f}%)")
-    print(f"  fully correct       {fully}/{n}   ({100*fully/n:.0f}%)   <- the 8/10 target")
-    print(f"  hallucinated        {h}/{n}   ({100*h/n:.0f}%)   <- must be 0")
+    summarise(rows)
     if args.out:
         args.out.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
         print(f"\nrows -> {args.out}")

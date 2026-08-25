@@ -41,7 +41,11 @@ def load_model(model_path: Path, four_bit: bool = True):
     # SDPA, not eager: eager attention materialises the full n x n matrix, so a
     # 6k-token prompt tried to allocate 17GB on a 6GB card and 500'd. SDPA uses
     # the fused kernel and stays flat in memory.
-    kwargs = {"dtype": torch.float16, "device_map": "auto",
+    # float16 has no CPU kernel worth the name - torch emulates it and a 3B
+    # model crawls. bfloat16 is what CPU matmul actually implements, so pick it
+    # when there is no CUDA device to serve from.
+    dtype = torch.float16 if torch.cuda.is_available() else torch.bfloat16
+    kwargs = {"dtype": dtype, "device_map": "auto",
               "attn_implementation": "sdpa"}
     if four_bit and torch.cuda.is_available():
         from transformers import BitsAndBytesConfig

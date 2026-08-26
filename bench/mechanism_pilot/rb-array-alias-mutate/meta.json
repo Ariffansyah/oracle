@@ -1,0 +1,9 @@
+{
+  "id": "rb-array-alias-mutate",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["dup", "alias", "same object", "mutat", "caller"]],
+  "note": "out = items drops the .dup, so << mutates the caller's array in place. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,:done]"
+}

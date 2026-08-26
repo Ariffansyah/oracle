@@ -1,0 +1,9 @@
+{
+  "id": "java-batch-total-reset",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["total", "hoisted", "outside the loop", "reset", "accumulator"]],
+  "note": "int total = 0 moved above the outer for-loop, so each batch's total no longer resets and accumulates across batches. Verified: [3,7,5] -> [3,10,15]"
+}

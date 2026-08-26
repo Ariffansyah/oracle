@@ -1,0 +1,9 @@
+{
+  "id": "js-math-min-empty",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["infinity", "empty", "math.min", "guard"]],
+  "note": "the length===0 guard is removed; Math.min() called with no arguments (an empty spread) returns Infinity, not NaN and not a thrown error - a silently wrong value. Verified: null -> Infinity"
+}

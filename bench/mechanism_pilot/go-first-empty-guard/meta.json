@@ -1,0 +1,9 @@
+{
+  "id": "go-first-empty-guard",
+  "language": "go",
+  "ext": "go",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["index out of range", "panic", "guard", "empty"]],
+  "note": "the len(xs)==0 guard is removed; indexing xs[0] on an empty slice panics at runtime with index out of range. Verified: -1 -> panic, exit 2"
+}

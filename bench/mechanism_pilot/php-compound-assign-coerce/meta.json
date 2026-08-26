@@ -1,0 +1,9 @@
+{
+  "id": "php-compound-assign-coerce",
+  "language": "php",
+  "ext": "php",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["+=", ".=" , "typeerror", "operand", "concaten"]],
+  "note": ".= (string concat-assign) is replaced with += (numeric add-assign); PHP 8.5 throws a fatal TypeError for + on two non-numeric strings, it does not coerce them to numbers. Verified: 'user-bob' -> fatal TypeError, exit 255"
+}

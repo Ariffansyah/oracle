@@ -7,27 +7,47 @@ Status as of 2026-08-25.
 
 ---
 
-## Where the model actually stands (2026-08-25)
+## Where the model actually stands (2026-08-26)
 
-One number is defensible today, and it is not a detection F1:
+**26 Aug, latest:** `mechanism-v1-merged` — the first retrain aimed at
+explanation correctness rather than detection — finds **all 33 buggy cases
+(100% recall, a project first)** and fixes **three of the four inverted-
+direction mechanism failures**, but false alarms went 2 -> 7 and locus
+39/46 vs `oracle-merged`'s 41/46. Six of the seven false alarms are one
+fabrication (a call "removed" that was edited in place), which is the
+already-diagnosed unified-diff rendering artifact firing more often, not a new
+failure. Full write-up at the end of this file: "Mechanism training: the
+direction failures move, precision pays for it". **`oracle-merged` is still
+the checkpoint with the best locus number; `mechanism-v1` is the better
+explainer and the worse reporter.**
 
-> **`oracle-merged` scores 41/46 (89%) correct locus with a 4% false-alarm rate
-> on 46 executable cases across 9 languages**, every label proved by running the
-> code rather than inferred from SZZ.
+The 25 Aug picture, which the rest of this section describes, still stands as
+the baseline everything above is measured against:
 
-Read that with three qualifications, all measured below:
+> **`oracle-merged` gets 31/46 (67%) correct on locus AND mechanism.** 41/46
+> (89%) was locus only; the hand-grade found 10 more cases where the model
+> named the right construct but the stated causal claim is wrong or inverted,
+> on top of the 5 it already missed outright.
 
-1. **It is a verdict-and-locus number, not an explanation-correctness number.**
+Read that with these qualifications:
+
+1. **89% was never an explanation-correctness number, and now we know the gap.**
    The scorer checks whether the answer names the faulty construct, not whether
-   the mechanism it describes is true. Four right-verdict-wrong-prose cases are
-   on record from 25 Aug alone. The project's goal is about the explanation, so
-   the real figure is below 89% and nobody knows by how much. The hand-grade is
-   the only instrument that settles it.
-2. **False alarms are 2, and the target is 0.** Both are behaviour-preserving
+   the mechanism it describes is true. The hand-grade (below) is the instrument
+   that settles it, and it moves the real figure from "below 89%, unknown by how
+   much" to **67%, below the project's 8/10 goal.**
+2. **The mechanism failures are disproportionately *inverted direction*, not
+   noise.** `c-int-division`, `go-accum-reset`, `rb-string-mutate`,
+   `rs-int-division` all get the right line and describe the wrong direction of
+   the effect (truncation happens at a different step than claimed, a reset
+   moved the opposite way, a mutation is gained not lost, division direction is
+   backwards). This looks like the model pattern-matching to a familiar bug
+   trope near the right line rather than tracing the actual runtime semantics.
+3. **False alarms are 2, and the target is 0.** Both are behaviour-preserving
    refactors, and the cause is now known: a unified diff renders an edited line
    as remove+add, so the model describing a "removed" docstring is reading its
    input correctly. A rendering artifact, not a reasoning failure.
-3. **`oracle-merged` is the older checkpoint and the best one.** The 25 Aug
+4. **`oracle-merged` is the older checkpoint and the best one.** The 25 Aug
    retrain (`sft-ml8-grounded`) scored worse. Training is not the lever here.
 
 Five approaches were measured and lost on 25 Aug: retraining on the same corpus,
@@ -1623,6 +1643,186 @@ inverted claim, and two attempts today to build a matcher that could
 (`identified()`, `identifiers()`) produced confidently wrong scores before the
 control caught them.
 
+### The hand-grade (25 Aug): 31/46, not 41/46
+
+Ran the hand-grade next-session.md called for: read `pre`/`post` source for all
+46 cases against `data/basic_bench_oracle46.jsonl`'s `predicted.summary` and
+`predicted.findings[].explanation`, and where the causal claim wasn't obvious
+from source alone, actually executed pre and post (gcc+ASan, go, rustc, java,
+node, deno, ruby, php, python — the same runtimes `bench/basic_bench.py` uses)
+to confirm what really happens. No automated scorer change; this is a manual
+read against ground truth, spot-checked afterward against two of the flagged
+cases (`c-int-division`, `go-accum-reset`) by re-running pre/post directly.
+
+| | count |
+|---|---|
+| locus + mechanism both correct | **31/46 (67%)** |
+| locus correct, mechanism wrong or inverted | 10/46 (22%) |
+| locus wrong outright (already known: `go-nil-map`, `java-concurrent-modify`, `js-reverse-index`, `py-annotate-only`, `rs-rename-local`) | 5/46 (11%) |
+
+The 10 mechanism failures, claimed vs. verified:
+
+| case | model claimed | actually happens |
+|---|---|---|
+| `c-int-division` | fraction lost "during addition" of the values | inputs are exact ints (no fraction to lose yet); truncation is at the division step (`s/n` as int/int) — confirmed: prints `2.00`, correct is `2.50` |
+| `c-strcpy-bound` | `strcpy` "writes up to sizeof(dst) bytes", truncating | `strcpy` has no bound awareness and writes all 12 bytes into an 8-byte buffer — ASan confirms a real stack-buffer-overflow WRITE of size 12, not a truncation |
+| `go-accum-reset` | shadowed `total := 0` resets to zero every iteration | opposite: `total` moved *out* of the loop, so it stops resetting per row and accumulates across rows — confirmed pre `[3 7 5]`, post `[3 10 15]` |
+| `php-concat-operator` | `+` on non-numeric strings does numeric coercion (`"hi123"`-style) | PHP 8.5 throws a fatal `TypeError: Unsupported operand types: string + string` — confirmed |
+| `py-dict-mutate` | deleted keys are silently skipped, leaving stray entries | raises `RuntimeError: dictionary changed size during iteration` — a crash, not a silent miss |
+| `rb-string-mutate` | the appended `"!"` is lost | opposite: removing `.dup` means the mutation leaks onto the caller's string via aliasing — confirmed pre prints `hi`, post prints `hi!` |
+| `rs-int-division` | commit "replaces integer division with floating-point division" | exactly backwards: pre was float division (`1.50`, correct), post is integer division then cast (`1.00`, wrong) |
+| `rs-overflow` | value "silently wraps around" instead of panicking | under this benchmark's own flags (debug, no `-O`), literal operands make `rustc` reject it at **compile time** — neither wraps nor panics at runtime |
+| `ts-reduce-empty` | empty-array case "returns undefined" | throws `TypeError: Reduce of empty array with no initial value` |
+| `py-pop-guard` | pop "silently succeeds" | raises `AttributeError: 'NoneType' object has no attribute 'next'` (already known, listed above) |
+
+Borderline calls, left as passing, flagged rather than silently resolved:
+`java-array-bound` hedges with an impossible `NullPointerException` alternative
+for a primitive `int[]` alongside the correct `ArrayIndexOutOfBoundsException`;
+`js-sort-numeric` says the array is "left unsorted" when it is sorted, just
+lexicographically; `py-mutable-default` has garbled phrasing but the core claim
+(same list object reused across calls) is right. Also outside the count because
+no finding fired (correctly scored not-hallucinated): `js-extract-helper`'s
+*summary* wrongly claims `report` was renamed to `sum` — `report` is preserved
+intact and `sum` is a separately extracted helper.
+
+**Reading it:** two of ten are repeats of cases already flagged by hand before
+this pass (`go-accum-reset`, `py-pop-guard`); eight are new. Four of the ten are
+a *specific* pattern — inverted direction of effect (`c-int-division`,
+`go-accum-reset`, `rb-string-mutate`, `rs-int-division`) — the model gets the
+right line and the right general category (division/reset/mutation) but
+describes the change backwards, which reads as pattern-matching to a familiar
+bug trope near the right token rather than tracing actual runtime semantics.
+That is a third species of failure alongside the two in finding 9 below: not
+"cites nothing" (species 1, grounding catches it) and not "cites real tokens,
+states an unrelated falsehood" (species 2), but *cites the right tokens, states
+the right category, gets the direction backwards*. Grounding cannot catch it
+because the tokens are real; the automated locus scorer cannot catch it because
+the location is right. Only execution catches it.
+
+### The trace-through prompt addendum: tested, lost (25 Aug)
+
+Hypothesis: the inverted-direction failures happen because the model pattern-
+matches to a familiar bug trope near the right token instead of tracing actual
+before/after behaviour, so an explicit instruction to trace a concrete example
+through old and new code before naming a direction might fix them — untested
+territory, distinct from the summary-factuality rule that already failed
+(that one targeted diff-rendering wording, this one targets causal reasoning).
+
+Appended as a monkeypatched sixth `Method` step (nothing in the repo edited;
+`schema.SYSTEM_PROMPT` patched in-process for this run only), then reran all 46
+cases through `oracle-merged`, greedy, same as every other basic-bench number:
+
+    6. Before finalizing any claim about direction - a value increasing,
+    decreasing, being reset, reused, truncated, skipped, or reversed - trace
+    one concrete example through the changed lines in the OLD code and the NEW
+    code and compare the two results. State the claim to match that trace, not
+    the closest-sounding familiar bug name. If the trace shows the new code
+    does more of something, earlier, or that the OLD code was the one with the
+    problem, say so even if it is the less common direction for that bug
+    category.
+
+**It fixed none of the ten mechanism failures and cost two more cases.**
+
+| locus-level (automated scorer) | baseline | +addendum |
+|---|---|---|
+| verdict + locus correct | 41/46 (89%) | 40/46 (87%) |
+| false alarms | 2 | 3 |
+
+Case-by-case against the 10 known mechanism failures: 6 came back **byte-
+identical or unchanged in substance** (`rb-string-mutate`, `rs-int-division`,
+`php-concat-operator`, `py-dict-mutate`, `rs-overflow`, `ts-reduce-empty`,
+`py-pop-guard` — still describing the wrong direction or the wrong runtime
+outcome). Two got **worse**: `c-int-division` replaced one wrong claim with a
+fabricated one — "the sum overflows before being cast to double" and "a
+division by zero when casting" — neither of which happens (no overflow, no
+division by zero, verified); `go-accum-reset` stopped flagging the bug
+entirely, concluding "preserving existing logic, no new runtime defects
+introduced" — a hallucinated-direction finding regressed into a miss.
+
+At the locus level, two long-standing misses got fixed
+(`js-reverse-index`, `rs-rename-local`) but two **new** false alarms appeared
+on refactor-only clean cases (`go-extract-helper`, `py-comprehension`) — the
+addendum's extra scrutiny made the model *more* willing to invent a defect in
+behaviour-preserving code, the opposite of what "no hallucination" needs.
+Net: -1 locus, +1 false alarm, and zero mechanism fixes.
+
+**Prompting is not the lever for mechanism, any more than training was for
+detection.** This is the fourth prompt-rule attempt in this project to fail
+(after 17 Aug detection, 25 Aug summary-factuality, and this one), each
+targeting a different failure and each disproved by rerunning the actual
+benchmark rather than trusting the intuition behind the rule. **Do not add
+this addendum to `SYSTEM_PROMPT`.**
+
+### The second model: `openai/gpt-oss-120b` on the same 46 cases (25 Aug)
+
+Closes the "second model" gap in the paper-status section below. Same 46
+cases, same unmodified `SYSTEM_PROMPT`, same schema, greedy (temperature 0),
+via Groq — this is the project's own distillation teacher, not a checkpoint of
+this project's model, so it is a genuine test of whether the failures found on
+Qwen2.5-Coder-3B are properties of *this class of system* or of *this specific
+3B model*.
+
+    .venv/bin/python bench/second_model_bench.py --out data/basic_bench_gptoss120b.jsonl
+
+| | oracle-merged (3B, fine-tuned) | gpt-oss-120b (teacher, zero-shot) |
+|---|---|---|
+| locus correct | 41/46 (89%) | **45/46 (98%)** |
+| false alarms | 2 | **1** |
+| locus **+ mechanism** correct (hand-graded) | 31/46 (67%) | **43/46 (93%)** |
+| locus-mechanism gap | 22 points | **5 points** |
+
+Hand-graded the same way as the first pass — pre/post source read, and
+execution used to settle every claim not obvious from source alone. Checked
+against the 10 cases where oracle-merged's mechanism was wrong or inverted:
+
+| case | gpt-oss-120b |
+|---|---|
+| `c-int-division` | fixed |
+| `c-strcpy-bound` | fixed |
+| `go-accum-reset` | fixed |
+| `php-concat-operator` | partially fixed — hedges toward the true outcome ("or a type error") but the primary claim is still wrong, and misattributes the cause to `strict_types` (the file declares none; PHP 8.5 throws the `TypeError` regardless) |
+| `py-dict-mutate` | fixed |
+| `rb-string-mutate` | fixed |
+| `rs-int-division` | fixed |
+| `rs-overflow` | **not fixed — same failure as oracle-merged.** Both models describe generic runtime overflow behaviour (panic/wrap); the verified truth is that `post.rs` fails to *compile* under the benchmark's own flags (`rustc`, no `-O`): `error: this arithmetic operation will overflow`, `#[deny(arithmetic_overflow)]`, because the operands are literals rustc const-folds before runtime. Neither a 3B fine-tune nor a 120B general model anticipates this. |
+| `ts-reduce-empty` | fixed |
+| `py-pop-guard` | fixed |
+
+8 of 10 fully fixed, 1 partial, 1 identically unfixed. The one remaining false
+alarm (`java-extract-method`) is also qualitatively different from
+oracle-merged's refactor false alarms: it flags a *hypothetical*
+`NullPointerException` for an untested null-array input rather than
+misdescribing the executed path — still a false alarm by this benchmark's
+strict rule (any finding on a clean case counts), but a different species of
+mistake than inventing a defect in code that was actually run.
+
+**Reading it:**
+
+1. **The inverted-direction mechanism failure is largely scale/capability-
+   dependent, not a universal property of LLM-based JIT review.** Nine of the
+   ten cases that beat a fine-tuned 3B model are handled correctly by a 120B
+   general model with no fine-tuning and no task-specific training at all. That
+   is evidence *against* reading the hand-grade as "this is what these systems
+   always do" and evidence *for* reading it as "this is what a 3B distillation
+   currently does."
+2. **`rs-overflow` is the interesting exception.** Both models fail it the same
+   way, for the same reason: this is a rustc-specific compile-time subtlety
+   (literal-operand const-folding) that neither model's training data made
+   salient. Not every mechanism gap closes with scale — this one looks like it
+   needs the specific fact, not more general capability.
+3. **This reframes what "training is not the lever" means.** Five retraining
+   attempts on this project's own data didn't move the number — but the
+   teacher itself clears the mechanism bar the student misses, on the exact
+   same cases. That is evidence the ceiling is in the distillation, not in a 3B
+   parameter count; it does not mean a better-targeted training signal
+   couldn't close the gap, only that the five approaches tried so far did not
+   find it.
+4. **The instrument, not just the model, is what this result validates.** The
+   hand-grade methodology cleanly separated a 22-point locus/mechanism gap on
+   one model from a 5-point gap on another, using the same 46 cases and the
+   same procedure. A locus-only benchmark would have reported 89% vs 98% and
+   missed that the *real* gap (67% vs 93%) is more than four times wider.
+
 ### The refactor false alarm is a rendering artifact, but word-diff is not the fix (25 Aug)
 
 **The mechanism.** A unified diff renders an edited line as a removal plus an
@@ -1697,3 +1897,155 @@ reason the swap fails at inference only. `data/sft_ml8_base.jsonl` and the
 corpus builders are in place. It is also the one remaining idea today that is
 not already disproved: retraining on the same data lost, prompt rules lost
 three times, context injection lost three times, and DPO is a null.
+
+### Mechanism training: the direction failures move, precision pays for it (26 Aug)
+
+The sixth approach, and the first one that is neither a prompt rule nor a
+repeat of the same corpus. Trained on hand-written examples of the exact bug
+families the 25 Aug hand-grade proved the model describes backwards.
+
+**The corpus is a small lever, and it is worth naming the dose.**
+`data/sft_mechanism_v1.jsonl` is 1748 records / 1692 unique:
+
+| source | records |
+|---|---|
+| the existing `sft_base` / `sft_ml8` corpora | ~1665 |
+| `bench/mechanism_pilot` cases, upsampled 3x | 81 (27 unique, 4.6%) |
+
+So the intervention is 27 hand-written cases seen six times each (3x upsample
+x 2 epochs) on top of the same base corpus that produced `sft-ml8-grounded` —
+the retrain that came out *worse*. All 27 are `buggy: true`; nothing in the
+addition teaches the clean direction.
+
+    # 14h on the 6GB card, 224 steps, 2 epochs, exit 0
+    .venv/bin/python -m fine_tuning.train_sft \
+        --dataset data/sft_mechanism_v1.jsonl --output-dir artifacts/sft-mechanism-v1
+    # merged, served, then:
+    ORACLE_INFERENCE_SAMPLES=1 .venv/bin/python bench/basic_bench.py \
+        --backend ollama --model-name mechanism-v1-merged \
+        --host http://localhost:8111 --out data/basic_bench_mechanism_v1.jsonl
+
+Both runs re-scored with the current scorer (`--score`) so they are comparable:
+
+| | `oracle-merged` | `mechanism-v1-merged` |
+|---|---|---|
+| fully correct (locus) | **41/46 (89%)** | 39/46 (85%) |
+| buggy cases located | 30/33 | **33/33 (100%)** |
+| clean cases passed | **11/13** | 6/13 |
+| false alarms | **2** | 7 |
+
+**Every buggy case is now located.** The three long-standing locus misses —
+`go-nil-map`, `java-concurrent-modify`, `js-reverse-index` — are all fixed, and
+nothing regressed into a miss. That is the first time any checkpoint has found
+all 33.
+
+**Five clean cases regressed into false alarms:** `c-const`,
+`go-extract-helper`, `java-extract-method`, `php-extract-helper`,
+`py-extract-helper`.
+
+#### Mechanism, hand-graded against the 10 known failures
+
+Same method as 25 Aug — read the source, and execute where the claim is not
+obvious. Verified this pass by running `deno`, `php`, `gcc`, `rustc` and `go`
+directly on the case files.
+
+| case | new claim | verified | verdict |
+|---|---|---|---|
+| `go-accum-reset` | `total` declared before the outer loop, never reset, so rowSums returns cumulative sums | pre `[3 7 5]`, post `[3 10 15]` | **fixed** |
+| `rb-string-mutate` | `t = s` mutates the caller's string; callers see the modification | matches | **fixed** |
+| `rs-int-division` | integer division truncates, 2.5 becomes 2 | matches | **fixed** |
+| `py-dict-mutate` | `RuntimeError` because dict size changes during iteration | matches | **fixed** |
+| `py-pop-guard` | `self.head.next` without checking `self.head` → `AttributeError` | matches | **fixed** |
+| `c-strcpy-bound` | overwrites memory beyond the buffer → overflow | core claim right, but adds a false subclaim ("strcpy does not append a null terminator" — it does) | borderline |
+| `ts-reduce-empty` | throws `RangeError`, "attempts to read xs[0]" | throws `TypeError: Reduce of empty array with no initial value` | partial — right that it throws (baseline said "returns undefined"), wrong exception |
+| `c-int-division` | "truncation during accumulation", `average(1,2)` returns 0 | truncation is at `s / n`, not the accumulation; verified output is `1.00`, not 0 | **still wrong** |
+| `php-concat-operator` | "invalid PHP syntax, parse error" | runtime `Fatal error: Uncaught TypeError: Unsupported operand types: string + string` | **still wrong** (new flavour) |
+| `rs-overflow` | "silently wraps" | `rustc` rejects at compile time: `error: this arithmetic operation will overflow`, `#[deny(arithmetic_overflow)]` | **still wrong** (identical to baseline and to gpt-oss-120b) |
+
+**5 fixed, 1 borderline, 1 partial, 3 unfixed.** More pointedly, of the four
+cases the hand-grade singled out as *inverted direction* — `c-int-division`,
+`go-accum-reset`, `rb-string-mutate`, `rs-int-division` — **three of four are
+fixed.** That is the pattern the 27 cases were written to target, and it is the
+first intervention in this project that moved it at all. Prompting moved none.
+
+#### The false alarms are one fabrication, not five
+
+Six of the seven false alarms make the same false claim: **that a call or a
+statement was removed, when it was edited in place.**
+
+| case | fabricated claim | verified |
+|---|---|---|
+| `go-extract-helper` | "the call to sum(...) is removed, so printing never happens" | `go run post.go` prints `6` |
+| `py-extract-helper` | "Removing the print call ... no longer printed" | `python3 post.py` prints `6` |
+| `java-extract-method` | "main no longer calls System.out.println(sum(...))" | it does |
+| `php-extract-helper` | "removes the original array argument" | it does not |
+| `py-annotate-only` | "removes the original non-generic implementations" | they are preserved |
+| `rs-rename-local` | "`acc` is declared but never used" | it is returned |
+
+The rendering is why. `bench/basic_bench.py`'s unified diff for
+`go-extract-helper` reads:
+
+    -func main() {
+    -	xs := []int{1, 2, 3}
+     	s := 0
+     	...
+    -	fmt.Println(s)
+    +	return s
+    +}
+    +
+    +func main() {
+    +	fmt.Println(sum([]int{1, 2, 3}))
+     }
+
+`-\tfmt.Println(s)` appears; the `+` line that restores it is eight lines
+below, and the model never reconciles the two. **This is not a new failure
+mode — it is the remove+add rendering artifact already documented above,
+firing five times more often.** The mechanism training did not teach the model
+to fabricate; it made the model more assertive, and the assertiveness landed
+on a defect the input representation was already inviting.
+
+That also explains why the gains and the losses are the same event. All 27
+training cases are `buggy: true`, so the only thing the corpus can shift is the
+model's willingness to report. Recall went to 33/33 and precision fell to 6/13.
+A model that simply always answered "buggy" would score 33/46 with 13 false
+alarms; `mechanism-v1` is at 39/46 with 7, so it has not collapsed into that,
+but it has moved measurably toward it.
+
+**Reading it:**
+
+1. **The mechanism lever works and the precision lever is separate.** Three of
+   four inverted-direction failures fixed by 27 examples is the first real
+   movement on explanation correctness this project has measured. It cost
+   precision on refactors, but the precision loss has a *different, already
+   diagnosed cause* — the diff rendering — rather than being the flip side of
+   the same dial.
+2. **The two live experiments now compose.** Word-diff rendering removes the
+   remove+add ambiguity and fixes exactly these false alarms, but swapping it
+   at inference loses because the model was trained on unified diffs. The
+   experiment already queued — regenerate the SFT corpus as word-diffs and
+   train on it — is the fix for the six fabrications above. Combining it with
+   the mechanism cases is the obvious next run.
+3. **The corpus needs the clean direction.** 27 buggy-only examples bought
+   recall at the cost of precision, which is what training on one label
+   predicts. Cases where the same construct appears and is *not* a defect —
+   and cases where the commit *fixes* one of these bugs — are the missing half.
+4. **A full 46-case mechanism hand-grade has not been run on this checkpoint.**
+   Only the 10 known failures were re-graded. The comparable 67% figure for
+   `oracle-merged` cannot be restated for `mechanism-v1` until the rest are
+   read, and the locus number (39/46) is a floor, exactly as it was before.
+
+#### The benchmark cannot express a bug-fix commit
+
+Trying to build the missing clean-direction control surfaced a limitation
+worth recording. `bench/basic_bench.py:114`:
+
+    differs = (rc_pre, out_pre) != (rc_post, out_post)
+    ok = differs if c["buggy"] else not differs
+
+A clean case is *defined* as one where pre and post produce identical output.
+A commit that fixes a bug changes behaviour, so it cannot be labelled clean —
+the verifier would call it `BAD LABEL`. **The harness conflates
+"behaviour-preserving" with "introduces no defect".** That is correct for
+refactors, which is all 13 clean cases are today, and wrong for fixes. Any
+control that asks "does the model over-report on a commit that removes a
+defect" needs a third label, not a `buggy` flag.

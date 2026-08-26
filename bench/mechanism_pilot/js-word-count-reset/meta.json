@@ -1,0 +1,9 @@
+{
+  "id": "js-word-count-reset",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["count", "hoisted", "outside the loop", "reset", "accumulator"]],
+  "note": "let count = 0 moved above the outer for-loop, so the word count no longer resets per line and accumulates across lines. Verified: [2,3,1] -> [2,5,6]"
+}

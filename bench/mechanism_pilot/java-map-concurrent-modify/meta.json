@@ -1,0 +1,9 @@
+{
+  "id": "java-map-concurrent-modify",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["keyset", "concurrentmodificationexception", "copy", "arraylist"]],
+  "note": "the new ArrayList<>(m.keySet()) snapshot copy is dropped; iterating m.keySet() directly while removing from m throws ConcurrentModificationException. Verified: {a=1, c=3} -> ConcurrentModificationException, exit 1"
+}

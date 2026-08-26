@@ -1,0 +1,9 @@
+{
+  "id": "py-list-alias-mutate",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["alias", "list(items)", "copy", "same list", "mutat"]],
+  "note": "out = items aliases the caller's list instead of copying it (list(items)), so append() leaks into the caller. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,None]"
+}

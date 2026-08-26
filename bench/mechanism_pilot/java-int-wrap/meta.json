@@ -1,0 +1,9 @@
+{
+  "id": "java-int-wrap",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["addexact", "overflow", "wrap", "silently", "arithmeticexception"]],
+  "note": "Math.addExact (which throws ArithmeticException on overflow) is replaced with plain +, which wraps silently in Java instead of throwing. This is the opposite direction from a typical guard-removal bug: removing the check makes it silent, not crash. Verified: ArithmeticException -> silent -2147483648, exit 0"
+}

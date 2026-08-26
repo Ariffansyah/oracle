@@ -1,0 +1,9 @@
+{
+  "id": "py-min-empty-guard",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["valueerror", "empty", "guard", "min("]],
+  "note": "the not nums guard is removed; min() on an empty list raises ValueError, it does not return None or a sentinel. Verified: None -> ValueError, exit 1"
+}

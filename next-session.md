@@ -43,11 +43,13 @@ never seen the two new cases.
 The retrain loses 2 cases and triples the false alarms. Do not ship it.
 
 On the full 46 (only `oracle-merged` has been run on all of them):
-**41/46 (89%) correct locus, 2 false alarms (4%), 0 unconfirmed.** That is the
-one defensible number this project has, and it is not a detection F1 — every
-label is proved by executing the code. It clears the 8/10 bar on locus. It does
-not clear "no hallucination" (2 short), and the "correct explanation" half is
-unmeasured, because the scorer checks locus and not mechanism.
+41/46 (89%) correct locus, 2 false alarms (4%), 0 unconfirmed — but the
+hand-grade (done later on 25 Aug, see step 1 below) found the locus number
+overstates it. **31/46 (67%) is correct on locus AND mechanism.** Every label
+is proved by executing the code, so this is not a detection F1, but it does
+**not** clear the 8/10 bar once mechanism is checked, and it does not clear "no
+hallucination" either (2 proved false alarms, plus 10 cases where a wrong or
+inverted causal claim is a hallucination the locus scorer cannot see).
 
 **Training is not the lever.** Five approaches were measured and lost on 25 Aug:
 retraining on the same corpus, prompt rules for summary factuality, context
@@ -151,13 +153,34 @@ prefixed one is not. Full write-up in `docs/RESULTS.md`.
 
 # Next steps, in order
 
-**1. Hand-grade the 46 for mechanism.** The automated scorer checks locus only
-and is a floor, not a verdict — it cannot see an inverted claim. The 8/10 goal
-is a mechanism claim, so it needs the hand pass. ~46 short reads, no GPU. The
-cheapest outstanding item, and it gates any claim about the goal. Two known
-cases where locus passes and mechanism does not: `py-pop-guard` (predicts pop
-"silently succeeds", it raises `AttributeError`) and the real `370806c`
-(says the change *introduces* `IndexError`; it removes it).
+**1. DONE (25 Aug, later in the day).** Hand-graded the 46 for mechanism, not
+just locus. Result: **31/46 (67%), not 41/46 (89%)** — 10 cases where the model
+names the right construct but the causal claim is wrong or inverted, on top of
+the 5 already-known locus misses. Full list with claimed-vs-verified in
+`docs/RESULTS.md` ("The hand-grade (25 Aug): 31/46, not 41/46"). Four of the
+ten are a specific pattern — inverted direction of effect
+(`c-int-division`, `go-accum-reset`, `rb-string-mutate`, `rs-int-division`):
+right line, right category, backwards direction. This is a third species of
+failure, distinct from the two already on record: cites the right tokens,
+states the right category, gets the mechanism backwards. Neither grounding nor
+the locus scorer can see it; only execution does. **67% is now the number that
+gates the 8/10 goal, and it is not close.**
+
+**1b. DONE and lost, same day.** Tested a "trace-through" `SYSTEM_PROMPT`
+addendum aimed squarely at the inverted-direction pattern above (trace a
+concrete example through old/new code before naming a direction). Full 46-case
+rerun, monkeypatched in-process, nothing in the repo touched. **Fixed zero of
+the ten mechanism failures.** Six were unchanged in substance, two got *worse*
+(`c-int-division` fabricated a new false claim — "overflow" and "division by
+zero" that do not happen; `go-accum-reset` stopped flagging the bug at all).
+At the automated locus level it net regressed too: 41/46 -> 40/46, 2 -> 3 false
+alarms, with two new invented defects on clean refactors
+(`go-extract-helper`, `py-comprehension`). Write-up in `docs/RESULTS.md`
+("The trace-through prompt addendum: tested, lost"). **Do not retry
+prompt-level fixes for mechanism** — this is the fourth prompt-rule attempt to
+fail in this project, each disproved by actually rerunning the benchmark. The
+inverted-direction failures look like a property of the model's reasoning, not
+something reachable by telling it to reason more carefully.
 
 **2. Decide whether `_analyze_consensus` should be made real.** It is a no-op
 through `serve.py` (finding 5), so a designed safeguard does not exist where it
@@ -229,6 +252,109 @@ fixed no inverted summary and cost a case), switching the inference rendering
 to word-diff (measured, loses 5 cases), retraining on the same corpus
 (`sft-ml8-grounded` came out worse), and more class mining (guard mining moved its class
 28.4% -> 33.9% for a 0.04 F1 gap, under the noise floor).
+
+# 26 Aug: the mechanism retrain finished, and it is the first real movement
+
+`sft-mechanism-v1` trained overnight (14h, 224 steps, 2 epochs, exit 0),
+merged to `artifacts/mechanism-v1-merged`, served, and benchmarked. Both runs
+re-scored with the current scorer so they compare:
+
+| | `oracle-merged` | `mechanism-v1-merged` |
+|---|---|---|
+| fully correct (locus) | **41/46 (89%)** | 39/46 (85%) |
+| buggy cases located | 30/33 | **33/33 — a project first** |
+| clean cases passed | **11/13** | 6/13 |
+| false alarms | **2** | 7 |
+
+**What it bought.** Three of the four *inverted-direction* mechanism failures
+are fixed — `go-accum-reset`, `rb-string-mutate`, `rs-int-division` — plus
+`py-dict-mutate` and `py-pop-guard`. Hand-graded and verified by execution.
+5 fixed, 1 borderline (`c-strcpy-bound`), 1 partial (`ts-reduce-empty`, now
+correctly says it throws but names `RangeError`; it is `TypeError`), 3 still
+wrong (`c-int-division`, `php-concat-operator`, `rs-overflow` — the last one
+identical to both the baseline and gpt-oss-120b). **This is the first
+intervention in this project that moved explanation correctness at all.**
+Prompting moved none, four times.
+
+**What it cost, and why it is not the same problem.** Five clean refactors
+became false alarms. Six of the seven make one identical false claim: that a
+call or print was *removed*, when it was edited in place. Verified: `go run
+post.go` and `python3 post.py` both print `6`. That is the remove+add unified-
+diff rendering artifact already on record, firing more often because the model
+is now more assertive — not a new failure mode.
+
+**The dose was small.** `sft_mechanism_v1.jsonl` is 1748 records / 1692
+unique: ~1665 from the existing `sft_base`/`sft_ml8` corpora plus the 27
+`bench/mechanism_pilot` cases upsampled 3x (81 records, 4.6%). Each pilot case
+was seen six times. All 27 are `buggy: true` — nothing teaches the clean
+direction, which is exactly what "recall to 100%, precision to 6/13" predicts.
+
+**Next run, and it is now well-motivated rather than hopeful:** regenerate the
+SFT corpus as word-diffs *and* keep the mechanism cases, then retrain. Word-
+diff rendering is the measured fix for the six fabrications; the mechanism
+cases are the measured fix for the direction failures. They address different
+halves and neither has been tried against the other. Add clean-direction
+examples to the corpus while rebuilding it.
+
+**Not yet done:** a full 46-case mechanism hand-grade on this checkpoint. Only
+the 10 known failures were re-read. 39/46 is a locus floor, exactly as 41/46
+was — the comparable "67%" figure cannot be restated for `mechanism-v1` until
+the rest are graded.
+
+**Harness limitation found while trying to build the clean-direction control.**
+`bench/basic_bench.py:114` defines a clean case as one where pre and post
+produce *identical* output. A commit that *fixes* a bug changes behaviour, so
+it cannot be labelled clean — `verify()` would call it `BAD LABEL`. The
+benchmark conflates "behaviour-preserving" with "introduces no defect". True
+for the 13 refactors it has, false for fixes. Testing "does the model
+over-report on a commit that removes a defect" needs a third label, not a
+`buggy` flag. **That is a design decision, so it was left alone.**
+
+Artifacts on the GPU box: `artifacts/sft-mechanism-v1` (+ checkpoint-112,
+checkpoint-224), `artifacts/mechanism-v1-merged` (6.2G). Logs
+`sft_mechanism_v1.log`, `merge_mechanism.log`, `serve_mechanism.log`.
+Rows in `data/basic_bench_mechanism_v1.jsonl`.
+
+# In progress, uncommitted (night of 25 Aug)
+
+Started after the pivot-recommendation commit. The training run described
+above has since consumed these. Two pieces:
+
+**`bench/mechanism_pilot/`** — 27 new hand-authored cases, `meta.json` schema
+identical to `bench/basic_bench.py`'s (`buggy`, `category`, `must_mention`,
+`note`), all `buggy: true`. Built directly from the hand-grade's 10 mechanism
+failures rather than mined from a real repo, one case per failure family in
+multiple languages: ratio-trunc / integer-division direction (c, go, java,
+php), accumulator/counter reset (java, js, py, rb), alias-mutate (js, php, py,
+rb), mutate-while-iterate (java, js, py, rb), empty-collection guard (go, js,
+py, rb), type-coercion (js, php, py, rb), overflow (c, rs). This is the "n=200,
+46 is thin" gap the pivot commit named, aimed specifically at the
+inverted-direction mechanism failure rather than at locus. **Not wired into
+any runner** — `bench/basic_bench.py`'s `ROOT` points at `bench/basic`, so
+these 27 sit outside its reach and nothing has scored them yet.
+
+**`data/sft_mechanism_pilot.jsonl`** (81 records = 27 cases x3) and
+**`data/sft_mechanism_v1.jsonl`** (1748 records) — the pilot cases turned into
+SFT examples with hand-written correct-mechanism assistant turns, then merged
+into a full retrain corpus. **No builder script for either is in the repo, so
+neither is reproducible from what's committed** — that is the main thing this
+work still owes, because the 26 Aug result above now rests on these two files.
+
+This was the sixth approach, and a different one from the five that lost: not
+a prompt rule and not a repeat of the same corpus, but retraining on
+hand-verified correct examples of the exact bug families the hand-grade showed
+the model gets backwards. **It ran, and it worked on what it targeted** — see
+the 26 Aug section at the top. Still outstanding: (a) a builder script so the
+corpus is reproducible, (b) a runner for `mechanism_pilot` — `basic_bench.py`'s
+`ROOT` points at `bench/basic`, so the 27 cases have still never been scored
+as a benchmark, only used as training data, (c) the full 46-case mechanism
+hand-grade on `mechanism-v1`, since only the 10 known failures were re-read.
+
+Also untracked: **`bench/second_model_bench.py`**, the actual script behind
+the "second model: gpt-oss-120b" result already written up in
+`docs/RESULTS.md` — meaning that result is currently not reproducible from
+committed code. (Its own repro command in the doc was also missing the
+`bench/` prefix; fixed this pass.)
 
 # Findings from 24 Aug that still stand
 
@@ -338,15 +464,27 @@ than assumed — which is what showed the refactor failure to be a rendering
 artifact rather than a reasoning failure. An SZZ-labelled corpus cannot produce
 that diagnosis.
 
-**Three gaps to close before submitting, in order:**
+**Three gaps, in order — two now closed, one remains:**
 
-1. **The hand-grade** (step 1). The paper would claim explanation quality while
-   measuring locus. 89% is not an explanation number and a reviewer finds that
-   immediately. Free, no GPU.
-2. **A second model.** Every finding is on Qwen2.5-Coder-3B. The apparatus
-   findings generalise by construction, but "does the rendering artifact appear
-   elsewhere" is the first question asked. Running the 46 against any second
-   model, even an API one, closes it cheaply.
+1. **The hand-grade — DONE 25 Aug.** No longer a gap, it's a result: 31/46
+   (67%), not 41/46 (89%), and it surfaces a third failure species (right
+   locus, inverted mechanism) that neither grounding nor the automated scorer
+   can see. This is now the strongest evidence for the methods-paper framing,
+   not a loose end in it — it is a concrete demonstration that a locus-only
+   metric overstates correctness by 22 points on this model.
+2. **A second model — DONE 25 Aug.** Ran and hand-graded `gpt-oss-120b` (this
+   project's own teacher, zero-shot, over Groq) on the same 46 cases, same
+   prompt, same procedure. **45/46 locus, 43/46 locus+mechanism (93%)** — 8 of
+   oracle-merged's 10 mechanism failures are fully fixed, 1 partial, 1 (
+   `rs-overflow`) fails identically on both models for the same rustc-specific
+   reason. Full table in `docs/RESULTS.md` ("The second model:
+   `openai/gpt-oss-120b`"). Reusable script: `bench/second_model_bench.py`.
+   **Reframes the project's own "training is not the lever" finding**: the
+   teacher clears the mechanism bar the distilled 3B student misses, on the
+   exact same cases, so the ceiling looks like it's in the distillation recipe
+   (five tried, all failed) rather than in 3B capacity per se — an honest
+   nuance to carry into the paper, not a reason to try a sixth retrain without
+   a new mechanism behind it.
 3. **n.** 46 cases is thin for a rate. Lead with the n=200 variance result,
    which is the strongest number in the project, not with the benchmark.
 

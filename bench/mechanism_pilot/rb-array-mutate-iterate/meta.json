@@ -1,0 +1,9 @@
+{
+  "id": "rb-array-mutate-iterate",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["dup", "copy", "skip", "index", "shift", "delete"]],
+  "note": "items.dup is dropped; deleting from an array while each iterates it directly shifts subsequent elements, silently skipping some evens rather than raising. Verified: [1,3] -> [4,8,1,3]"
+}

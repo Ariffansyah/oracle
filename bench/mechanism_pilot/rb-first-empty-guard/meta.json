@@ -1,0 +1,9 @@
+{
+  "id": "rb-first-empty-guard",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["nil", "empty", "guard", "first"]],
+  "note": "the xs.empty? guard is removed; Array#first on an empty array returns nil rather than raising, so the default value is silently lost instead of an exception. Verified: -1 -> nil"
+}

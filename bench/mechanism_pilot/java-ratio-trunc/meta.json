@@ -1,0 +1,9 @@
+{
+  "id": "java-ratio-trunc",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["integer division", "truncat", "cast", "before the division", "after the division"]],
+  "note": "the (double) cast moved to wrap correct/total instead of correct alone, so the division itself is int/int and truncates before the cast ever applies. Verified: 33.33 -> 0.00"
+}

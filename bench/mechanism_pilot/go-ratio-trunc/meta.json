@@ -1,0 +1,9 @@
+{
+  "id": "go-ratio-trunc",
+  "language": "go",
+  "ext": "go",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["integer division", "truncat", "cast", "float64", "before the division", "after the division"]],
+  "note": "float64() moved to wrap the whole division instead of each operand, so correct/total runs as integer division (1/3=0) before being cast. Verified: 33.33 -> 0.00"
+}

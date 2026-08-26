@@ -1,0 +1,9 @@
+{
+  "id": "js-array-alias-mutate",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["alias", "spread", "same array", "mutat", "caller"]],
+  "note": "out = items drops the [...items] spread copy, so push() mutates the caller's array. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,'tagged']"
+}

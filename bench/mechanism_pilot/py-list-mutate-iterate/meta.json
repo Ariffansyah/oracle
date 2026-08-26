@@ -1,0 +1,9 @@
+{
+  "id": "py-list-mutate-iterate",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["list(items)", "copy", "skip", "index", "shift", "mutat"]],
+  "note": "list(items) copy is dropped; removing from a list while iterating it directly shifts subsequent elements into the current index, silently SKIPPING some evens rather than raising. Verified: [1,3] -> [4,8,1,3] (4 and 8 survive)"
+}

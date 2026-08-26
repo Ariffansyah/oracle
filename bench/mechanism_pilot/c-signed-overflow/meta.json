@@ -1,0 +1,9 @@
+{
+  "id": "c-signed-overflow",
+  "language": "c",
+  "ext": "c",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["overflow", "int_max", "guard", "undefined behavior"]],
+  "note": "the INT_MAX/INT_MIN guard is removed, so a + b is signed integer overflow, undefined behavior caught by -fsanitize=undefined at runtime. Verified: 2147483647 -> UBSan runtime error, wraps to -2147483648"
+}

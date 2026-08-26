@@ -1,0 +1,9 @@
+{
+  "id": "js-loose-equal-coerce",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["==", "===", "coerc", "loose", "type"]],
+  "note": "=== is replaced with ==, so \"007\" == 7 coerces the string to a number (7 == 7) and now matches when it should not. Verified: false -> true"
+}

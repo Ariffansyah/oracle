@@ -1,0 +1,9 @@
+{
+  "id": "py-str-concat-typeerror",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["str(", "typeerror", "coerc", "concaten"]],
+  "note": "str(count) is dropped; Python does not implicitly coerce int to str for +, so this now raises TypeError instead of silently formatting. Verified: '3 items' -> TypeError, exit 1"
+}

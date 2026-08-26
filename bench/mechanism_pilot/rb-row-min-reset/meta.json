@@ -1,0 +1,9 @@
+{
+  "id": "rb-row-min-reset",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["best", "hoisted", "outside", "reset", "nil"]],
+  "note": "best is now initialized once before the loop (only when nil) instead of fresh per row, so a low value from an earlier row survives into later rows. Verified: [1,2,5] -> [1,1,1]"
+}

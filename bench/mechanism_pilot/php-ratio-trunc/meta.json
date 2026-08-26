@@ -1,0 +1,9 @@
+{
+  "id": "php-ratio-trunc",
+  "language": "php",
+  "ext": "php",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["intdiv", "integer division", "truncat"]],
+  "note": "PHP's / always returns a float for int operands; the commit replaces it with intdiv(), which explicitly truncates. Verified: 33.33 -> 0.00"
+}

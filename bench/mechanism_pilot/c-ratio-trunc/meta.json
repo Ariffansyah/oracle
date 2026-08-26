@@ -1,0 +1,9 @@
+{
+  "id": "c-ratio-trunc",
+  "language": "c",
+  "ext": "c",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["integer division", "truncat", "cast", "before the division", "after the division"]],
+  "note": "cast moved outside the division: (double)(correct/total) truncates 1/3 to 0 before ever becoming a fraction; the earlier cast on correct alone made the whole division float. Verified: 33.33 -> 0.00"
+}

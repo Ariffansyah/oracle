@@ -1,0 +1,9 @@
+{
+  "id": "rs-runtime-overflow",
+  "language": "rust",
+  "ext": "rs",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["checked_add", "overflow", "panic", "saturat"]],
+  "note": "checked_add's saturating fallback is replaced with plain +. Because the values come from a runtime Vec (not compile-time literals), this panics at RUNTIME with 'attempt to add with overflow', not a compile error. Verified: 255 -> panic, exit 101"
+}

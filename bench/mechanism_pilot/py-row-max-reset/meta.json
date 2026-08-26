@@ -1,0 +1,9 @@
+{
+  "id": "py-row-max-reset",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["best", "hoisted", "outside the loop", "reset", "accumulator"]],
+  "note": "best=0 moved outside the outer for-loop, so it stops resetting per row and the running max leaks across rows. Verified: [3,9,5] -> [3,9,9]"
+}

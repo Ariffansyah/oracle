@@ -1,0 +1,9 @@
+{
+  "id": "rb-str-concat-typeerror",
+  "language": "ruby",
+  "ext": "rb",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["to_s", "typeerror", "coerc", "concaten"]],
+  "note": "count.to_s is dropped; Ruby's Integer#+ tries to coerce its argument as a number and raises TypeError on a String instead of concatenating. Verified: '3 items' -> TypeError, exit 1"
+}

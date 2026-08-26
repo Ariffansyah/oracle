@@ -1,0 +1,9 @@
+{
+  "id": "php-array-ref-alias",
+  "language": "php",
+  "ext": "php",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["reference", "&$items", "=&", "alias", "mutat", "caller"]],
+  "note": "the parameter becomes &$items and $out =& $items adds an explicit reference, so PHP's normal by-value array copy is bypassed and the caller's array is mutated too. Verified: data unchanged -> data gains 'done'"
+}

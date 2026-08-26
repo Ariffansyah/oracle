@@ -1,0 +1,9 @@
+{
+  "id": "py-zerodiv-guard",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["zero", "guard", "zerodivisionerror", "division"]],
+  "note": "the b == 0 guard is removed, so dividing by zero now raises ZeroDivisionError instead of returning None. Verified: None -> ZeroDivisionError traceback, exit 1"
+}

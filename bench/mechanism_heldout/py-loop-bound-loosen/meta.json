@@ -1,0 +1,6 @@
+{
+  "id": "py-loop-bound-loosen", "language": "python", "ext": "py", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [["<=", "one past", "out of range", "off-by-one", "IndexError", "len(xs)"]],
+  "note": "COUNTER-ALIGNED: < to <= on a loop bound. Loosening the comparison is the DEFECT here, not a repair. Verified: 6 -> IndexError"
+}

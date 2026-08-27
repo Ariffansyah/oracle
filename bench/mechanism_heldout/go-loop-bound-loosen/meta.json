@@ -1,0 +1,6 @@
+{
+  "id": "go-loop-bound-loosen", "language": "go", "ext": "go", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [["<=", "one past", "out of range", "off-by-one", "panic", "xs[i]"]],
+  "note": "COUNTER-ALIGNED: < to <= on a loop bound. Loosening is the DEFECT. Verified: 6 -> index out of range panic"
+}

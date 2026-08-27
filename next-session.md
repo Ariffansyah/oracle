@@ -1,116 +1,117 @@
-Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first (every
-measurement plus the command that reproduces it), then `docs/ROADMAP.md`.
+Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first — its top
+three sections are 27 Aug and the newest two overturn things the third one says.
+Then `docs/ROADMAP.md`.
 
-**The GPU is free. `sft-mechanism-v2` finished 27 Aug 09:36 WIB and has been
-benchmarked on all three evaluation sets.** A server may still be up on the box
-serving it — check before launching anything, a second 3B does not fit the 6GB
-card:
+**The GPU is free.** A server may be up on the box serving `sft-mechanism-v2`;
+check before launching anything, a second 3B does not fit the 6GB card:
 
-    ssh oracle-gpu 'nvidia-smi --query-gpu=memory.used --format=csv,noheader'
+    ./serve.sh status
     ssh oracle-gpu 'pkill -f llm_explainer.serve'     # if you need it free
 
-**Do this first, before any new measurement: commit.** Three sessions of work
-sit untracked — `corpus/deepjit.py`, `dataset_builder/worddiff.py` and
-`build_mechanism_corpus.py`, 95 new benchmark cases across four directories,
-the rater packet, the real-commit sampler, and today's v2 results. None of it
-is reproducible from git as things stand, and several results in
-`docs/RESULTS.md` now depend on files that exist only in the working tree.
+# What the 27 Aug session settled
 
-# Where v2 landed, and the one finding worth carrying forward
+**Item 1 (commit) was already done** by `ab1f284`. `dataset_builder/build_mechanism_corpus.py`
+is tracked; only the benchmark run files were still ignored, and `.gitignore`
+now un-ignores `data/basic_bench_*.jsonl` and the v2 held-out runs, because
+every table in `RESULTS.md` is scored from them.
 
-Full write-up in `docs/RESULTS.md`, first section. The short version:
+**Item 2 (the configuration confound) is settled, and it reverses the result.**
+One no-training rerun put `oracle-merged` in v2's exact configuration:
+
+| checkpoint | schema | rendering | locus | false alarms |
+|---|---|---|---|---|
+| `oracle-merged` | on | unified | 41/46 | 2 |
+| `oracle-merged` | on | git `--word-diff` | 36/46 | 4 |
+| `oracle-merged` | off | module word-diff | **35/46** | 1 |
+| `mechanism-v1` | on | unified | 39/46 | 7 |
+| `mechanism-v2` | off | module word-diff | **37/46** | 5 |
+
+Same weights, configuration only: **41 -> 35**. The "regression" being explained
+was 41 -> 37. **Measured identically, v2 is the better checkpoint.** Do not quote
+the old three-way table; every arm of it differed in two factors.
+
+**Item 3 (counter-aligned boundary cases) is built and run.** Fourteen cases,
+seven languages, execution-proved: a loosening that IS a bug in
+`mechanism_heldout`, a tightening that IS a fix in `clean_heldout`.
+**Denominators changed: 14 -> 21 and 27 -> 34.**
 
 | set | n | fully correct | false alarms |
 |---|---|---|---|
-| `bench/basic` | 46 | 37 (80%) | 5 |
-| `mechanism_heldout` | 14 | 12 (86%) | 0 |
-| `clean_heldout` | 27 | 27 (100%) | 0 |
+| `mechanism_heldout` | 21 | 19 (90%) | 0 |
+| `clean_heldout` | 34 | 34 (100%) | 0 |
 
-**v2 is the weakest of the three checkpoints on locus** (41 -> 39 -> 37). It is
-also the first run whose corpus fully trained: 1995 x 1 epoch / 8 = 250 steps,
-which is what the log shows. Run that arithmetic on every future run.
+**The surface rule is falsified.** v2 answers all 14 counter-aligned cases
+correctly, including in c, go and java — the three languages where it fails
+`bench/basic`. Combined with `oracle-merged` (no clean-direction training)
+failing the same cases under the same rendering, the direction-rule story is
+refuted twice over and must not go in the paper.
 
-**Word-diff did its job.** Six of v1's seven false alarms claimed a call was
-*removed* when it was edited in place; **zero of v2's five do.** That
-fabrication class is closed. It cost a new one: word-diff renders a whole-block
-rewrite as interleaved noise (git does the same, so this is not our renderer),
-and four of the five remaining false alarms are on extract/refactor cases,
-which are exactly block rewrites.
+# The finding that outranks everything above
 
-**The finding that outranks the numbers.** All four lost buggy cases are
-off-by-one; that category goes 9/9 -> 5/9 while every other category holds at
-100%. Three of them draw the `fix` template verbatim, with no findings:
+**v2 fabricates executed program output, with absolute paths into the training
+corpus's directory.** On `go-offbyone` it justifies a wrong "this is a repair"
+by quoting a Go panic trace from
+`/home/arp/Documents/oracle/bench/mechanism_pilot/go-offbyone.go:6` — a file
+that does not exist.
 
-    for (int i = 0; i [-<-]{+<=+} 5; i++)
-      -> "This commit repairs the logic-error ... goes back to its correct
-          behavior, and no new defects are introduced."
+| across v2's 101 answers | count |
+|---|---|
+| quote executed program output | 42 |
+| of those, cite an absolute path | 6 |
+| paths pointing into `bench/mechanism_pilot/` | 6 |
+| those paths that exist | **0** |
 
-while the held-out boundary cases come back **right**:
+Two name cases created on 27 Aug that did not exist when v2 was trained. The
+mechanism is `dataset_builder/build_mechanism_corpus.py:150`: every `fix` target
+reads "the program's output changes from {was} to {now}", which teaches the form
+without teaching that the quote must be something you ran.
 
-    n [-<=-]{+<+} 100    buggy -> flagged   correct
-    n [-<-]{+<=+} 100    fix   -> clean     correct
-
-The model learned a **surface rule on the direction of the operator swap** —
-loosening a comparison means someone fixed a bug, tightening it means someone
-broke one. True of a range predicate, false of a loop bound. 162
-clean-direction records, all `findings: []` and all "removes a defect and
-introduces none", made that prior strong enough to beat reading the code. It
-generalised the template to loop bounds, **a family that appears nowhere in the
-fix corpus.**
-
-**So the held-out numbers are inflated.** Every boundary case in both held-out
-sets is aligned with that rule; none tests it adversarially. 12/14 and 27/27
-are not evidence the rule is understood. Do not quote a held-out boundary
-number until the counter-aligned cases below exist.
+**Five of the six sit inside answers the scorer graded correct**, inside
+`clean_heldout`'s 34/34. Right verdict, invented justification. This decides
+item 5 toward the strict reading: the fabrication is *evidence*, not decoration.
 
 # What to do, in order
 
-**1. Commit.** See above. Nothing else is safe until this is done.
+**1. Count fabricated evidence on `oracle-merged` and `mechanism-v1`**, same
+three sets, same detector (absolute path, or a quoted output that no run
+produces). Does the untemplated checkpoint do it too, and at what rate? This is
+the number that turns the finding from an anecdote about one checkpoint into a
+claim about templated distillation. No training, ~25 min of GPU.
 
-**2. Settle the configuration confound. Cheap, no training, do it before any
-new comparison.** v2 was measured short-hint with module word-diffs, matching
-its training; `oracle-merged` and `mechanism-v1` were measured with the JSON
-Schema in the prompt and unified diffs. **Some unknown share of 89% -> 80%
-belongs to the configuration, not the checkpoint.** One rerun settles it —
-either v2 under the old shape, or both older checkpoints under the new one.
-Until then the three-way table must carry the caveat everywhere it appears.
+**2. Decide whether the `fix` template should quote program output at all.**
+It is one f-string. If removing it removes the fabrication, that is a corpus
+intervention with a measured before and after — the seventh approach, and the
+first aimed at a failure mode nobody else has reported.
 
-**3. Build the counter-aligned boundary cases.** This is the gap the surface
-rule exposed and the cheapest real repair available: a loosening that IS a bug
-(loop bounds — `bench/basic` already has three) and a tightening that IS a fix,
-in both held-out sets, execution-proved like everything else. **Do not retrain
-before these exist** — without them there is no way to tell whether a fix
-worked or the rule just pointed the right way again.
+**3. Hand-grade v2's 46 for mechanism.** Still open. 37/46 is a locus floor and
+is not comparable to the 31/46 that `oracle-merged` and `mechanism-v1` scored on
+locus+mechanism. Predictions are in `data/basic_bench_mechanism_v2.jsonl`; needs
+no GPU. Grades go in `data/handgrade_mechanism_v2.csv` beside v1's. **Apply the
+strict hallucination rule decided above, and re-grade v1 under it too.**
 
-**4. Hand-grade v2's 46 for mechanism.** 37/46 is a locus floor and is not
-comparable to the 31/46 that `oracle-merged` and `mechanism-v1` both scored on
-locus+mechanism. Predictions are already in
-`data/basic_bench_mechanism_v2.jsonl`; the grade needs no GPU, only execution.
-Grades are data — put them in `data/handgrade_mechanism_v2.csv` beside v1's.
+**4. Explain the `bench/basic` off-by-one failures.** Narrower question now:
+why does v2 fail `c-array-bound`, `go-offbyone`, `java-array-bound` while
+passing seven counter-aligned cases of the same family? The one visible
+difference is that the failing cases bound the loop with the container's own
+length expression (`len(xs)`, `xs.length`, literal `5`) and the passing ones use
+a separate parameter `n`. **Untested hypothesis** — build the discriminating
+cases before believing it.
 
-**5. Decide the hallucination question and write it down.** Still open from
-26 Aug: does a fabricated worked example inside an otherwise-correct
-explanation count as a hallucination? Under a strict reading `mechanism-v1` is
-21/46, not 31/46. **Decide once, apply to all three checkpoints, do not let it
-drift between runs.**
-
-**6. The 40 real commits — still the strongest evidence available and still
-not run.** `data/real_commits.jsonl`, 40 commits from the five held-out
-projects, seed 20260826. Random sample, no family selection, no relationship to
-training data. Run on **v2 and `mechanism-v1` both** or the numbers cannot be
-attributed.
+**5. The 40 real commits — still the strongest evidence available and still not
+run.** `data/real_commits.jsonl`, seed 20260826, five held-out projects. Run on
+**v2 and `mechanism-v1` both** or the numbers cannot be attributed.
 
     .venv/bin/python bench/real_commits.py --run data/real_commits.jsonl
     .venv/bin/python bench/real_commits.py --sheet data/real_commits.jsonl
 
-**7. Inter-rater agreement.** `data/rater_packet.md` is ready and blinded.
-Needs a person, not a GPU. Cheapest open item and it closes "every mechanism
-number in this project has one rater".
+**6. Inter-rater agreement.** `data/rater_packet.md` is ready and blinded. Needs
+a person, not a GPU. Closes "every mechanism number in this project has one
+rater".
 
-**8. Cost and latency, 3B vs 120B.** Untouched. The teacher scores 93% against
+**7. Cost and latency, 3B vs 120B.** Untouched. The teacher scores 93% against
 the student's 67%, so a reviewer will ask what the small model buys.
 
-**Do not** retrain before item 3, add more prompt rules (five attempts, all
+**Do not** retrain before items 1–2, add more prompt rules (five attempts, all
 lost), or spend GPU on DPO (closed as a null).
 
 # The honest read, for the paper
@@ -155,8 +156,8 @@ contribution with an existence proof attached. That paper survives review. A
 | `bench/basic` | 46 | eval, the headline set |
 | `bench/mechanism_pilot` | 28 | **TRAINING** — never report a score |
 | `bench/clean_direction` | 54 | **TRAINING** — never report a score |
-| `bench/mechanism_heldout` | 14 | eval, held-out families |
-| `bench/clean_heldout` | 27 | eval, held-out families |
+| `bench/mechanism_heldout` | 21 | eval, held-out families (was 14 before 27 Aug) |
+| `bench/clean_heldout` | 34 | eval, held-out families (was 27 before 27 Aug) |
 
 `basic_bench.py` prints a block warning if you point `--root` at the two
 training directories.
@@ -810,8 +811,8 @@ this time something warns.
     python bench/basic_bench.py --verify                              # 46/46
     python bench/basic_bench.py --root bench/mechanism_pilot --verify # 28/28
     python bench/basic_bench.py --root bench/clean_direction --verify # 54/54
-    python bench/basic_bench.py --root bench/mechanism_heldout --verify # 14/14
-    python bench/basic_bench.py --root bench/clean_heldout --verify   # 27/27
+    python bench/basic_bench.py --root bench/mechanism_heldout --verify # 21/21 (14/14 when written)
+    python bench/basic_bench.py --root bench/clean_heldout --verify   # 34/34 (27/27 when written)
 
 **Case inventory — read this before quoting any benchmark number:**
 
@@ -820,8 +821,8 @@ this time something warns.
 | `bench/basic` | 46 | eval, the headline set |
 | `bench/mechanism_pilot` | 28 | **TRAINING** — never report a score |
 | `bench/clean_direction` | 54 | **TRAINING** — never report a score |
-| `bench/mechanism_heldout` | 14 | eval, held-out families |
-| `bench/clean_heldout` | 27 | eval, held-out families |
+| `bench/mechanism_heldout` | 21 | eval, held-out families (was 14 before 27 Aug) |
+| `bench/clean_heldout` | 34 | eval, held-out families (was 27 before 27 Aug) |
 
 **3. The second-rater packet.** `bench/rater_packet.py --emit` writes
 `data/rater_packet.md`: 20 cases, seed 20260826, **blinded** — it withholds

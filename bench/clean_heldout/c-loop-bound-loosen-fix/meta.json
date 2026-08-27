@@ -1,0 +1,9 @@
+{
+  "id": "c-loop-bound-loosen-fix",
+  "language": "c",
+  "ext": "c",
+  "label": "fix",
+  "parent": "c-loop-bound-loosen",
+  "category": "off-by-one",
+  "note": "COUNTER-ALIGNED: reverses c-loop-bound-loosen. <= to < on a loop bound is the REPAIR here, not a defect."
+}

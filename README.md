@@ -1,8 +1,9 @@
 # ORACLE
 
-An **end-to-end instruction-tuned code LLM** for Just-In-Time (JIT) defect
-prediction. No classifier, no feature engineering: a single model reads a commit
-diff and answers with a structured verdict.
+**Predict, then explain.** A two-stage pipeline for Just-In-Time (JIT) defect
+prediction: a gate classifier turns a commit into a *risk score*, and an
+instruction-tuned code LLM turns the commits worth reading into
+*natural-language findings*.
 
 ```json
 {
@@ -22,7 +23,54 @@ probability. A probability cannot be acted on: nobody fixes `la = 412`. ORACLE
 reformulates the task as **defect explanation with a structured output**, and
 trains a model specifically for it.
 
-## Two-stage training
+## The pipeline
+
+```
+  commit ──► stage 1: gate ──► risk score ──► stage 2: explainer ──► findings
+             LightGBM on            0..1        Qwen2.5-Coder-3B     category +
+             embeddings +                       QLoRA, tuned for     explanation
+             process metrics                    this task
+```
+
+**Stage 1 detects.** `ml_model/gate.py`, 7989 ApacheJIT commits, chronological
+80/20 split, test n=1598 at 95% target recall:
+
+| variant | AUC | PR-AUC | LLM calls saved |
+|---|---|---|---|
+| counting baseline | 0.638 | 0.363 | — |
+| process metrics only (the 2013 baseline) | 0.777 | 0.660 | 20.4% |
+| **embeddings + metrics** | **0.822** | **0.699** | 28.2% |
+
+Reading the code adds +0.045 AUC over process metrics alone, and the stack
+clears the counting baseline by +0.184. This is where the *prediction* in
+"JIT defect prediction" actually lives.
+
+**Stage 2 explains.** The tuned 3B emits a structured finding per defect and
+grounds it in the diff (99.1% grounded, against 80.7% for the stock base
+model). What it does *not* do is detect out of distribution: on CVEfixes its
+separation is −4.2pp, statistically indistinguishable from chance. Each
+component is used where it measures well, and neither claim leans on the other.
+
+**The gate's verdict is never put into the explainer's prompt.** Telling a model
+the answer and then scoring its agreement is how `corpus/label.py` produced a
+teacher with recall 1.00 and zero false negatives — a number that was true by
+construction. The gate selects *who* gets an LLM call; the explainer reaches its
+own verdict, and the disagreement rate between the two is itself a measurement.
+
+## The name
+
+Not an acronym. A **test oracle** is the part of a testing system that decides
+whether a program's observed behaviour is correct — the component that supplies
+the verdict everything else is measured against. That is the job here: read a
+commit, decide whether it carries a defect, and say what the defect is.
+
+The name is also a standing reminder of the failure mode this project keeps
+catching in itself. An oracle is only worth having if its verdict is checkable.
+Every label in `bench/` is proved by executing the code rather than inferred
+from SZZ, and every number in `docs/RESULTS.md` ships with the command that
+reproduces it, for that reason.
+
+## Training the explainer, in two stages
 
 ```
   Qwen2.5-Coder-3B-Instruct  (base)
@@ -45,7 +93,7 @@ trains a model specifically for it.
                                         ui/tui_app.py
 ```
 
-**Why two stages.** SFT alone produces a model that answers in the right shape
+**Why two training stages.** SFT alone produces a model that answers in the right shape
 but over-reports — given churn, a rename or an added guard it manufactures a
 plausible-sounding defect, because every SFT target it saw was a confident
 answer. Over-reporting is a *behavioural* failure, not a formatting one, and
@@ -277,6 +325,9 @@ fine_tuning/train_dpo.py           TRL DPOTrainer, continues from the SFT adapte
 llm_explainer/client.py            transformers | ollama, strict JSON parsing
 ui/tui_app.py                      three-pane Textual UI
 corpus/fetch.py                    fetch real ApacheJIT diffs for training
+ml_model/gate.py                   stage 1: LightGBM head, embeddings + metrics
+ml_model/train_gate.py             train and ablate the gate (--ablate)
+bench/basic_bench.py               executable benchmark, labels proved by running
 ui/commands.py                     `:` command mode, parsed and tested standalone
 llm_explainer/context.py           git context retrieval (-U50, file snapshots)
 docs/METHODS.md                    plain-language explanation of every method
@@ -314,9 +365,13 @@ it covers. Start there if the design decisions look arbitrary.
   model for anything beyond a smoke test.
 * **bitsandbytes 4-bit is CUDA-only.** On CPU, pass `--no-4bit` and expect to
   need a small base model (1.5B) and patience.
-* **No statistical classifier.** Earlier revisions carried an XGBoost/CatBoost
-  risk model; it was removed. Three boosters landed within 0.005 AUC of each
-  other on ApacheJIT (0.862–0.867), which says the 14 process metrics are the
-  ceiling rather than the algorithm — and a probability cannot be acted on
-  regardless. `corpus/` keeps the ApacheJIT loader and diff fetcher, which is
-  the part that was actually worth keeping.
+* **The gate scores; it does not explain.** An earlier revision ranked commits
+  with XGBoost/CatBoost over the 14 process metrics alone, and that was removed:
+  three boosters landed within 0.005 AUC of each other on ApacheJIT
+  (0.862–0.867), which says the metrics were the ceiling rather than the
+  algorithm. What replaced it reads the code — LightGBM over embeddings *plus*
+  metrics, +0.045 AUC over metrics alone. A risk score still cannot be acted on
+  by itself; that is the whole reason stage 2 exists.
+* **The explainer cannot detect out of distribution.** Separation −4.2pp on
+  CVEfixes, indistinguishable from chance, against 99.1% grounding. Do not read
+  its verdict as a detector — that is stage 1's job.

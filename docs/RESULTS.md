@@ -7,7 +7,243 @@ Status as of 2026-08-27.
 
 ---
 
+## Counter-aligned boundary cases: the surface rule is falsified, and a worse failure surfaces (2026-08-27)
+
+`next-session.md` item 3. Both held-out sets were aligned with the direction
+rule the 27 Aug section proposed — tightening-is-buggy, loosening-is-fix — so
+neither could test it. Fourteen counter-aligned cases now exist, every label
+proved by execution:
+
+| direction | label | where | n |
+|---|---|---|---|
+| loosening (`<` -> `<=`) on a loop bound **IS a bug** | `buggy` | `bench/mechanism_heldout` | 7 |
+| tightening (`<=` -> `<`) on a loop bound **IS a fix** | `fix` | `bench/clean_heldout` | 7 |
+
+Languages: c, go, java, javascript, php, python, ruby. Each is a `total`/`joinAll`
+helper whose bound is a separate parameter or the container's length; the `-fix`
+member of each pair is the same two files reversed.
+
+    .venv/bin/python bench/basic_bench.py --root bench/mechanism_heldout --verify
+    .venv/bin/python bench/basic_bench.py --root bench/clean_heldout    --verify
+    # 21/21 and 34/34 verified by execution
+
+**Denominators changed: `mechanism_heldout` 14 -> 21, `clean_heldout` 27 -> 34.**
+The 12/14 and 27/27 in the section below are on the old sets and are not
+comparable to anything measured on the new ones.
+
+### v2 on the expanded sets
+
+    ORACLE_INFERENCE_SAMPLES=1 ORACLE_INCLUDE_SCHEMA=false .venv/bin/python \
+      bench/basic_bench.py --backend ollama --model-name sft-mechanism-v2 \
+      --host http://localhost:8111 --word-diff-module \
+      --root bench/mechanism_heldout --out data/heldout_mech_v2_n21.jsonl
+    # --root bench/clean_heldout --out data/heldout_clean_v2_n34.jsonl
+
+| set | n | fully correct | false alarms |
+|---|---|---|---|
+| `mechanism_heldout` | 21 | 19 (90%) | 0 |
+| `clean_heldout` | 34 | 34 (100%) | 0 |
+
+The two misses are `php-shadow-update` and `py-shadow-update`, the same unseen
+family as before. **Every one of the 14 counter-aligned cases is answered
+correctly.**
+
+### The direction rule is falsified
+
+A model applying "loosening is a repair, tightening is a defect" would fail all
+seven `-loosen` cases. v2 gets 7/7, in all seven languages, including the three
+where it fails `bench/basic`:
+
+    go-loop-bound-loosen   for i := 0; i [-<-]{+<=+} n; i++
+    -> "The change loosens the loop condition from 'i < n' to 'i <= n', causing
+        the loop to run one extra iteration when n > 0 ... leading to a slice
+        out-of-range panic at runtime."          findings: 1, correct
+
+Together with the configuration rerun in the section above — where
+`oracle-merged`, which has no clean-direction training at all, fails the same
+`bench/basic` off-by-one cases under the same rendering — the surface-rule
+attribution is refuted from two independent directions. **It should not be
+carried into the paper.**
+
+What still needs explaining is narrower: why v2 fails `c-array-bound`,
+`go-offbyone` and `java-array-bound` while passing seven counter-aligned cases
+of the same family. The one structural difference visible is that the failing
+cases bound the loop with the container's own length expression (`len(xs)`,
+`xs.length`, a literal `5`) while the passing ones bound it with a separate
+parameter `n`. That is an observation, not a result — it is one hypothesis and
+it has not been tested.
+
+### The finding that outranks all of the above: fabricated execution evidence
+
+`go-offbyone`, which v2 calls a repair, justifies the call like this:
+
+    "the program's output changes from 'panic: runtime error: index out of
+     range [4] with length 3\n\ngoroutine 1 [running]:\nmain.sum(...)\n\t
+     /home/arp/Documents/oracle/bench/mechanism_pilot/go-offbyone.go:6 ...'
+     to '9'."
+
+`bench/mechanism_pilot/go-offbyone.go` **does not exist.** The model fabricated
+a runtime panic trace, complete with an absolute path into the training corpus's
+own directory and plausible line numbers, and presented it as observed program
+behaviour.
+
+The mechanism is the `fix` template. `dataset_builder/build_mechanism_corpus.py:150`
+composes every `fix` target as *"the program's output changes from {was} to
+{now}"*, filling `was`/`now` from the case note's executed before/after output.
+That teaches the form — quote the program's output when you judge something a
+fix — without teaching that the quote must be something you actually ran.
+
+Across v2's 101 answers on the three evaluation sets:
+
+| | count |
+|---|---|
+| answers examined | 101 |
+| quote executed program output | 42 |
+| of those, cite an absolute filesystem path | 6 |
+| paths that point into `bench/mechanism_pilot/` | 6 |
+| of those paths that exist | **0** |
+
+Two of the fabricated paths name `go-loop-bound-loosen` and
+`py-loop-bound-loosen` — cases created on 27 Aug, in `mechanism_heldout`, that
+have never been in `mechanism_pilot` and did not exist when v2 was trained. The
+model is not recalling a path; it is generating one under the directory its
+training corpus was built from.
+
+**Five of the six sit inside answers the scorer graded correct**, and they are
+part of `clean_heldout`'s 34/34. The verdict is right and the justification is
+invented.
+
+**This decides `next-session.md` item 5** in the direction of the strict
+reading, and sharpens it: the fabrication at issue is not a decorative worked
+example, it is *evidence* — an appeal to program behaviour the model never
+observed, in the exact register the corpus taught it to sound authoritative in.
+A reader checking the claim finds a path that does not exist.
+
+**What this costs, and what it buys.**
+
+- Every "fully correct" figure in this project is a locus-and-verdict number.
+  None of them inspect whether the justification is fabricated. `34/34` and
+  `19/21` are floors on verdict, not statements about explanation quality.
+- The grounding check does not catch this: a fabricated path and a fabricated
+  panic trace are made of tokens that appear in the diff and the case name.
+- It is a clean, reportable result of exactly the type `ROADMAP.md`'s
+  contingency names. Templated distillation targets transfer their *rhetorical
+  form* along with their content, and a form that cites executed output teaches
+  the model to cite executed output it does not have. That is a general claim
+  about distillation for explanation, demonstrable in six lines.
+
+**Next, in order:** count fabricated evidence across `oracle-merged` and
+`mechanism-v1` on the same sets (does the untemplated checkpoint do it too, and
+at what rate); then decide whether the `fix` template should quote output at all.
+
+---
+
+## The configuration confound, settled: the "regression" is the renderer (2026-08-27)
+
+`next-session.md` item 2. The three-way table in the section below compares
+checkpoints that were never measured under the same conditions. One rerun —
+`oracle-merged` in v2's *exact* configuration, no training — settles it, and
+reverses the result.
+
+    ORACLE_INFERENCE_SAMPLES=1 ORACLE_INCLUDE_SCHEMA=false .venv/bin/python \
+      bench/basic_bench.py --backend ollama --model-name oracle-merged \
+      --host http://localhost:8111 --word-diff-module \
+      --out data/basic_bench_oracle46_wordmodule.jsonl
+
+All five runs on `bench/basic` (n=46), scored with the current scorer via
+`--score`:
+
+| run file | checkpoint | schema | rendering | locus | false alarms |
+|---|---|---|---|---|---|
+| `basic_bench_oracle46` | `oracle-merged` | on | unified | **41/46 (89%)** | 2 |
+| `basic_bench_oracle46_word` | `oracle-merged` | on | git `--word-diff` | 36/46 (78%) | 4 |
+| `basic_bench_oracle46_wordmodule` | `oracle-merged` | off | module word-diff | **35/46 (76%)** | 1 |
+| `basic_bench_mechanism_v1` | `mechanism-v1` | on | unified | 39/46 (85%) | 7 |
+| `basic_bench_mechanism_v2` | `mechanism-v2` | off | module word-diff | **37/46 (80%)** | 5 |
+
+**Same weights, configuration only: 41 -> 35.** Six cases, 13 points, no
+retraining. The v2 "regression" that section was written to explain is 41 -> 37,
+four cases. **The configuration effect is larger than the entire gap it was
+invoked to account for.**
+
+**Under identical measurement v2 is the better checkpoint**, 37/46 against
+35/46. One of `oracle-merged`'s 46 calls (`rb-string-mutate`) returned no
+schema-valid JSON after two tries and is scored as no-finding; granting it
+charitably gives 36/46, still below v2. The `schema on` runs are the ones with
+the 41 and 39; nothing about the checkpoints changed between them.
+
+Decomposition, schema held on so the renderer moves alone:
+
+| change | locus | off-by-one |
+|---|---|---|
+| baseline (unified, schema on) | 41/46 | 8/9 |
+| renderer only -> git word-diff | 36/46 | 5/9 |
+| renderer + schema off -> module word-diff | 35/46 | 4/9 |
+
+The renderer carries most of it; dropping the schema adds roughly one more case.
+
+### This overturns the surface-rule attribution
+
+| off-by-one (n=9) | unified | git word-diff | module word-diff |
+|---|---|---|---|
+| `oracle-merged` | 8/9 | 5/9 | **4/9** |
+| `mechanism-v1` | 9/9 | — | — |
+| `mechanism-v2` | — | — | **5/9** |
+
+Every unified run scores 8–9 of 9. Every word-diff run scores 4–5 of 9,
+**whichever checkpoint it is.** `oracle-merged` never saw a single
+clean-direction record and still collapses to 4/9 in the configuration v2 was
+measured in — one case *worse* than v2.
+
+The section below attributes v2's off-by-one collapse to the 162
+clean-direction records installing a surface rule keyed to the direction of the
+operator swap. **That attribution does not survive this run.** The collapse
+reproduces on a checkpoint with no such training. On `c-array-bound`, under the
+same module word-diff:
+
+    oracle-merged: "The change expands the loop condition from i < 5 to i <= 5,
+                    causing the loop to include the last element of the array.
+                    This corrects a buffer overflow and does not introduce any
+                    new runtime defects."                         findings: []
+
+    mechanism-v2:  "This commit repairs the logic-error in c-array-bound.c: the
+                    program goes back to its correct behavior, and no new
+                    defects are introduced."                      findings: []
+
+`oracle-merged` reads the swap correctly — it names `i < 5` and `i <= 5` — and
+then calls the loosening a repair anyway. Same verdict, same error, different
+vocabulary.
+
+**What each factor actually supplied.** The rendering supplies the mistake: the
+direction rule is present in a checkpoint trained only on unified diffs, and
+appears as soon as that checkpoint is shown a word-diff. The clean-direction
+corpus supplies the *wording* — v2 draws the `fix` template
+(`dataset_builder/build_mechanism_corpus.py:150`) verbatim where `oracle-merged`
+phrases the same wrong answer in its own words. Training data made the error
+fluent and templated; it did not create it.
+
+**Consequences.**
+
+- The three-way checkpoint table below must not be quoted. Its three columns
+  differ in two factors each, and correcting for them reverses the ranking.
+- Every future benchmark comparison fixes schema and renderer across all arms,
+  and the run file records both.
+- "Word-diff closed the in-place-edit fabrication class" still stands — that was
+  a within-configuration comparison. "v2 is the weakest checkpoint on locus"
+  does not.
+
+---
+
 ## `sft-mechanism-v2`: 37/46, and the boundary rule it learned (2026-08-27)
+
+> **Partly superseded — read the section above first.** The three-way checkpoint
+> table here compares runs that differ in prompt shape and diff rendering as well
+> as in weights. Correcting for that reverses the ranking: under v2's own
+> configuration `oracle-merged` scores 35/46, below v2's 37/46. The surface-rule
+> attribution below is also not supported — the same off-by-one collapse
+> reproduces on `oracle-merged`, which has no clean-direction training. What
+> survives: the word-diff fix to the in-place-edit fabrication class, the block-
+> rewrite artifact, and the step arithmetic.
 
 The combined retrain — word-diffs, mechanism cases, clean-direction examples,
 a corpus budgeted to fit — trained cleanly and is **the weakest of the three
@@ -128,17 +364,22 @@ which rules the degenerate model out. The two misses there are
 training did not reach.
 
 **What the sets need:** boundary cases in the counter-aligned direction — a
-loosening that IS a bug, a tightening that IS a fix. Until they exist, no
-held-out boundary number should be quoted.
+loosening that IS a bug, a tightening that IS a fix. **Built 27 Aug**, four of
+each, execution-proved: `mechanism_heldout` 14 -> 18, `clean_heldout` 27 -> 31.
+The 12/14 and 27/27 above are on the OLD sets and are not comparable to any
+number taken on the new ones.
 
-### The confound: v2 was not measured under the same conditions
+### The confound: v2 was not measured under the same conditions — now settled
 
 v2 ran short-hint (`ORACLE_INCLUDE_SCHEMA=false`) with module-rendered
 word-diffs, both matching its training. `oracle-merged` and `mechanism-v1` were
 measured with the JSON Schema in the prompt and unified diffs. **Some unknown
 share of 89% -> 80% belongs to the configuration rather than the checkpoint**,
 and the three-way table above must carry that caveat wherever it is quoted.
-Separating them needs one no-training rerun (see `next-session.md`).
+Separating them needed one no-training rerun. **It has been done** — see the
+section above. The answer is that configuration accounts for more than the whole
+gap: `oracle-merged` scores 35/46 under v2's configuration, and v2 is the better
+checkpoint when both are measured the same way.
 
 Locus is also still a floor: 37/46 is not comparable to the 31/46 that
 `oracle-merged` and `mechanism-v1` both scored on locus+mechanism. That

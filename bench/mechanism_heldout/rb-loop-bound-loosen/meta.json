@@ -1,0 +1,6 @@
+{
+  "id": "rb-loop-bound-loosen", "language": "ruby", "ext": "rb", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [["<=", "one past", "nil", "off-by-one", "xs.length"]],
+  "note": "COUNTER-ALIGNED: < to <= on a loop bound. Loosening is the DEFECT. Verified: 6 -> NoMethodError on nil"
+}

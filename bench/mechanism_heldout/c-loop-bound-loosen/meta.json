@@ -1,0 +1,6 @@
+{
+  "id": "c-loop-bound-loosen", "language": "c", "ext": "c", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [["<=", "one past", "out of bounds", "off-by-one", "overflow", "xs[i]"]],
+  "note": "COUNTER-ALIGNED: < to <= on a loop bound. Loosening is the DEFECT. Verified: 6 -> ASan stack-buffer-overflow"
+}

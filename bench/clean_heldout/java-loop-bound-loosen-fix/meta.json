@@ -1,0 +1,9 @@
+{
+  "id": "java-loop-bound-loosen-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-loop-bound-loosen",
+  "category": "off-by-one",
+  "note": "COUNTER-ALIGNED: reverses java-loop-bound-loosen. <= to < on a loop bound is the REPAIR here, not a defect."
+}

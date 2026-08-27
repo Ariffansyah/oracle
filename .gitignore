@@ -32,3 +32,8 @@ data/deepjit/
 # `data/*.jsonl` and `data/*.csv` above would otherwise swallow them.
 !data/real_commits.jsonl
 !data/handgrade_mechanism_v1.csv
+# Benchmark run files: small, and every table in RESULTS.md is scored from them
+# (`basic_bench.py --score`). `data/*.jsonl` above would otherwise swallow them.
+!data/basic_bench_*.jsonl
+!data/heldout_mech_v2*.jsonl
+!data/heldout_clean_v2*.jsonl

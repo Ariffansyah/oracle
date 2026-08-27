@@ -1,0 +1,6 @@
+{
+  "id": "java-loop-bound-loosen", "language": "java", "ext": "java", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [["<=", "one past", "out of bounds", "off-by-one", "ArrayIndexOutOfBounds", "xs[i]"]],
+  "note": "COUNTER-ALIGNED: < to <= on a loop bound. Loosening is the DEFECT. Verified: 6 -> ArrayIndexOutOfBoundsException"
+}

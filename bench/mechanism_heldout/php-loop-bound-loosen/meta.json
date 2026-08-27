@@ -1,0 +1,6 @@
+{
+  "id": "php-loop-bound-loosen", "language": "php", "ext": "php", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [["<=", "one past", "undefined array key", "off-by-one", "count($xs)"]],
+  "note": "COUNTER-ALIGNED: < to <= on a loop bound. Loosening is the DEFECT. Verified: 'a,b,c,' -> warning + 'a,b,c,,'"
+}

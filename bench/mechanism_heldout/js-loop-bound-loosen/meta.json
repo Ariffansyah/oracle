@@ -1,0 +1,6 @@
+{
+  "id": "js-loop-bound-loosen", "language": "javascript", "ext": "js", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [["<=", "one past", "undefined", "NaN", "off-by-one", "xs.length"]],
+  "note": "COUNTER-ALIGNED: < to <= on a loop bound. Loosening is the DEFECT. Verified: 6 -> NaN"
+}

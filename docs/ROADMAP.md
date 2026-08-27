@@ -42,8 +42,11 @@ picture, but they no longer describe what the project is trying to do.
 labels are proved by executing the code rather than inferred from SZZ.
 
 **Where that stands:** `oracle-merged` scores **41/46 (89%) correct locus, 2
-false alarms (4%)**, best of three checkpoints and better than the 25 Aug
-retrain. The locus half of the goal is met; the "correct explanation" half is
+false alarms (4%)** with the schema in the prompt and unified diffs. That is its
+best configuration, not a checkpoint ranking: measured in `sft-mechanism-v2`'s
+configuration the same weights score 35/46, below v2's 37/46 (RESULTS.md, 27
+Aug). Any checkpoint comparison must fix prompt shape and diff rendering across
+all arms. The locus half of the goal is met; the "correct explanation" half is
 unmeasured, and the "no hallucination" half is 2 cases short. Full write-up and
 the five approaches that were measured and lost are in `RESULTS.md`.
 
@@ -352,10 +355,17 @@ That paper is defensible with what already exists:
   edits that change no code, a scorer that graded correct paraphrases as
   hallucinations, a consensus safeguard that has never executed on the backend
   where every number is taken, and a grounding repair whose obvious form grounded
-  a third of findings against randomly paired commits. Each was caught by a
-  control, and the controls are the contribution.
+  a third of findings against randomly paired commits. **27 Aug adds two more:**
+  a three-way checkpoint table whose arms differed in two configuration factors,
+  where correcting for them reverses the ranking; and a model that fabricates
+  executed program output — quoting a runtime panic trace from an absolute path
+  inside the training corpus's directory, for a file that does not exist — in
+  answers the scorer grades correct. Each was caught by a control, and the
+  controls are the contribution.
 - **An executable benchmark for defect explanation.** 46 cases, 9 languages, every
-  label proved by running the code. It separates locus from mechanism and proves
+  label proved by running the code, plus two held-out sets (21 and 34) carrying
+  14 counter-aligned boundary cases built 27 Aug to test a rule the aligned sets
+  structurally could not see. It separates locus from mechanism and proves
   false alarms rather than assuming them — neither is possible on an SZZ-labelled
   corpus, and it is what showed the refactor false alarm to be a rendering
   artifact rather than a reasoning failure.

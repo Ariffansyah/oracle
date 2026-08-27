@@ -1,153 +1,165 @@
-Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first — its top
-three sections are 27 Aug and the newest two overturn things the third one says.
-Then `docs/ROADMAP.md`.
+Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first — the top
+four sections are 27 Aug, newest first, and the newest two overturn claims the
+older ones make. Then `docs/ROADMAP.md`.
 
-**The GPU is free.** A server may be up on the box serving `sft-mechanism-v2`;
-check before launching anything, a second 3B does not fit the 6GB card:
+# Status at handoff (27 Aug, ~19:00 WIB)
 
-    ./serve.sh status
-    ssh oracle-gpu 'pkill -f llm_explainer.serve'     # if you need it free
+**A pilot training run is on the GPU.** `sft-v2-pilot`, 80 steps, 2 epochs,
+~260s/step, started ~18:35 WIB, ETA ~00:20 WIB. Check it before anything else:
 
-# What the 27 Aug session settled
+    ssh oracle-gpu 'pgrep -af fine_tuning.train_sft'
+    ssh oracle-gpu 'tail -c 600 ~/oracle/sft_v2_pilot.log | tr "\r" "\n" | tail -3'
+    ssh oracle-gpu 'ls ~/oracle/artifacts/sft-v2-pilot'
 
-**Item 1 (commit) was already done** by `ab1f284`. `dataset_builder/build_mechanism_corpus.py`
-is tracked; only the benchmark run files were still ignored, and `.gitignore`
-now un-ignores `data/basic_bench_*.jsonl` and the v2 held-out runs, because
-every table in `RESULTS.md` is scored from them.
+Working tree is clean at `2d67f58`. Three commits landed on 27 Aug:
+`de18986` session findings, `fe39e59` the v2 contract, `2d67f58` the v2 corpus
+build. The explainer server was stopped to free the card.
 
-**Item 2 (the configuration confound) is settled, and it reverses the result.**
-One no-training rerun put `oracle-merged` in v2's exact configuration:
+# What 27 Aug established
 
-| checkpoint | schema | rendering | locus | false alarms |
-|---|---|---|---|---|
-| `oracle-merged` | on | unified | 41/46 | 2 |
-| `oracle-merged` | on | git `--word-diff` | 36/46 | 4 |
-| `oracle-merged` | off | module word-diff | **35/46** | 1 |
-| `mechanism-v1` | on | unified | 39/46 | 7 |
-| `mechanism-v2` | off | module word-diff | **37/46** | 5 |
+**1. The three-way checkpoint table was a configuration artifact.** One
+no-training rerun put `oracle-merged` in v2's exact configuration:
 
-Same weights, configuration only: **41 -> 35**. The "regression" being explained
-was 41 -> 37. **Measured identically, v2 is the better checkpoint.** Do not quote
-the old three-way table; every arm of it differed in two factors.
-
-**Item 3 (counter-aligned boundary cases) is built and run.** Fourteen cases,
-seven languages, execution-proved: a loosening that IS a bug in
-`mechanism_heldout`, a tightening that IS a fix in `clean_heldout`.
-**Denominators changed: 14 -> 21 and 27 -> 34.**
-
-| set | n | fully correct | false alarms |
+| checkpoint | schema | rendering | locus |
 |---|---|---|---|
-| `mechanism_heldout` | 21 | 19 (90%) | 0 |
-| `clean_heldout` | 34 | 34 (100%) | 0 |
+| `oracle-merged` | on | unified | 41/46 |
+| `oracle-merged` | on | git `--word-diff` | 36/46 |
+| `oracle-merged` | off | module word-diff | **35/46** |
+| `mechanism-v2` | off | module word-diff | **37/46** |
 
-**The surface rule is falsified.** v2 answers all 14 counter-aligned cases
-correctly, including in c, go and java — the three languages where it fails
-`bench/basic`. Combined with `oracle-merged` (no clean-direction training)
-failing the same cases under the same rendering, the direction-rule story is
-refuted twice over and must not go in the paper.
+Same weights, configuration only: 41 -> 35, larger than the 41 -> 37 gap it was
+invoked to explain. **Measured identically, v2 is the better checkpoint.** Never
+quote the old three-way table.
 
-# The finding that outranks everything above
+**2. The surface-rule story is dead, refuted twice.** Off-by-one tracks the
+renderer, not the weights (8-9/9 unified, 4-5/9 word-diff, whichever
+checkpoint), and `oracle-merged` reproduces the collapse with no clean-direction
+training at all. Fourteen counter-aligned boundary cases were then built —
+a loosening that IS a bug, a tightening that IS a fix, seven languages,
+execution-proved — and **v2 answers all 14 correctly.**
+Denominators changed: `mechanism_heldout` 14 -> 21, `clean_heldout` 27 -> 34.
 
-**v2 fabricates executed program output, with absolute paths into the training
-corpus's directory.** On `go-offbyone` it justifies a wrong "this is a repair"
-by quoting a Go panic trace from
-`/home/arp/Documents/oracle/bench/mechanism_pilot/go-offbyone.go:6` — a file
-that does not exist.
+**3. v2 fabricates executed program output.** It justifies a wrong verdict by
+quoting a Go panic trace from an absolute path inside `bench/mechanism_pilot`
+for a file that does not exist. Of 101 answers, 42 quote program output, 6 cite
+absolute paths, **0 of those paths exist**, and two name cases created after the
+checkpoint was trained. Five of the six sit inside answers the scorer graded
+correct.
 
-| across v2's 101 answers | count |
-|---|---|
-| quote executed program output | 42 |
-| of those, cite an absolute path | 6 |
-| paths pointing into `bench/mechanism_pilot/` | 6 |
-| those paths that exist | **0** |
+**4. The diagnosis, and it is the reason for everything below.** Of 54 buggy
+cases v2 missed six, and **five of the six reproduce a training template
+verbatim** — three the `fix` template, two the `rename` template — each ending
+in "no defect". `php-shadow-update` shows the mechanism: a shadowed variable
+looks like a rename, so the model matched the shape, printed the sentence, and
+the sentence carried it to a clean verdict. Two structural causes, neither
+reachable by prompting (which is why five prompt attempts lost):
 
-Two name cases created on 27 Aug that did not exist when v2 was trained. The
-mechanism is `dataset_builder/build_mechanism_corpus.py:150`: every `fix` target
-reads "the program's output changes from {was} to {now}", which teaches the form
-without teaching that the quote must be something you ran.
+- `Analysis` emitted `summary` first, so the verdict was the first key
+  generated and generation only runs forwards. The v1 prompt asks the model to
+  "state to yourself what runtime behaviour differs now" and gives it **nowhere
+  to write that down**.
+- Matching a template is cheaper than reading the code.
 
-**Five of the six sit inside answers the scorer graded correct**, inside
-`clean_heldout`'s 34/34. Right verdict, invented justification. This decides
-item 5 toward the strict reading: the fabrication is *evidence*, not decoration.
+# The v2 contract (built, untrained until the pilot lands)
 
-# The v2 output contract is built and unmeasured (27 Aug)
+`config.OUTPUT_CONTRACT` = `v1` | `v2`, **default v1**. One switch moves prompt,
+format hint and expected keys together — they are deliberately not selectable
+apart, because finding 1 above is what happens when they drift.
 
-Diagnosis: **every missed defect is the model agreeing with its own first
-sentence.** Five of v2's six misses reproduce a training template verbatim, and
-every template ends in "no defect". Two causes: `summary` was the first key
-generated, so the verdict preceded the evidence and could not be revised; and
-the templates were cheaper than reading the code.
+`Effect` is the FIRST field of `Analysis`: `trigger`, `before`, `after`,
+`direction`. `grade_effect()` scores three tiers on every run and every
+`--score`:
 
-Built, all no-GPU, all self-checks green, no existing number moved:
+| tier | question | catches |
+|---|---|---|
+| `direction_ok` | which way did the code move | inversions, which `identified()` structurally cannot see |
+| `observable_ok` | does the claim match what ran | invented values |
+| `fabricated` | proof, not suspicion | an absolute path the model was never given, or a claimed change on byte-identical output |
 
-- `config.OUTPUT_CONTRACT` = `v1` | `v2`, default **v1**. One switch moves
-  prompt, format hint and expected keys together.
-- `Effect` is the FIRST field of `Analysis`: `trigger`, `before`, `after`,
-  `direction`. v1 targets stay byte-identical (`exclude_none`).
-- `grade_effect()` scores three tiers on every run and every `--score`:
-  `direction_ok` (catches inversions, which `identified()` cannot see),
-  `observable_ok`, and `fabricated` (absolute path, or a claimed change on
-  byte-identical output).
-- `executed_effect()` fills the field by RUNNING the case, and the `fix`
-  template no longer quotes program output in prose.
+**Baseline: 0 checkable claims on all seven stored runs.** No checkpoint in this
+project has ever made one.
 
-**Baseline: 0 checkable claims out of 46/21/34 on every stored run.** No
-checkpoint here has ever made one. `direction_ok` is the number to watch.
+# Do this first, in order
 
-**The v2 contract is untrained and therefore unproven.** Do not describe it as
-a fix until a run exists. Acceptance criterion, fixed in advance: `direction_ok`
-materially above what v1's six template misses imply, with `fabricated` at zero.
+**1. Score the pilot.** Serve it, then set the contract on BOTH sides or you
+reintroduce finding 1:
 
-# What to do, in order
+    ssh oracle-gpu 'cd ~/oracle && nohup .venv/bin/python -m llm_explainer.serve \
+        --port 8111 --model artifacts/sft-v2-pilot > ~/oracle/serve.log 2>&1 &'
+    ssh -f -N -L 8111:localhost:8111 oracle-gpu
 
-**0. Train one v2 checkpoint.** `ORACLE_OUTPUT_CONTRACT=v2` for corpus build,
-training and evaluation — all three, or the contract mismatch alone costs six
-cases in forty-six. Rebuild the corpus first (`executed_effect` needs to run),
-check the step arithmetic (records x epochs / (batch x grad_accum)), then score
-with the same env var set.
+    ORACLE_OUTPUT_CONTRACT=v2 ORACLE_INCLUDE_SCHEMA=false ORACLE_INFERENCE_SAMPLES=1 \
+      .venv/bin/python bench/basic_bench.py --backend ollama \
+      --model-name sft-v2-pilot --host http://localhost:8111 --word-diff-module \
+      --out data/basic_bench_v2_pilot.jsonl
+    # --root bench/mechanism_heldout --out data/heldout_mech_v2_pilot.jsonl
+    # --root bench/clean_heldout     --out data/heldout_clean_v2_pilot.jsonl
 
+Locus is comparable to 37/46, 19/21, 34/34. The three effect tiers have no
+prior — baseline is zero claims, so any well-formed claim is new information.
 
-**1. Count fabricated evidence on `oracle-merged` and `mechanism-v1`**, same
-three sets, same detector (absolute path, or a quoted output that no run
-produces). Does the untemplated checkpoint do it too, and at what rate? This is
-the number that turns the finding from an anecdote about one checkpoint into a
-claim about templated distillation. No training, ~25 min of GPU.
+**2. Read the result honestly.** This run answers TWO questions only: does the
+model emit a well-formed `effect`, and does `direction_ok` beat zero on
+held-out families. It does **not** answer whether the contract fixes explanation
+correctness in general — 80 unique targets, heavily upsampled, and the two
+shadow-update misses are a family the training never saw. **A poor
+`direction_ok` is ambiguous between "the contract is wrong" and "318 records is
+too little." Do not conclude the first from this run.**
 
-**2. Decide whether the `fix` template should quote program output at all.**
-It is one f-string. If removing it removes the fabrication, that is a corpus
-intervention with a measured before and after — the seventh approach, and the
-first aimed at a failure mode nobody else has reported.
+**3. Then decide the fork that is still open.** Only executable cases can carry
+a true `effect`; the 1673 teacher-labelled commits in `data/labelled_all.jsonl`
+have no pre/post to run, so the full v2 corpus would be 83% effect-free, which
+teaches the field is optional. The builder refuses to do this quietly — it
+prints the counts and points at `--no-bulk`. If the pilot shows the format is
+learned, the real experiment is a Groq `gpt-oss-120b` pass adding
+trigger/before/after to those 1673 records (all `hinted: False`, so the leak fix
+holds), then the full ~2000-record corpus at ~250 steps.
 
-**3. Hand-grade v2's 46 for mechanism.** Still open. 37/46 is a locus floor and
-is not comparable to the 31/46 that `oracle-merged` and `mechanism-v1` scored on
-locus+mechanism. Predictions are in `data/basic_bench_mechanism_v2.jsonl`; needs
-no GPU. Grades go in `data/handgrade_mechanism_v2.csv` beside v1's. **Apply the
-strict hallucination rule decided above, and re-grade v1 under it too.**
+# Still open, unchanged by 27 Aug
 
-**4. Explain the `bench/basic` off-by-one failures.** Narrower question now:
-why does v2 fail `c-array-bound`, `go-offbyone`, `java-array-bound` while
-passing seven counter-aligned cases of the same family? The one visible
-difference is that the failing cases bound the loop with the container's own
-length expression (`len(xs)`, `xs.length`, literal `5`) and the passing ones use
-a separate parameter `n`. **Untested hypothesis** — build the discriminating
-cases before believing it.
-
-**5. The 40 real commits — still the strongest evidence available and still not
+**4. The 40 real commits — still the strongest evidence available and still not
 run.** `data/real_commits.jsonl`, seed 20260826, five held-out projects. Run on
-**v2 and `mechanism-v1` both** or the numbers cannot be attributed.
+two checkpoints or the numbers cannot be attributed.
 
     .venv/bin/python bench/real_commits.py --run data/real_commits.jsonl
-    .venv/bin/python bench/real_commits.py --sheet data/real_commits.jsonl
 
-**6. Inter-rater agreement.** `data/rater_packet.md` is ready and blinded. Needs
-a person, not a GPU. Closes "every mechanism number in this project has one
-rater".
+**5. Inter-rater agreement.** `data/rater_packet.md` is ready and blinded. Needs
+a person, not a GPU. Closes "every mechanism number here has one rater".
+
+**6. Hand-grade v2's 46 for mechanism.** 37/46 is a locus floor, not comparable
+to the 31/46 that `oracle-merged` and `mechanism-v1` scored on locus+mechanism.
+Predictions are in `data/basic_bench_mechanism_v2.jsonl`. If `grade_effect`
+works on the pilot, this may be mechanisable instead of hand-graded.
 
 **7. Cost and latency, 3B vs 120B.** Untouched. The teacher scores 93% against
 the student's 67%, so a reviewer will ask what the small model buys.
 
-**Do not** retrain before items 1–2, add more prompt rules (five attempts, all
-lost), or spend GPU on DPO (closed as a null).
+**8. A case worth building: hunk re-anchoring.** A real commit (Go `Counter`)
+added `Reset()` around an existing `mu.Lock()`, so `Value()` silently lost its
+lock. The lock lines are unchanged CONTEXT, anchored under the added function —
+nothing in the diff signals the loss, you must notice an absence. The model
+called it a deadlock in `Reset`. **Word-diff does not fix this** (verified); it
+is a third artifact class, distinct from in-place-edit and block-rewrite. Label
+is provable with `go run -race`, but `_run()` has no `-race` flag yet and a race
+is not deterministic the way the off-by-one cases are.
+
+# Traps that have already cost this project a result
+
+- **Fix prompt shape and diff rendering across every arm of a comparison**, and
+  record both in the run file. This cost six cases in forty-six.
+- **Score word-diff-trained checkpoints with `--word-diff-module`**, never
+  `--word-diff` (git) — they disagree on 24% of cases.
+- **Check step arithmetic before quoting any run:** records x epochs /
+  (batch x grad_accum). Half of two earlier corpora trained on a subset unnoticed.
+  The pilot: 318 x 2 / 8 = 79.5 -> 80 steps, and all 318 survived the
+  fully-masked drop.
+- **Never mix benchmark denominators.** 12-, 14-, 27-, 44-, 46-, 21- and 34-case
+  runs are not comparable.
+- **Never report a score on `bench/mechanism_pilot` or `bench/clean_direction`** —
+  those are training data.
+- **No more prompt-rule fixes** (five attempts, all lost) and **no DPO**
+  (null, and the pairs do not fit 6GB).
+- Locus is a floor, not a verdict. `identified()` cannot see an inverted claim.
 
 # The honest read, for the paper
 

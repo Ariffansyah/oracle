@@ -1,0 +1,13 @@
+{
+  "id": "rb-row-min-reset-rename",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "refactor",
+  "parent": "rb-row-min-reset",
+  "category": "logic-error",
+  "note": "renames the local `best` to `best_x`; output stays '[1, 2, 5]'",
+  "renamed": [
+    "best",
+    "best_x"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "rb-array-mutate-iterate-rename",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "refactor",
+  "parent": "rb-array-mutate-iterate",
+  "category": "logic-error",
+  "note": "renames the local `items` to `items_x`; output stays '[1, 3]'",
+  "renamed": [
+    "items",
+    "items_x"
+  ]
+}

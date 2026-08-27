@@ -1,0 +1,13 @@
+{
+  "id": "js-precedence-total-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-precedence-total",
+  "category": "logic-error",
+  "note": "renames the local `total` to `total_x`; output stays '16'",
+  "renamed": [
+    "total",
+    "total_x"
+  ]
+}

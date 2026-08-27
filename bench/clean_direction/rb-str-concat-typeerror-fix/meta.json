@@ -1,0 +1,9 @@
+{
+  "id": "rb-str-concat-typeerror-fix",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "fix",
+  "parent": "rb-str-concat-typeerror",
+  "category": "logic-error",
+  "note": "reverses rb-str-concat-typeerror: '/home/arp/Documents/oracle/bench/mechanism_pilot/rb-str-concat-typeerror/post.rb:2:in \\'Integer#+\\': String can\\'t be coerced into Integer (TypeError)\\n\\n  count + \" \" + label\\n          ^^^\\n\\tfrom /home/arp/Documents/oracle/bench/mechanism_pilot/rb-str-concat-typeerror/post.rb:2:in \\'Object#build_message\\'\\n\\tfrom /home/arp/Documents/oracle/bench/mechanism_pilot/rb-str-concat-typeerror/post.rb:5:in \\'<main>\\'' -> '3 items'"
+}

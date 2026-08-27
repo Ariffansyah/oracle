@@ -1,0 +1,6 @@
+{
+  "id": "c-rounding-direction", "language": "c", "ext": "c", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["round up", "ceiling", "partial", "remainder", "last page"]],
+  "note": "the round-up idiom was removed, so a partial final page is dropped. Verified: 4 -> 3"
+}

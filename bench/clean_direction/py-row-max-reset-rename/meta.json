@@ -1,0 +1,13 @@
+{
+  "id": "py-row-max-reset-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-row-max-reset",
+  "category": "logic-error",
+  "note": "renames the local `best` to `best_x`; output stays '[3, 9, 5]'",
+  "renamed": [
+    "best",
+    "best_x"
+  ]
+}

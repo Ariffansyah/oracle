@@ -1,0 +1,13 @@
+{
+  "id": "java-ratio-trunc-rename",
+  "language": "java",
+  "ext": "java",
+  "label": "refactor",
+  "parent": "java-ratio-trunc",
+  "category": "logic-error",
+  "note": "renames the local `scorePercentage` to `scorePercentage_x`; output stays '33.33'",
+  "renamed": [
+    "scorePercentage",
+    "scorePercentage_x"
+  ]
+}

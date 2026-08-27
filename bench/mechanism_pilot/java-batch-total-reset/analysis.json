@@ -1,0 +1,10 @@
+{
+  "summary": "The change moves the declaration of the running total variable outside the outer loop and removes the per‑iteration reset, causing batch totals to accumulate across batches, which is a logic error.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "'total' is now declared before the outer loop and never reset for each batch, so out[i] receives the cumulative sum of all previous batches plus the current one, producing incorrect results for any batch after the first.",
+      "file": "java-batch-total-reset.java"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "java-int-wrap-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-int-wrap",
+  "category": "logic-error",
+  "note": "reverses java-int-wrap: '-2147483648' -> 'Exception in thread \"main\" java.lang.ArithmeticException: integer overflow\\n\\tat java.base/java.lang.Math.addExact(Math.java:911)\\n\\tat Main.safeAdd(pre.java:3)\\n\\tat Main.main(pre.java:6)'"
+}

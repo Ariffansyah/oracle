@@ -1,0 +1,9 @@
+{
+  "id": "rb-fallback-swap-fix",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "fix",
+  "parent": "rb-fallback-swap",
+  "category": "logic-error",
+  "note": "reverses rb-fallback-swap: 'anonymous\\nanonymous' -> 'anonymous\\nada'"
+}

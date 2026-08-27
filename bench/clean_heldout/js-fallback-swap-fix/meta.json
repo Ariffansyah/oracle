@@ -1,0 +1,9 @@
+{
+  "id": "js-fallback-swap-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-fallback-swap",
+  "category": "logic-error",
+  "note": "reverses js-fallback-swap: 'anonymous anonymous' -> 'anonymous ada'"
+}

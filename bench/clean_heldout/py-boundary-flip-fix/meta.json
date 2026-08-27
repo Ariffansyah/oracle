@@ -1,0 +1,9 @@
+{
+  "id": "py-boundary-flip-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-boundary-flip",
+  "category": "off-by-one",
+  "note": "reverses py-boundary-flip: '[False, False, True]' -> '[False, True, True]'"
+}

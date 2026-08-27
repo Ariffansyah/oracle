@@ -1,0 +1,9 @@
+{
+  "id": "php-ratio-trunc-fix",
+  "language": "php",
+  "ext": "php",
+  "label": "fix",
+  "parent": "php-ratio-trunc",
+  "category": "logic-error",
+  "note": "reverses php-ratio-trunc: '0.00' -> '33.33'"
+}

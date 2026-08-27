@@ -1,0 +1,6 @@
+{
+  "id": "rb-swallowed-error", "language": "ruby", "ext": "rb", "buggy": true,
+  "category": "error-handling",
+  "must_mention": [["swallow", "silently", "0", "rescue", "instead of raising"]],
+  "note": "the rescue now returns 0 instead of raising, so an unparseable port silently becomes port 0. Verified: 'caught: bad port: http' -> '0'"
+}

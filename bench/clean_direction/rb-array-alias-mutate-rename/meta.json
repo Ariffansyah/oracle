@@ -1,0 +1,13 @@
+{
+  "id": "rb-array-alias-mutate-rename",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "refactor",
+  "parent": "rb-array-alias-mutate",
+  "category": "logic-error",
+  "note": "renames the local `data` to `data_x`; output stays '[1, 2, 3]\\n[1, 2, 3, :done]'",
+  "renamed": [
+    "data",
+    "data_x"
+  ]
+}

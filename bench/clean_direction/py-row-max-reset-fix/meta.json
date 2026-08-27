@@ -1,0 +1,9 @@
+{
+  "id": "py-row-max-reset-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-row-max-reset",
+  "category": "logic-error",
+  "note": "reverses py-row-max-reset: '[3, 9, 9]' -> '[3, 9, 5]'"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "rb-swallowed-error-fix",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "fix",
+  "parent": "rb-swallowed-error",
+  "category": "error-handling",
+  "note": "reverses rb-swallowed-error: '0' -> 'caught: bad port: http'"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "js-word-count-reset-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-word-count-reset",
+  "category": "logic-error",
+  "note": "renames the local `lineWordCounts` to `lineWordCounts_x`; output stays '[ 2, 3, 1 ]'",
+  "renamed": [
+    "lineWordCounts",
+    "lineWordCounts_x"
+  ]
+}

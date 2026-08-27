@@ -1,0 +1,13 @@
+{
+  "id": "go-ratio-trunc-rename",
+  "language": "go",
+  "ext": "go",
+  "label": "refactor",
+  "parent": "go-ratio-trunc",
+  "category": "logic-error",
+  "note": "renames the local `scorePercentage` to `scorePercentage_x`; output stays '33.33'",
+  "renamed": [
+    "scorePercentage",
+    "scorePercentage_x"
+  ]
+}

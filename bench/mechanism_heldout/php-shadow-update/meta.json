@@ -1,0 +1,6 @@
+{
+  "id": "php-shadow-update", "language": "php", "ext": "php", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["sum", "never", "discard", "unused", "total"]],
+  "note": "the loop assigns to an unused local, so total never accumulates. Verified: 6 -> 0"
+}

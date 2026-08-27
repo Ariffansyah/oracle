@@ -1,0 +1,9 @@
+{
+  "id": "go-unit-scale-fix",
+  "language": "go",
+  "ext": "go",
+  "label": "fix",
+  "parent": "go-unit-scale",
+  "category": "logic-error",
+  "note": "reverses go-unit-scale: '3' -> '3000'"
+}

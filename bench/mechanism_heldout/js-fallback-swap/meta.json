@@ -1,0 +1,6 @@
+{
+  "id": "js-fallback-swap", "language": "javascript", "ext": "js", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["order", "fallback", "always", "precedence", "overrides"]],
+  "note": "swapping the operands makes the fallback win whenever it is truthy, so the real name is never used. Verified: 'anonymous ada' -> 'anonymous anonymous'"
+}

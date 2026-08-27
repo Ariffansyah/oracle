@@ -1,0 +1,10 @@
+{
+  "summary": "The commit replaces a strict equality check with a loose equality, introducing type‑coercion that can cause unintended matches (e.g., \"007\" == 7). This logic change can lead to incorrect behavior or security issues when IDs are compared.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Using == allows JavaScript to coerce differing types, so values like \"0\" == false, \"\" == 0, or \"007\" == 7 evaluate to true, potentially causing false positive matches or authorization bypasses.",
+      "file": "js-loose-equal-coerce.js"
+    }
+  ]
+}

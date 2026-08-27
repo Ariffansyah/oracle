@@ -1,0 +1,10 @@
+{
+  "summary": "The change swaps the string concat-assign `.=` for the numeric add-assign `+=` in build_label, so a call that used to return \"user-bob\" now raises a fatal TypeError. This introduces a runtime defect on the existing call path.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "`$label += $name` applies the arithmetic `+` operator to two non-numeric strings. PHP 8 does not coerce them to numbers here; it throws `TypeError: Unsupported operand types: string + string`, so build_label(\"user-\", \"bob\") fatals instead of returning \"user-bob\". The direction matters: `+=` does not concatenate and does not silently produce 0, it aborts the request.",
+      "file": "php-compound-assign-coerce.php"
+    }
+  ]
+}

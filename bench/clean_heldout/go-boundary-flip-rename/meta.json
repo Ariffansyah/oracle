@@ -1,0 +1,13 @@
+{
+  "id": "go-boundary-flip-rename",
+  "language": "go",
+  "ext": "go",
+  "label": "refactor",
+  "parent": "go-boundary-flip",
+  "category": "off-by-one",
+  "note": "renames the local `inRange` to `inRange_x`; output stays 'true true false'",
+  "renamed": [
+    "inRange",
+    "inRange_x"
+  ]
+}

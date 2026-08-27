@@ -1,0 +1,13 @@
+{
+  "id": "js-loose-equal-coerce-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-loose-equal-coerce",
+  "category": "logic-error",
+  "note": "renames the local `isMatch` to `isMatch_x`; output stays 'false'",
+  "renamed": [
+    "isMatch",
+    "isMatch_x"
+  ]
+}

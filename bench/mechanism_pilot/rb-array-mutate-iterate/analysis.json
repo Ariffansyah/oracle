@@ -1,0 +1,10 @@
+{
+  "summary": "The change removes the defensive .dup() and iterates over the original array while deleting elements, introducing a logic error where deleting items during iteration can cause some even numbers to be skipped and remain in the array.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Iterating over items and deleting elements from the same array can skip elements (e.g., consecutive even numbers), so remove_evens may leave some evens behind, breaking the intended behavior.",
+      "file": "rb-array-mutate-iterate.rb"
+    }
+  ]
+}

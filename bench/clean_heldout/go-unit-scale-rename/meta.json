@@ -1,0 +1,13 @@
+{
+  "id": "go-unit-scale-rename",
+  "language": "go",
+  "ext": "go",
+  "label": "refactor",
+  "parent": "go-unit-scale",
+  "category": "logic-error",
+  "note": "renames the local `timeoutMillis` to `timeoutMillis_x`; output stays '3000'",
+  "renamed": [
+    "timeoutMillis",
+    "timeoutMillis_x"
+  ]
+}

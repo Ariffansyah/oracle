@@ -1,0 +1,13 @@
+{
+  "id": "py-boundary-flip-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-boundary-flip",
+  "category": "off-by-one",
+  "note": "renames the local `allow` to `allow_x`; output stays '[False, True, True]'",
+  "renamed": [
+    "allow",
+    "allow_x"
+  ]
+}

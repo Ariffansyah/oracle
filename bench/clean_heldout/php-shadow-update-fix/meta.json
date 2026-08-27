@@ -1,0 +1,9 @@
+{
+  "id": "php-shadow-update-fix",
+  "language": "php",
+  "ext": "php",
+  "label": "fix",
+  "parent": "php-shadow-update",
+  "category": "logic-error",
+  "note": "reverses php-shadow-update: '0' -> '6'"
+}

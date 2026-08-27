@@ -1,0 +1,10 @@
+{
+  "summary": "The commit replaces Math.addExact with plain addition, removing overflow checking. This introduces a defect where integer overflow silently wraps instead of throwing, leading to incorrect results.",
+  "findings": [
+    {
+      "category": "input-validation",
+      "explanation": "safeAdd no longer validates overflow; adding Integer.MAX_VALUE and 1 wraps to Integer.MIN_VALUE instead of throwing ArithmeticException, causing silent incorrect results.",
+      "file": "java-int-wrap.java"
+    }
+  ]
+}

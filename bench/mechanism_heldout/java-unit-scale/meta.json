@@ -1,0 +1,6 @@
+{
+  "id": "java-unit-scale", "language": "java", "ext": "java", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["1000", "100", "unit", "millisecond", "scale"]],
+  "note": "1000 became 100, so every converted duration is 10x too small. Verified: 5000 -> 500"
+}

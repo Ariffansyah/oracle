@@ -1,0 +1,9 @@
+{
+  "id": "go-first-empty-guard-fix",
+  "language": "go",
+  "ext": "go",
+  "label": "fix",
+  "parent": "go-first-empty-guard",
+  "category": "logic-error",
+  "note": "reverses go-first-empty-guard: 'panic: runtime error: index out of range [0] with length 0\\n\\ngoroutine 1 [running]:\\nmain.firstOrDefault(...)\\n\\t/home/arp/Documents/oracle/bench/mechanism_pilot/go-first-empty-guard/post.go:6\\nmain.main()\\n\\t/home/arp/Documents/oracle/bench/mechanism_pilot/go-first-empty-guard/post.go:9 +0xa\\nexit status 2' -> '-1'"
+}

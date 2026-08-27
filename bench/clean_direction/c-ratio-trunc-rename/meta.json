@@ -1,0 +1,13 @@
+{
+  "id": "c-ratio-trunc-rename",
+  "language": "c",
+  "ext": "c",
+  "label": "refactor",
+  "parent": "c-ratio-trunc",
+  "category": "logic-error",
+  "note": "renames the local `score_percentage` to `score_percentage_x`; output stays '33.33'",
+  "renamed": [
+    "score_percentage",
+    "score_percentage_x"
+  ]
+}

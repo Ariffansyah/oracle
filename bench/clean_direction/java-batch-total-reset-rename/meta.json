@@ -1,0 +1,13 @@
+{
+  "id": "java-batch-total-reset-rename",
+  "language": "java",
+  "ext": "java",
+  "label": "refactor",
+  "parent": "java-batch-total-reset",
+  "category": "logic-error",
+  "note": "renames the local `batches` to `batches_x`; output stays '3 7 5'",
+  "renamed": [
+    "batches",
+    "batches_x"
+  ]
+}

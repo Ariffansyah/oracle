@@ -1,0 +1,6 @@
+{
+  "id": "js-precedence-total", "language": "javascript", "ext": "js", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["precedence", "parenthes", "multiplied", "before", "grouping"]],
+  "note": "removing parentheses scales only tax, not the sum. Verified: 16 -> 7"
+}

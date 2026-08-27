@@ -1,0 +1,6 @@
+{
+  "id": "py-boundary-flip", "language": "python", "ext": "py", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [[">=", "boundary", "exactly 18", "excluded", "off-by-one"]],
+  "note": ">= to > excludes the boundary value itself. Verified: [False, True, True] -> [False, False, True]"
+}

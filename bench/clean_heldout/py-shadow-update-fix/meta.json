@@ -1,0 +1,9 @@
+{
+  "id": "py-shadow-update-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-shadow-update",
+  "category": "logic-error",
+  "note": "reverses py-shadow-update: '0' -> '6'"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "c-signed-overflow-fix",
+  "language": "c",
+  "ext": "c",
+  "label": "fix",
+  "parent": "c-signed-overflow",
+  "category": "logic-error",
+  "note": "reverses c-signed-overflow: '-2147483648' -> '2147483647'"
+}

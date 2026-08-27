@@ -1,0 +1,13 @@
+{
+  "id": "js-swallowed-error-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-swallowed-error",
+  "category": "error-handling",
+  "note": "renames the local `parseConfig` to `parseConfig_x`; output stays 'caught: bad config'",
+  "renamed": [
+    "parseConfig",
+    "parseConfig_x"
+  ]
+}

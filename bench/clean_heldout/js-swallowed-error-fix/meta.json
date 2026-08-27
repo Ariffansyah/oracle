@@ -1,0 +1,9 @@
+{
+  "id": "js-swallowed-error-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-swallowed-error",
+  "category": "error-handling",
+  "note": "reverses js-swallowed-error: '{}' -> 'caught: bad config'"
+}

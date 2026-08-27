@@ -1,0 +1,13 @@
+{
+  "id": "js-array-mutate-iterate-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-array-mutate-iterate",
+  "category": "logic-error",
+  "note": "renames the local `items` to `items_x`; output stays '[ 1, 3 ]'",
+  "renamed": [
+    "items",
+    "items_x"
+  ]
+}

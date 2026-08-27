@@ -1,0 +1,13 @@
+{
+  "id": "py-min-empty-guard-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-min-empty-guard",
+  "category": "logic-error",
+  "note": "renames the local `nums` to `nums_x`; output stays 'None'",
+  "renamed": [
+    "nums",
+    "nums_x"
+  ]
+}

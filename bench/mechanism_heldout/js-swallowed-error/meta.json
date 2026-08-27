@@ -1,0 +1,6 @@
+{
+  "id": "js-swallowed-error", "language": "javascript", "ext": "js", "buggy": true,
+  "category": "error-handling",
+  "must_mention": [["swallow", "silently", "empty", "catch", "instead of throwing"]],
+  "note": "the catch returns an empty object instead of throwing, so a malformed config is indistinguishable from an empty one. Verified: 'caught: bad config' -> '{}'"
+}

@@ -1,0 +1,10 @@
+{
+  "summary": "The commit changes `with_flag` to assign the input array directly to `out` instead of duplicating it, causing the method to mutate the caller's array and potentially raise errors on frozen arrays. This introduces a logic error and unexpected side effects.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "`with_flag` now modifies the original `items` array by appending :done, whereas the previous version duplicated the array. Callers expecting the input to remain unchanged will see unintended mutations, and if the input array is frozen this will raise a RuntimeError, leading to bugs.",
+      "file": "rb-array-alias-mutate.rb"
+    }
+  ]
+}

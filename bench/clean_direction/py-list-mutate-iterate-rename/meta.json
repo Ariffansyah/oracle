@@ -1,0 +1,13 @@
+{
+  "id": "py-list-mutate-iterate-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-list-mutate-iterate",
+  "category": "logic-error",
+  "note": "renames the local `items` to `items_x`; output stays '[1, 3]'",
+  "renamed": [
+    "items",
+    "items_x"
+  ]
+}

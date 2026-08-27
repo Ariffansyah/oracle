@@ -1,0 +1,13 @@
+{
+  "id": "rb-first-empty-guard-rename",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "refactor",
+  "parent": "rb-first-empty-guard",
+  "category": "logic-error",
+  "note": "renames the local `first_or_default` to `first_or_default_x`; output stays '-1'",
+  "renamed": [
+    "first_or_default",
+    "first_or_default_x"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "rb-array-alias-mutate-fix",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "fix",
+  "parent": "rb-array-alias-mutate",
+  "category": "logic-error",
+  "note": "reverses rb-array-alias-mutate: '[1, 2, 3, :done]\\n[1, 2, 3, :done]' -> '[1, 2, 3]\\n[1, 2, 3, :done]'"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "js-loose-equal-coerce-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-loose-equal-coerce",
+  "category": "logic-error",
+  "note": "reverses js-loose-equal-coerce: 'true' -> 'false'"
+}

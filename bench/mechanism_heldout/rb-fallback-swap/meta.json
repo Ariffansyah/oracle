@@ -1,0 +1,6 @@
+{
+  "id": "rb-fallback-swap", "language": "ruby", "ext": "rb", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["order", "fallback", "always", "precedence", "overrides"]],
+  "note": "the test now runs on fallback, so fallback always wins. Verified: 'anonymous/ada' -> 'anonymous/anonymous'"
+}

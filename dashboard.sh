@@ -170,11 +170,14 @@ fi
 # What the training actually produced. A merged model older than the DPO
 # adapter means the last run died before the merge, which is exactly what an
 # OOM at step 0 looks like: the process is gone and every artifact is stale.
-R 'cd ~/oracle/artifacts 2>/dev/null && stat -c "%n %y" \
-     sft-adapter/adapter_model.safetensors dpo-adapter/adapter_model.safetensors \
-     sft-ml8-grounded/adapter_model.safetensors \
-     sft-merged/model.safetensors oracle-merged/model.safetensors 2>/dev/null' \
-  | awk '{printf "    %-44s %s %s\n", $1, $2, substr($3,1,5)}'
+# Hand-naming the artifacts missed the two that matter: sft-mechanism-v1 and
+# -v2 are the checkpoints the current work is about, and neither was on this
+# list, so the panel showed oracle-merged as the newest thing on the box for
+# two days. Glob the adapters and merges instead, newest last, same reason the
+# error panel globs the logs.
+R 'cd ~/oracle/artifacts 2>/dev/null && stat -c "%y %n" \
+     */adapter_model.safetensors */model.safetensors 2>/dev/null | sort' \
+  | awk '{printf "    %-46s %s %s\n", $4, $1, substr($2,1,5)}'
 
 sec "gpu (on $H)"
 R 'nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader 2>/dev/null | sed "s/^/  /"' \
@@ -248,36 +251,80 @@ sec "basic-algorithm benchmark (the 8/10 goal)"
 # never read off the rows' own verdict fields: scorer fixes land after runs do
 # (the hyphen fix moved the base model a whole case) and a stale field would
 # quietly report the old number forever.
-BENCH_CASES=$(ls -d bench/basic/*/ 2>/dev/null | wc -l)
-BENCH_LANGS=$(sed -n 's/.*"language": *"\([^"]*\)".*/\1/p' bench/basic/*/meta.json 2>/dev/null \
-  | sort -u | wc -l)
+#
+# There are now five case roots, and only three of them are evaluation sets.
+# bench/mechanism_pilot and bench/clean_direction are TRAINING data for the
+# mechanism checkpoints, so they are deliberately absent here — a score on them
+# measures memorisation, and basic_bench itself refuses to print one quietly.
+for root in bench/basic bench/mechanism_heldout bench/clean_heldout; do
+  n=$(ls -d $root/*/ 2>/dev/null | wc -l)
+  l=$(sed -n 's/.*"language": *"\([^"]*\)".*/\1/p' $root/*/meta.json 2>/dev/null | sort -u | wc -l)
+  printf '    %-26s %2d cases, %d languages\n' "$(basename "$root")" "$n" "$l"
+done
 if pgrep -f "basic_bench[.]py" >/dev/null; then
   BENCH_MODEL=$(pgrep -af "basic_bench[.]py" | sed -n 's/.*--model-name \([^ ]*\).*/\1/p' | head -1)
+  # Read the live run's --root rather than assuming bench/basic. The held-out
+  # runs go through the same script, and reporting their progress against 46
+  # cases printed "160%, ~74/46 answered" — a bar past 100% on the wrong
+  # denominator, which is worse than no bar.
+  BENCH_ROOT=$(pgrep -af "basic_bench[.]py" | sed -n 's/.*--root \([^ ]*\).*/\1/p' | head -1)
+  BENCH_ROOT=${BENCH_ROOT:-bench/basic}
+  BENCH_CASES=$(ls -d "$BENCH_ROOT"/*/ 2>/dev/null | wc -l)
   # Progress has to come from the server's log: --out is written once, at the
   # end, so the output file says nothing while the run is in flight. The count
-  # is generations answered since that server started, which equals cases done
-  # only when one run owns the server - true here, and labelled as "answered"
-  # rather than "done" so it cannot overstate.
+  # is generations answered since that SERVER started, which equals cases done
+  # only when one run owns the server for its whole life — chain two roots
+  # against one server and it keeps climbing past the total. Clamp it, and say
+  # what it is.
   BENCH_ANS=$(R 'grep -c " -> " "$(ls -t ~/oracle/serve*.log 2>/dev/null | head -1)" 2>/dev/null')
-  job bench green "scoring ${BENCH_MODEL:-?}   $(bar "${BENCH_ANS:-0}" "${BENCH_CASES:-1}")   ~${BENCH_ANS:-0}/$BENCH_CASES answered"
+  BENCH_ANS=${BENCH_ANS:-0}
+  if [ "$BENCH_ANS" -gt "$BENCH_CASES" ] 2>/dev/null; then
+    job bench green "scoring ${BENCH_MODEL:-?} on $(basename "$BENCH_ROOT")   $BENCH_CASES cases   ${DIM}(server has answered $BENCH_ANS since start, incl. earlier runs)"
+  else
+    job bench green "scoring ${BENCH_MODEL:-?} on $(basename "$BENCH_ROOT")   $(bar "$BENCH_ANS" "${BENCH_CASES:-1}")   ~$BENCH_ANS/$BENCH_CASES answered"
+  fi
 else
-  job bench yellow "idle   $BENCH_CASES cases, $BENCH_LANGS languages"
+  job bench yellow "idle"
 fi
-for f in data/basic_bench_*.jsonl; do
-  [ -f "$f" ] || continue
-  .venv/bin/python bench/basic_bench.py --score "$f" 2>/dev/null \
-    | awk -v n="$(basename "$f" .jsonl | sed 's/^basic_bench_//')" '
-        /fully correct/     {fully=$3; pct=$4}
-        /hallucinated/      {h=$2}
-        END {if (fully != "") printf "    %-20s fully %-8s %-6s halluc %s\n", n, fully, pct, h}'
-done
+# Each stored run is scored against the root it was taken on. A heldout file
+# rescored against bench/basic matches no ids at all, which is why these were
+# invisible here until the root was passed through.
+score_run() { # score_run <file> <root>
+  local f=$1 root=$2 total
+  total=$(ls -d "$root"/*/ 2>/dev/null | wc -l)
+  .venv/bin/python bench/basic_bench.py --root "$root" --score "$f" 2>/dev/null \
+    | awk -v n="$(basename "$f" .jsonl | sed 's/^basic_bench_//;s/^heldout_/heldout /')" \
+          -v total="$total" '
+        /fully correct/ {fully=$3; pct=$4}
+        /false alarms/  {fa=$3}
+        END {
+          if (fully == "") exit
+          split(fully, a, "/")
+          # A run taken before cases were added rescores on only the ids it has.
+          # Printing "9/12 (75%)" flush against "37/46 (80%)" invites exactly the
+          # denominator-mixing this project has already published once.
+          part = (a[2] != total) ? sprintf("  <- only %d of %d cases", a[2], total) : ""
+          printf "    %-20s fully %-8s %-6s false alarms %-7s%s\n", n, fully, pct, fa, part
+        }'
+}
+for f in data/basic_bench_*.jsonl;  do [ -f "$f" ] && score_run "$f" bench/basic; done
+for f in data/heldout_mech_*.jsonl; do [ -f "$f" ] && score_run "$f" bench/mechanism_heldout; done
+for f in data/heldout_clean_*.jsonl;do [ -f "$f" ] && score_run "$f" bench/clean_heldout; done
 
 sec "local corpus"
 for f in data/labelled.jsonl data/labelled_multilang.jsonl data/multilang_commits.jsonl \
          data/guard_commits.jsonl data/labelled_guards.jsonl \
-         data/contrastive_pairs.jsonl data/apachejit_commits.jsonl; do
+         data/contrastive_pairs.jsonl data/apachejit_commits.jsonl \
+         data/sft_ml8_grounded.jsonl data/sft_mechanism_v1.jsonl \
+         data/sft_mechanism_v2.jsonl data/real_commits.jsonl; do
   [ -f "$f" ] && printf '  %-34s %6d\n' "$(basename "$f")" "$(wc -l < "$f")"
 done
+# A training corpus is not what it says on the tin: TRL truncates at
+# MAX_SEQ_LENGTH and then DROPS anything whose prompt alone filled the window,
+# and half of sft_mechanism_v1 (858 of 1748) went that way unnoticed. The step
+# count is the check that catches it — records x epochs / (batch x grad_accum)
+# — so print the arithmetic beside the file rather than trusting the line count.
+printf '  %s\n' "${DIM}steps a corpus SHOULD take = records x epochs / 8; if the log ran fewer, it trained on a subset${OFF}"
 
 sec "serving"
 # Name the model, not just the port. A tunnel that answers says nothing about
@@ -298,9 +345,15 @@ sec "errors (on $H)"
 # Hand-naming the logs missed the one that mattered: the 25 Aug retrain wrote
 # to sft_ml8.log, which was on nobody's list, so a failure in a 9.5h run would
 # have shown a clean error panel. Glob every log the box keeps instead.
-R 'grep -hE "^[A-Za-z_.]+Error|Traceback|OutOfMemory" \
-     ~/oracle/*.log 2>/dev/null \
-   | tail -2 | cut -c1-100 | sed "s/^/  /"'
+# -h hid the filename, and nothing carried a date, so a two-week-old traceback
+# from a dead experiment rendered identically to a run that died this minute —
+# and the panel was read as current both times. Name the log and its age.
+R 'cd ~/oracle && grep -lE "^[A-Za-z_.]+Error|Traceback|OutOfMemory" *.log 2>/dev/null \
+   | while read -r f; do
+       printf "%s|%s|%s\n" "$(( ($(date +%s) - $(stat -c %Y "$f")) / 3600 ))" "$f" \
+         "$(grep -hE "^[A-Za-z_.]+Error|Traceback|OutOfMemory" "$f" | tail -1 | cut -c1-72)"
+     done | sort -n | head -3' \
+  | awk -F'|' '{printf "  %-22s %4sh ago  %s\n", $2, $1, $3}'
 
 printf '\n'
 }

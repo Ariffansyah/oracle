@@ -1,0 +1,13 @@
+{
+  "id": "php-compound-assign-coerce-rename",
+  "language": "php",
+  "ext": "php",
+  "label": "refactor",
+  "parent": "php-compound-assign-coerce",
+  "category": "logic-error",
+  "note": "renames the local `label` to `label_x`; output stays 'user-bob'",
+  "renamed": [
+    "label",
+    "label_x"
+  ]
+}

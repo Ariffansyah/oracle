@@ -1,0 +1,13 @@
+{
+  "id": "java-unit-scale-rename",
+  "language": "java",
+  "ext": "java",
+  "label": "refactor",
+  "parent": "java-unit-scale",
+  "category": "logic-error",
+  "note": "renames the local `toMillis` to `toMillis_x`; output stays '5000'",
+  "renamed": [
+    "toMillis",
+    "toMillis_x"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "java-batch-total-reset-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-batch-total-reset",
+  "category": "logic-error",
+  "note": "reverses java-batch-total-reset: '3 10 15' -> '3 7 5'"
+}

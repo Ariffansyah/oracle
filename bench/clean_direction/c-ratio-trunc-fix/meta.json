@@ -1,0 +1,9 @@
+{
+  "id": "c-ratio-trunc-fix",
+  "language": "c",
+  "ext": "c",
+  "label": "fix",
+  "parent": "c-ratio-trunc",
+  "category": "logic-error",
+  "note": "reverses c-ratio-trunc: '0.00' -> '33.33'"
+}

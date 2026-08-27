@@ -1,0 +1,10 @@
+{
+  "summary": "The change replaces the shallow copy of the input array with a direct reference, causing the function to mutate the caller's array instead of returning a new tagged array, which can introduce unintended side‑effects.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "By assigning out = items and then pushing \"tagged\", the original array passed to withTag is modified. Callers expecting the original array to remain unchanged will now see it altered, leading to bugs or incorrect program state.",
+      "file": "js-array-alias-mutate.js"
+    }
+  ]
+}

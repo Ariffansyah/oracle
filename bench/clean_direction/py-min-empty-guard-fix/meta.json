@@ -1,0 +1,9 @@
+{
+  "id": "py-min-empty-guard-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-min-empty-guard",
+  "category": "logic-error",
+  "note": "reverses py-min-empty-guard: 'Traceback (most recent call last):\\n  File \"/home/arp/Documents/oracle/bench/mechanism_pilot/py-min-empty-guard/post.py\", line 4, in <module>\\n    print(smallest([]))\\n          ~~~~~~~~^^^^\\n  File \"/home/arp/Documents/oracle/bench/mechanism_pilot/py-min-empty-guard/post.py\", line 2, in smallest\\n    return min(nums)\\nValueError: min() iterable argument is empty' -> 'None'"
+}

@@ -1,0 +1,10 @@
+{
+  "summary": "The change replaces copying the input iterable with a direct reference, causing the function to mutate the original collection and to fail with an AttributeError when a non‑list iterable is passed, introducing a defect.",
+  "findings": [
+    {
+      "category": "input-validation",
+      "explanation": "with_sentinel now assigns out = items and calls out.append(None). If items is not a mutable list (e.g., a tuple, generator, or other iterable), out.append does not exist, raising AttributeError. Additionally, the original collection is modified, breaking the original contract that the function returns a new list with a sentinel without altering the caller’s data.",
+      "file": "bpy-list-alias-mutate.py"
+    }
+  ]
+}

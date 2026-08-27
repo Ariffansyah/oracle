@@ -1,0 +1,9 @@
+{
+  "id": "go-ratio-trunc-fix",
+  "language": "go",
+  "ext": "go",
+  "label": "fix",
+  "parent": "go-ratio-trunc",
+  "category": "logic-error",
+  "note": "reverses go-ratio-trunc: '0.00' -> '33.33'"
+}

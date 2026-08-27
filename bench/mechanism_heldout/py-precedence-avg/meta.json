@@ -1,0 +1,6 @@
+{
+  "id": "py-precedence-avg", "language": "python", "ext": "py", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["precedence", "parenthes", "multiplied", "before", "grouping"]],
+  "note": "dropping the parentheses makes * bind tighter than +, so only bonus is scaled. Verified: 30 -> 20"
+}

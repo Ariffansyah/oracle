@@ -1,0 +1,10 @@
+{
+  "summary": "The commit changes removeEvens to iterate directly over the input array while mutating it, removing the safe copy. This introduces a logic error because splicing the array during a for...of loop can cause elements to be skipped, leading to incorrect removal of even numbers.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Iterating over items with for...of while calling splice on the same array modifies the collection during iteration, causing the iterator to miss elements (e.g., some even numbers remain). This changes runtime behaviour and produces incorrect results.",
+      "file": "js-array-mutate-iterate.js"
+    }
+  ]
+}

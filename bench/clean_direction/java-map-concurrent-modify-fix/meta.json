@@ -1,0 +1,9 @@
+{
+  "id": "java-map-concurrent-modify-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-map-concurrent-modify",
+  "category": "logic-error",
+  "note": "reverses java-map-concurrent-modify: 'Exception in thread \"main\" java.util.ConcurrentModificationException\\n\\tat java.base/java.util.LinkedHashMap$LinkedHashIterator.nextNode(LinkedHashMap.java:1023)\\n\\tat java.base/java.util.LinkedHashMap$LinkedKeyIterator.next(LinkedHashMap.java:1046)\\n\\tat Main.removeEvens(post.java:5)\\n\\tat Main.main(post.java:13)' -> '{a=1, c=3}'"
+}

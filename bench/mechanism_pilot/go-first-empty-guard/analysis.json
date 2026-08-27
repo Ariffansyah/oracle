@@ -1,0 +1,10 @@
+{
+  "summary": "The change removes the empty‑slice guard in firstOrDefault, so calling it with an empty slice now indexes xs[0] and panics, introducing a runtime defect.",
+  "findings": [
+    {
+      "category": "input-validation",
+      "explanation": "If firstOrDefault is called with an empty []int, the removed len check leads to an out‑of‑range slice access (xs[0]), causing a panic at runtime.",
+      "file": "go-first-empty-guard.go"
+    }
+  ]
+}

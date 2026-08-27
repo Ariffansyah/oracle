@@ -1,0 +1,10 @@
+{
+  "summary": "The commit changes the score calculation to cast after integer division, causing truncation of the ratio before scaling, which yields incorrect percentages for non‑whole ratios.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Casting after integer division truncates the correct/total ratio, so score_percentage returns 0 for many valid inputs (e.g., correct=1, total=3) instead of the expected fractional percentage.",
+      "file": "bc-ratio-trunc.c"
+    }
+  ]
+}

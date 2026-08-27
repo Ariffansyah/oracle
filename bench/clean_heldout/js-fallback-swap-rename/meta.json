@@ -1,0 +1,13 @@
+{
+  "id": "js-fallback-swap-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-fallback-swap",
+  "category": "logic-error",
+  "note": "renames the local `label` to `label_x`; output stays 'anonymous ada'",
+  "renamed": [
+    "label",
+    "label_x"
+  ]
+}

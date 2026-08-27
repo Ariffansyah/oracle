@@ -1,0 +1,10 @@
+{
+  "summary": "The commit changes with_flag to accept its parameter by reference and creates an alias to the input array, causing the function to mutate the caller's array and requiring callers to pass a variable, which can introduce side‑effects and reference‑related warnings.",
+  "findings": [
+    {
+      "category": "api-misuse",
+      "explanation": "Changing the function signature to take $items by reference and aliasing $out =& $items means callers must now pass a variable; passing a literal or expression will trigger a PHP warning \"Only variables can be passed by reference\" and the function will unexpectedly modify the caller's array, breaking existing code that relied on the original copy‑on‑write behavior.",
+      "file": "php-array-ref-alias.php"
+    }
+  ]
+}

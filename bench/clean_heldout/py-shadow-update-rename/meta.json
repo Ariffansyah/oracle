@@ -1,0 +1,13 @@
+{
+  "id": "py-shadow-update-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-shadow-update",
+  "category": "logic-error",
+  "note": "renames the local `total` to `total_x`; output stays '6'",
+  "renamed": [
+    "total",
+    "total_x"
+  ]
+}

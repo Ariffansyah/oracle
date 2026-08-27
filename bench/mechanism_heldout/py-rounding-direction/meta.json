@@ -1,0 +1,6 @@
+{
+  "id": "py-rounding-direction", "language": "python", "ext": "py", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["ceil", "floor", "round", "down", "last page"]],
+  "note": "ceil to floor drops the final partial page, losing the remainder. Verified: 4 -> 3"
+}

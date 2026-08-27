@@ -1,0 +1,9 @@
+{
+  "id": "rb-first-empty-guard-fix",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "fix",
+  "parent": "rb-first-empty-guard",
+  "category": "logic-error",
+  "note": "reverses rb-first-empty-guard: 'nil' -> '-1'"
+}

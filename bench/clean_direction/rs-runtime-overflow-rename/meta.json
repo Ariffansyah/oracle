@@ -1,0 +1,13 @@
+{
+  "id": "rs-runtime-overflow-rename",
+  "language": "rust",
+  "ext": "rs",
+  "label": "refactor",
+  "parent": "rs-runtime-overflow",
+  "category": "logic-error",
+  "note": "renames the local `scores` to `scores_x`; output stays '255'",
+  "renamed": [
+    "scores",
+    "scores_x"
+  ]
+}

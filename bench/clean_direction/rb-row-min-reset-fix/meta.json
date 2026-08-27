@@ -1,0 +1,9 @@
+{
+  "id": "rb-row-min-reset-fix",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "fix",
+  "parent": "rb-row-min-reset",
+  "category": "logic-error",
+  "note": "reverses rb-row-min-reset: '[1, 1, 1]' -> '[1, 2, 5]'"
+}

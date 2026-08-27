@@ -1,0 +1,9 @@
+{
+  "id": "js-math-min-empty-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-math-min-empty",
+  "category": "logic-error",
+  "note": "reverses js-math-min-empty: 'Infinity' -> 'null'"
+}

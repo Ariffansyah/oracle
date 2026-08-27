@@ -1,0 +1,9 @@
+{
+  "id": "c-rounding-direction-fix",
+  "language": "c",
+  "ext": "c",
+  "label": "fix",
+  "parent": "c-rounding-direction",
+  "category": "logic-error",
+  "note": "reverses c-rounding-direction: '3' -> '4'"
+}

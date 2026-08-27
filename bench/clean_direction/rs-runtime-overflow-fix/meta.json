@@ -1,0 +1,9 @@
+{
+  "id": "rs-runtime-overflow-fix",
+  "language": "rust",
+  "ext": "rs",
+  "label": "fix",
+  "parent": "rs-runtime-overflow",
+  "category": "logic-error",
+  "note": "reverses rs-runtime-overflow: \"thread 'main' (21903) panicked at /home/arp/Documents/oracle/bench/mechanism_pilot/rs-runtime-overflow/post.rs:4:17:\\nattempt to add with overflow\\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\" -> '255'"
+}

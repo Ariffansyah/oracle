@@ -1,0 +1,9 @@
+{
+  "id": "php-array-ref-alias-fix",
+  "language": "php",
+  "ext": "php",
+  "label": "fix",
+  "parent": "php-array-ref-alias",
+  "category": "logic-error",
+  "note": "reverses php-array-ref-alias: 'Array\\n(\\n    [0] => 1\\n    [1] => 2\\n    [2] => 3\\n    [3] => done\\n)\\nArray\\n(\\n    [0] => 1\\n    [1] => 2\\n    [2] => 3\\n    [3] => done\\n)' -> 'Array\\n(\\n    [0] => 1\\n    [1] => 2\\n    [2] => 3\\n)\\nArray\\n(\\n    [0] => 1\\n    [1] => 2\\n    [2] => 3\\n    [3] => done\\n)'"
+}

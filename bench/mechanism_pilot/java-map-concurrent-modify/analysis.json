@@ -1,0 +1,10 @@
+{
+  "summary": "The change replaces iteration over a copy of the map's keys with direct iteration over the map's keySet, causing removal of entries during iteration to throw a ConcurrentModificationException, introducing a concurrency defect.",
+  "findings": [
+    {
+      "category": "concurrency",
+      "explanation": "Iterating over m.keySet() and calling m.remove(k) modifies the map during iteration, which triggers a ConcurrentModificationException at runtime.",
+      "file": "java-map-concurrent-modify.java"
+    }
+  ]
+}

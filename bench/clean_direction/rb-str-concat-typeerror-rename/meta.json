@@ -1,0 +1,13 @@
+{
+  "id": "rb-str-concat-typeerror-rename",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "refactor",
+  "parent": "rb-str-concat-typeerror",
+  "category": "logic-error",
+  "note": "renames the local `build_message` to `build_message_x`; output stays '3 items'",
+  "renamed": [
+    "build_message",
+    "build_message_x"
+  ]
+}

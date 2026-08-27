@@ -1,0 +1,10 @@
+{
+  "summary": "The change moves the `best` variable outside the per‑row loop, so it is no longer re‑initialized for each row. This makes `row_mins` compute a single global minimum and return it for every row, breaking the intended per‑row minimum logic.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "`best` is initialized once before `rows.map` and only set on the first iteration (`best = row[0] if best.nil?`). Subsequent rows reuse the previous `best`, so the method returns the global minimum for every row instead of each row's own minimum, producing incorrect results.",
+      "file": "rb-row-min-reset.rb"
+    }
+  ]
+}

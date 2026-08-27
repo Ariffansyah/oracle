@@ -1,0 +1,6 @@
+{
+  "id": "go-unit-scale", "language": "go", "ext": "go", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["1000", "unit", "millisecond", "second", "scale"]],
+  "note": "dropping the *1000 returns seconds from a function whose contract is milliseconds, a 1000x too-short timeout. Verified: 3000 -> 3"
+}

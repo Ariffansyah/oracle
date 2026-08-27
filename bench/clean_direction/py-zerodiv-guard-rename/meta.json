@@ -1,0 +1,13 @@
+{
+  "id": "py-zerodiv-guard-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-zerodiv-guard",
+  "category": "logic-error",
+  "note": "renames the local `safe_divide` to `safe_divide_x`; output stays 'None'",
+  "renamed": [
+    "safe_divide",
+    "safe_divide_x"
+  ]
+}

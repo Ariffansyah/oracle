@@ -1,0 +1,53 @@
+# Full 46-case mechanism hand-grade of `mechanism-v1-merged`, 26 Aug.
+# Source rows: data/basic_bench_mechanism_v1.jsonl
+# grade: locus = right construct AND true causal claim
+#        mechanism = right construct, causal claim wrong/inverted/wrong-error
+#        wrong = neither (here: a finding on code proved unchanged)
+# Every mechanism grade below was settled by executing pre and post.
+case_id,grade,note
+c-array-bound,locus,
+c-int-division,mechanism,"truncation placed 'during accumulation'; verified it is at the division (2.00 vs 2.50) and the cited average(1,2)=0 is fabricated"
+c-strcpy-bound,mechanism,"claims strcpy 'does not append a null terminator' - it does; overflow conclusion right, stated cause false"
+go-accum-reset,locus,
+go-nil-map,locus,"summary says 'accessing' but the finding correctly names assignment"
+go-offbyone,mechanism,"cites xs[len(xs)-1] as the bad access; panic is at index 4 = len(xs)"
+java-array-bound,locus,"summary says NullPointerException, finding says ArrayIndexOutOfBoundsException - contradicts itself"
+java-concurrent-modify,locus,
+java-null-guard,locus,
+java-string-equals,mechanism,"exactly inverted: claims post returns true for equal-content strings; actual output is false"
+js-reverse-index,mechanism,"claims a RangeError; JS returns undefined and the sum is NaN"
+js-sort-numeric,locus,
+js-var-capture,locus,
+php-concat-operator,mechanism,"claims invalid syntax and a parse error; it is valid syntax and a runtime TypeError"
+php-divzero-guard,locus,"summary says non-empty arrays throw - inverted; finding names the empty array correctly"
+php-loose-compare,locus,
+php-slice-end,locus,
+py-dict-mutate,locus,
+py-mutable-default,locus,
+py-pop-guard,locus,
+py-range-bound,locus,"'one less than the intended sum' - verified 15 -> 10, short by 5"
+rb-int-division,locus,"claims mean([1,2]) returns 0; verified it returns 1"
+rb-nil-guard,locus,
+rb-range-bound,locus,"claims it returns zero for n>1; verified it returns 10"
+rb-string-mutate,locus,
+rs-index-bound,locus,
+rs-int-division,locus,"claims 2.5 becomes 2; verified 1.50 -> 1.00"
+rs-overflow,mechanism,"claims it silently wraps; rustc rejects it at compile time - identical failure to oracle-merged and gpt-oss-120b"
+rs-unwrap-none,locus,
+ts-nullish-default,locus,
+ts-reduce-empty,mechanism,"finding names RangeError; verified TypeError. Summary got it right, finding did not"
+ts-slice-end,locus,
+ts-sort-in-place,locus,
+c-const,wrong,proved false alarm on a clean case
+go-extract-helper,wrong,proved false alarm on a clean case
+java-extract-method,wrong,proved false alarm on a clean case
+php-extract-helper,wrong,proved false alarm on a clean case
+py-annotate-only,wrong,proved false alarm on a clean case
+py-extract-helper,wrong,proved false alarm on a clean case
+rs-rename-local,wrong,proved false alarm on a clean case
+go-rename,locus,clean case passed - no findings on code proved unchanged
+js-extract-helper,locus,clean case passed - no findings on code proved unchanged
+js-rename-param,locus,clean case passed - no findings on code proved unchanged
+py-comprehension,locus,clean case passed - no findings on code proved unchanged
+rb-rename-var,locus,clean case passed - no findings on code proved unchanged
+ts-rename-param,locus,clean case passed - no findings on code proved unchanged

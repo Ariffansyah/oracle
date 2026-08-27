@@ -1,0 +1,9 @@
+{
+  "id": "py-rounding-direction-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-rounding-direction",
+  "category": "logic-error",
+  "note": "reverses py-rounding-direction: '3' -> '4'"
+}

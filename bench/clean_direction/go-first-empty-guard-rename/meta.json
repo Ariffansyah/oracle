@@ -1,0 +1,13 @@
+{
+  "id": "go-first-empty-guard-rename",
+  "language": "go",
+  "ext": "go",
+  "label": "refactor",
+  "parent": "go-first-empty-guard",
+  "category": "logic-error",
+  "note": "renames the local `firstOrDefault` to `firstOrDefault_x`; output stays '-1'",
+  "renamed": [
+    "firstOrDefault",
+    "firstOrDefault_x"
+  ]
+}

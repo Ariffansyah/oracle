@@ -1,0 +1,13 @@
+{
+  "id": "php-ratio-trunc-rename",
+  "language": "php",
+  "ext": "php",
+  "label": "refactor",
+  "parent": "php-ratio-trunc",
+  "category": "logic-error",
+  "note": "renames the local `score_percentage` to `score_percentage_x`; output stays '33.33'",
+  "renamed": [
+    "score_percentage",
+    "score_percentage_x"
+  ]
+}

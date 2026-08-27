@@ -1,0 +1,13 @@
+{
+  "id": "c-rounding-direction-rename",
+  "language": "c",
+  "ext": "c",
+  "label": "refactor",
+  "parent": "c-rounding-direction",
+  "category": "logic-error",
+  "note": "renames the local `per_page` to `per_page_x`; output stays '4'",
+  "renamed": [
+    "per_page",
+    "per_page_x"
+  ]
+}

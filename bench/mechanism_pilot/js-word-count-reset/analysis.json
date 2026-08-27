@@ -1,0 +1,10 @@
+{
+  "summary": "The commit moves the `count` variable outside the per-line loop, causing word counts to accumulate across lines instead of resetting for each line, introducing a logic error.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "`count` is no longer reinitialized for each line; it is declared once before the loop and never reset, so `out` receives cumulative word counts rather than per-line counts, breaking the intended functionality.",
+      "file": "js-word-count-reset.js"
+    }
+  ]
+}

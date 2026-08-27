@@ -1,0 +1,9 @@
+{
+  "id": "py-zerodiv-guard-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-zerodiv-guard",
+  "category": "logic-error",
+  "note": "reverses py-zerodiv-guard: 'Traceback (most recent call last):\\n  File \"/home/arp/Documents/oracle/bench/mechanism_pilot/py-zerodiv-guard/post.py\", line 4, in <module>\\n    print(safe_divide(10, 0))\\n          ~~~~~~~~~~~^^^^^^^\\n  File \"/home/arp/Documents/oracle/bench/mechanism_pilot/py-zerodiv-guard/post.py\", line 2, in safe_divide\\n    return a / b\\n           ~~^~~\\nZeroDivisionError: division by zero' -> 'None'"
+}

@@ -1,0 +1,10 @@
+{
+  "summary": "The change replaces iteration over a copy of the list with iteration over the original list while removing elements, introducing a logic error where mutating the list during iteration can skip items and fail to remove all even numbers.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Iterating directly over 'items' while calling items.remove(x) mutates the list during iteration, causing the iterator to skip elements and leaving some even numbers in the list.",
+      "file": "py-list-mutate-iterate.py"
+    }
+  ]
+}

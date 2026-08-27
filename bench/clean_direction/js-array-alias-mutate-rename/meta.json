@@ -1,0 +1,13 @@
+{
+  "id": "js-array-alias-mutate-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-array-alias-mutate",
+  "category": "logic-error",
+  "note": "renames the local `data` to `data_x`; output stays \"[ 1, 2, 3 ] [ 1, 2, 3, 'tagged' ]\"",
+  "renamed": [
+    "data",
+    "data_x"
+  ]
+}

@@ -3,7 +3,175 @@
 Every measurement taken, with the command that reproduces it. Numbers only —
 interpretation lives in `ROADMAP.md`, corpus provenance in `DATASETS.md`.
 
-Status as of 2026-08-25.
+Status as of 2026-08-27.
+
+---
+
+## `sft-mechanism-v2`: 37/46, and the boundary rule it learned (2026-08-27)
+
+The combined retrain — word-diffs, mechanism cases, clean-direction examples,
+a corpus budgeted to fit — trained cleanly and is **the weakest of the three
+checkpoints on locus.** The interesting part is not the number.
+
+    250/250 steps, 15h31m, exit 0, train_loss 0.9165, 1.684M tokens
+    artifacts/sft-mechanism-v2   (adapter, 240 MB, + checkpoint-250)
+
+**First run in this project whose corpus was fully trained.** 1995 records x 1
+epoch / 8 grad-accum = 249.4 -> 250 steps, which is what the log shows. Run the
+arithmetic on every future run: v1 (1748 records) took 224 steps and therefore
+trained on 890.
+
+### The three evaluation sets
+
+    ORACLE_INFERENCE_SAMPLES=1 ORACLE_INCLUDE_SCHEMA=false .venv/bin/python \
+      bench/basic_bench.py --backend ollama --model-name sft-mechanism-v2 \
+      --host http://localhost:8111 --word-diff-module \
+      --out data/basic_bench_mechanism_v2.jsonl
+    # --root bench/mechanism_heldout --out data/heldout_mech_v2.jsonl
+    # --root bench/clean_heldout     --out data/heldout_clean_v2.jsonl
+
+| set | n | fully correct | false alarms |
+|---|---|---|---|
+| `bench/basic` | 46 | 37 (80%) | 5 |
+| `mechanism_heldout` | 14 | 12 (86%) | 0 |
+| `clean_heldout` | 27 | 27 (100%) | 0 |
+
+Against the earlier checkpoints on the 46 — **but see the confound below, this
+table is not clean**:
+
+| | `oracle-merged` | `mechanism-v1` | `mechanism-v2` |
+|---|---|---|---|
+| locus correct | **41/46 (89%)** | 39/46 (85%) | 37/46 (80%) |
+| buggy located | 30/33 | **33/33** | 29/33 |
+| clean passed | **11/13** | 6/13 | 8/13 |
+| false alarms | **2** | 7 | 5 |
+
+### Word-diff fixed what it was aimed at
+
+v1's precision collapse was one claim: six of its seven false alarms said a
+call or print was *removed* when the diff shows it edited in place. **Zero of
+v2's five make that claim.** The rendering change removed that fabrication
+class outright. This is the second intervention in the project to move
+anything, and the first to fully close a named failure mode.
+
+### Word-diff bought a new artifact: block rewrites
+
+`--word-diff` marks an in-place edit unmistakably and renders a *whole-block
+rewrite* as interleaved noise. One line of Python:
+
+    def evens(xs):
+        [-out-]{+return+} [-=-]{+[x+} [-[]-]
+        for x in [-xs:-]
+            {+xs+} if x % 2 == [-0:-]
+    [-            out.append(x)-]
+    [-    return out-]{+0]+}
+
+git's own `--word-diff=plain` mangles it the same way, so this is word-diff
+itself and not `dataset_builder/worddiff.py`. **Four of v2's five remaining
+false alarms are on extract/refactor cases, which are exactly block rewrites.**
+The rendering artifact was moved, not eliminated.
+
+### The finding that matters: a surface rule on comparison direction
+
+Every one of v2's four lost buggy cases is off-by-one. That category alone
+falls **9/9 -> 5/9 while every other category holds at 100%**:
+
+| category (buggy cases) | n | v1 | v2 |
+|---|---|---|---|
+| logic-error | 15 | 15 | 15 |
+| off-by-one | 9 | 9 | **5** |
+| error-handling | 7 | 7 | 7 |
+| buffer-overflow | 1 | 1 | 1 |
+| api-misuse | 1 | 1 | 1 |
+
+Three of the four render as a bare operator swap and draw the same answer,
+in the `fix` template's own words (`build_mechanism_corpus.py:150`), with
+`findings: []`:
+
+    c-array-bound     for (int i = 0; i [-<-]{+<=+} 5; i++)
+    go-offbyone       for i := 0; i [-<-]{+<=+} len(xs); i++
+    java-array-bound  for (int i = 0; i [-<-]{+<=+} xs.length; i++)
+    -> "This commit repairs the logic-error in ...: the program goes back to
+        its correct behavior, and no new defects are introduced."
+
+Now the held-out boundary cases, which it gets **right**:
+
+    go-boundary-flip       n [-<=-]{+<+} 100   buggy -> flagged   correct
+    py-boundary-flip     age [->=-]{+>+}  18   buggy -> flagged   correct
+    go-boundary-flip-fix   n [-<-]{+<=+} 100   fix   -> clean     correct
+
+**The rule the model learned is keyed to the direction of the operator swap,
+not to what the loop indexes:** loosening a comparison (`<` -> `<=`) reads as a
+repair, tightening it (`<=` -> `<`) reads as a defect. That is true of a range
+predicate like `n <= 100` and false of a loop bound like `i <= len(xs)`, where
+loosening is the classic overrun.
+
+162 clean-direction records, every one of them `findings: []` and "removes a
+defect and introduces none", made that prior strong enough to override reading
+the code. Note it generalised the fix template to **loop bounds, a family that
+appears nowhere in the fix corpus** — all 28 `fix` cases are ratio-trunc,
+guards and aliasing.
+
+### Therefore the held-out numbers are inflated
+
+**Every boundary case in both held-out sets is aligned with that surface rule**
+— tightening-is-buggy, loosening-is-fix. None of them tests it adversarially.
+`bench/basic`'s loop bounds do, and v2 fails all three. So 12/14 and 27/27 are
+not evidence that the rule is understood; on the boundary component they are
+evidence that it happened to point the right way.
+
+Separately, `clean_heldout` at 27/27 with zero findings everywhere cannot
+distinguish v2 from a model that answers "clean, no findings" to everything of
+that shape. It is only informative read beside `mechanism_heldout` (12/14),
+which rules the degenerate model out. The two misses there are
+`php-shadow-update` and `py-shadow-update` — one unseen family the mechanism
+training did not reach.
+
+**What the sets need:** boundary cases in the counter-aligned direction — a
+loosening that IS a bug, a tightening that IS a fix. Until they exist, no
+held-out boundary number should be quoted.
+
+### The confound: v2 was not measured under the same conditions
+
+v2 ran short-hint (`ORACLE_INCLUDE_SCHEMA=false`) with module-rendered
+word-diffs, both matching its training. `oracle-merged` and `mechanism-v1` were
+measured with the JSON Schema in the prompt and unified diffs. **Some unknown
+share of 89% -> 80% belongs to the configuration rather than the checkpoint**,
+and the three-way table above must carry that caveat wherever it is quoted.
+Separating them needs one no-training rerun (see `next-session.md`).
+
+Locus is also still a floor: 37/46 is not comparable to the 31/46 that
+`oracle-merged` and `mechanism-v1` both scored on locus+mechanism. That
+hand-grade has not been done for v2.
+
+---
+
+## Two apparatus findings, 2026-08-27
+
+**9. The benchmark scored a total outage as a result.** Run under a python
+without `requests`, every one of the 46 calls raised, and each was scored as
+"said nothing" — which on a clean case reads as a pass. The harness printed
+**"13/46 fully correct, 0 false alarms"**: the 13 clean cases passing by
+default, formatted exactly like a real score. `summarise()` now refuses to
+print any score when more than 20% of calls errored
+(`bench/basic_bench.py`, `MAX_ERROR_RATE`), and prints a count when any did.
+
+**10. `--word-diff` and the training renderer are not the same renderer.**
+`basic_bench.diff_of` shells out to git; `sft_mechanism_v2` was built with
+`dataset_builder/worddiff.to_word_diff`, which matches git on 76% of cases.
+Scoring a word-diff-trained checkpoint through git measures a train/inference
+mismatch. Added `--word-diff-module`, which is what every word-diff-trained
+checkpoint must be scored with; `--word-diff` still reproduces the 25 Aug
+inference-swap result.
+
+The dashboard carried three more of the same species, all fixed 27 Aug: the
+benchmark panel's hallucination column had been **empty since `summarise()`
+was renamed to "false alarms"**; the progress bar reported held-out runs
+against `bench/basic`'s 46 cases and printed "160%, ~74/46"; and 12-case and
+44-case runs were listed flush against 46-case runs with nothing marking the
+denominator. The artifacts panel was hand-named and had never listed
+`sft-mechanism-v1` or `-v2`; the error panel showed a 67-hour-old traceback
+with no filename or age.
 
 ---
 
@@ -17,9 +185,14 @@ direction mechanism failures**, but false alarms went 2 -> 7 and locus
 fabrication (a call "removed" that was edited in place), which is the
 already-diagnosed unified-diff rendering artifact firing more often, not a new
 failure. Full write-up at the end of this file: "Mechanism training: the
-direction failures move, precision pays for it". **`oracle-merged` is still
-the checkpoint with the best locus number; `mechanism-v1` is the better
-explainer and the worse reporter.**
+direction failures move, precision pays for it".
+
+**Superseded by the full hand-grade, next section.** With all 46 cases graded
+for mechanism rather than only the 10 known failures, **both checkpoints score
+31/46 (67%)**. `mechanism-v1` explains five more buggy cases correctly and
+loses exactly five clean ones. "The better explainer and the worse reporter" is
+right as a description of its behaviour and wrong as a claim about its overall
+correctness — the two are tied, and neither is near the 8/10 goal.
 
 The 25 Aug picture, which the rest of this section describes, still stands as
 the baseline everything above is measured against:
@@ -56,6 +229,256 @@ inference, and (earlier) DPO. The one live idea with a mechanism behind it is
 retraining on word-diffs — see the last section.
 
 ---
+
+## The full 46-case hand-grade of `mechanism-v1`: 31/46, a dead heat (2026-08-26)
+
+Outstanding since the retrain landed — only the 10 known failures had been
+re-read, so 39/46 was a locus floor and the comparable "67%" could not be
+restated. Now graded in full, every mechanism verdict settled by executing pre
+and post. Grades are data, not prose: `data/handgrade_mechanism_v1.csv`.
+
+| | `oracle-merged` | `mechanism-v1` |
+|---|---|---|
+| buggy cases located | 30/33 | **33/33** |
+| of those, mechanism correct | 20 | **25** |
+| clean cases passed | **11/13** | 6/13 |
+| **locus + mechanism correct** | **31/46 (67%)** | **31/46 (67%)** |
+
+**The two checkpoints are exactly tied, by different routes.** The mechanism
+retrain bought +5 correct explanations on buggy cases and paid exactly −5 on
+clean ones. Not approximately — 20→25 and 11→6.
+
+That is a sharper statement than the 26 Aug write-up's "the first real
+movement", and it does not retract it: the movement is real and it is on
+precisely what the training targeted. It is the *net* that is a wash, and the
+26 Aug session could not see that because it re-read only the 10 known
+failures.
+
+**Case-level, which is where the interesting part is:**
+
+    fixed by the retrain      go-accum-reset, py-dict-mutate, py-pop-guard,
+                              rb-string-mutate, rs-int-division          (5)
+    locus misses recovered    go-nil-map, java-concurrent-modify         (2)
+    still wrong on both       c-int-division, c-strcpy-bound,
+                              php-concat-operator, rs-overflow,
+                              ts-reduce-empty                            (5)
+    NEW mechanism failures    go-offbyone, java-string-equals            (2 regressions)
+                              js-reverse-index (was a locus miss)        (1)
+
+**`java-string-equals` is a new inverted-direction failure, and it is exactly
+the species the retrain was built to remove.** The model claims `==` makes
+`same()` return **true** for two equal-content strings; the program prints
+**false**. So the retrain did not eliminate inverted direction as a class — it
+fixed the four instances it was trained on and produced a fresh one elsewhere.
+That is what the family-selection limitation predicts, and it is the strongest
+in-house evidence for it.
+
+**Two failure sub-species worth separating, both new here:**
+
+1. **The summary contradicts its own finding.** `java-array-bound` says
+   NullPointerException in the summary and ArrayIndexOutOfBoundsException in the
+   finding; `php-divzero-guard` says non-empty arrays throw in the summary and
+   names the empty array correctly in the finding; `ts-reduce-empty` gets
+   TypeError right in the summary and wrong (RangeError) in the finding. A
+   grader reading only one field would score these differently — which is a
+   scorer-design problem, not just a model problem.
+2. **The mechanism is right and the illustration is fabricated.**
+   `rb-int-division` claims `mean([1,2])` returns 0 (verified: 1);
+   `rb-range-bound` claims zero for n>1 (verified: 10); `py-range-bound` claims
+   "one less than the intended sum" (verified: 15 → 10, short by 5);
+   `rs-int-division` claims 2.5 becomes 2 (verified: 1.50 → 1.00). These are
+   graded **locus** here, because the causal claim is true and only the worked
+   example is invented — but four of 25 "correct" explanations carry a false
+   number, and a stricter rater would grade them down. **This is the single
+   most likely source of inter-rater disagreement** and the packet in
+   `bench/rater_packet.py` exists partly to measure it.
+
+**Reproduce:**
+
+    python bench/basic_bench.py --score data/basic_bench_mechanism_v1.jsonl
+
+## The mechanism training families were chosen by looking at test failures
+
+**This is the limitation most likely to sink the explanation result, and it is
+the same species of error this document spends its length documenting in other
+people's work and in this project's own gate.** It is recorded here in full
+rather than left for a reviewer to find.
+
+`bench/mechanism_pilot` was, per the 25 Aug handoff, "built directly from the
+hand-grade's 10 mechanism failures ... one case per failure family". Checked
+mechanically, the correspondence is total:
+
+| hand-grade failure | training family present |
+|---|---|
+| `c-int-division`, `rs-int-division` | `*-ratio-trunc` (c, go, java, php) |
+| `go-accum-reset` | `*-reset` (java, js, py, rb) |
+| `rb-string-mutate`, `py-dict-mutate` | `*-alias-mutate` (js, php, py, rb) |
+| `py-pop-guard`, `ts-reduce-empty` | `*-empty-guard` (go, js, py, rb) |
+| `c-strcpy-bound`, `rs-overflow` | `*-overflow` (c, rs) |
+| `php-concat-operator` | `*-coerce` (js, php, py, rb) |
+
+**10 of 10. There is no held-out family.** The programs differ — different
+languages, different code — so this is not literal test-set training. But the
+*selection* of what to teach was driven by which test cases failed, which is
+tuning on the test set by another name.
+
+**What this does and does not license.** `mechanism-v1` fixing 5 of the 10 is a
+sound **existence proof**: a 3B can be taught mechanism, where four prompt-rule
+attempts moved nothing. That claim survives. The **rate does not** — "5 of 10"
+cannot be quoted as generalisation, and any table putting it next to a baseline
+is misleading.
+
+**Two repairs, both now in place.**
+
+1. **Held-out families.** `bench/mechanism_heldout` (14 cases) and
+   `bench/clean_heldout` (27 cases, 14 fix + 13 refactor) cover six mechanisms
+   the mechanism training never saw — operator precedence, boundary-comparison
+   direction, fallback/default order, unit scale, shadowed-variable update,
+   rounding direction, and swallowed errors. All 41 are proved by execution and
+   appear in no training corpus.
+
+       python bench/basic_bench.py --root bench/mechanism_heldout --verify
+       python bench/basic_bench.py --root bench/clean_heldout --verify
+
+2. **The real commits.** `data/real_commits.jsonl` is 40 commits sampled at
+   random from the five held-out projects. No family selection, no relationship
+   to the training data at all. **This is the cleanest evidence available for
+   the central claim** and is why it outranks "more n" as a reason to run it.
+
+**A guard, because the directories sit next to each other.**
+`bench/mechanism_pilot` and `bench/clean_direction` are training data, and
+`--root` puts them one flag away from a headline number. `basic_bench.py` now
+refuses to score them quietly — it prints a block warning that a score there
+measures memorisation. The apparatus findings in this document are mostly cases
+where nothing warned; this one warns.
+
+## Half of every SFT corpus never trained anything (2026-08-26)
+
+`MAX_SEQ_LENGTH` is 1024 and TRL truncates `keep_start`, so a record whose
+*prompt* alone reaches 1024 tokens loses its entire assistant turn. TRL then
+drops it — the training log says so in as many words, "Dropping fully masked
+examples from train dataset" — and the run continues without it.
+
+Measured on `data/sft_mechanism_v1.jsonl` with the run's own tokenizer:
+
+| | records | prompt >= 1024 | effective |
+|---|---|---|---|
+| `sft_mechanism_v1` | 1748 | **858 (49.1%)** | 890 |
+| `sft_ml8_grounded` | 1286 | — | 616 |
+
+The step counts confirm it independently, and they were in the logs all along:
+224 steps x 8 grad-accum / 2 epochs = **896 records, not 1748**; for
+`sft-ml8-grounded`, 154 steps => **616 of 1286**. Reproduce with:
+
+    ssh oracle-gpu 'cd ~/oracle && .venv/bin/python -c "..."'   # tokenizer probe
+    grep -oE "[0-9]+/[0-9]+" sft_mechanism_v1.log | tail -1     # step count
+
+Three consequences:
+
+1. **The mechanism dose was never 4.6%.** All 81 pilot records fit (max 1055
+   tokens) while half the bulk corpus did not, so the real share of what
+   trained was **9%** — double the figure recorded on 26 Aug.
+2. **It is not a label-balance artifact.** Truncation drops slightly more buggy
+   records than clean ones, 34.6% buggy nominal against 30.1% effective. That
+   is far too small to explain recall 33/33 with precision 6/13, so the
+   one-directional mechanism corpus remains the explanation for that.
+3. **`config.py`'s own comment is stale and says so twice.** "prompts run 414
+   tokens median, 476 at p90, 795 max" was measured on the DPO set; the line
+   below it already corrects this to "~800 tokens median". The real corpus is
+   1121 tokens median, 1916 at p90, 3996 max.
+
+`dataset_builder/build_mechanism_corpus.py` measures every record against the
+real tokenizer and shrinks the diff until the answer survives. On the rebuilt
+corpus, **0 of 1995 records are dropped** — 250 steps at 1 epoch, which is the
+arithmetic working out.
+
+## Prompt shape has never matched between training and inference (2026-08-26)
+
+`basic_bench.py` never sets `include_schema`, and `client.py:170` resolves it to
+**True** for the `ollama` backend — so every benchmark number was taken with the
+full JSON Schema in the prompt. `sft_base`, `sft_multilang8` and
+`sft_ml8_grounded` are **100% short-hint**. `config.py:160` already says "Set
+`ORACLE_INCLUDE_SCHEMA=false` when serving a checkpoint from serve.py", and no
+run has.
+
+The 81 mechanism-pilot records are the *only* training data ever built with the
+schema (82 of 1748 in `sft_mechanism_v1`), which is a confound in the 26 Aug
+mechanism result: those records matched the inference shape and the other 95%
+did not. Re-baselining both checkpoints under `ORACLE_INCLUDE_SCHEMA=false` is
+cheap and has not been done.
+
+## Stage 1 against DeepJIT / CC2Vec / JITLine (2026-08-26)
+
+The comparison the project has claimed since the README and never run. QT and
+OPENSTACK on the **authors' splits, unchanged** — 23133/2571 and 11973/1331,
+matched 100% on commit hash against the JITLine metrics tables.
+
+    python -m corpus.deepjit --eval
+
+| project | n test | buggy | AUC | PR-AUC | F1 @0.5 | always-buggy F1 |
+|---|---|---|---|---|---|---|
+| qt | 2571 | 7.1% | **0.8049** | 0.2797 | 0.333 | 0.133 |
+| openstack | 1331 | 12.2% | **0.8373** | 0.3814 | 0.442 | 0.218 |
+
+Against JITLine's own published numbers, read out of the stored cell outputs of
+`JITLine_RQ1-RQ3.ipynb` in its replication package (Zenodo 4596503, cells 11
+and 12) rather than transcribed from the paper:
+
+| project | ORACLE gate AUC | JITLine AUC | ORACLE F1 | JITLine F1 |
+|---|---|---|---|---|
+| qt | 0.805 | 0.82 | 0.333 | 0.24 |
+| openstack | 0.837 | 0.83 | 0.442 | 0.33 |
+
+**The gate lands inside the published range**, on metrics alone — JITLine adds
+code-token features and SMOTE on the same commits.
+
+**But run the count control before believing that means much.** `la` — lines
+added, one feature — scores:
+
+| project | la only | la+ld | la+ld+nf | full gate (22 metrics) | JITLine |
+|---|---|---|---|---|---|
+| qt | 0.741 | 0.735 | 0.744 | 0.805 | 0.82 |
+| openstack | **0.797** | 0.809 | 0.807 | 0.837 | 0.83 |
+
+On OPENSTACK a **single-feature line counter is 0.033 AUC from JITLine's
+published number**, and the full 22-metric gate beats that counter by 0.040.
+This is a fact about the benchmark rather than about any model on it: QT and
+OPENSTACK have little headroom above commit size, and DeepJIT, CC2Vec, JITLine
+and this gate are all competing inside it.
+
+It is the `count_control.py` discipline applied to somebody else's benchmark,
+and it is an apparatus finding in its own right — the eighth. It also settles
+what the head-to-head licenses: **"the gate is a credible Stage 1" is
+supported; "we closed the gap with DeepJIT" is not, because the gap on this
+benchmark is mostly churn.** The control now runs automatically inside
+`corpus/deepjit.py --eval`, so the AUC cannot be quoted without it. Caveats that must travel with
+this table: F1 is at 0.5 against JITLine's own operating point, so AUC is the
+honest comparison; and the gate's *own* operating point (95% recall) gives
+F1 0.177 on qt and 0.354 on openstack, because buying recall at a 7% base rate
+costs precision. That is the right trade for a cascade and a bad leaderboard
+number.
+
+**DeepJIT and CC2Vec are not in the table, deliberately.** JITLine's numbers
+above come from its replication package, so they are sourced. The other two
+would have to be transcribed from their papers and are not quoted here. What
+*is* sourced, from the JITLine abstract (arXiv 2103.07068v2), is the relation:
+JITLine reports being "at least 26%-38% more accurate (F-measure)" than CC2Vec
+and DeepJIT, so both sit below the JITLine column.
+
+**And the reason CC2Vec's published number was high is a leak.** The same
+abstract records that CC2Vec trained on the test set, and that excluding it
+drops CC2Vec's F-measure by **38.5% on OpenStack and 45.7% on Qt**. That is the
+same failure this project found in its own gate — trained on its own evaluation
+set, worth 0.495 F1 and 0.21 AUC — occurring in a published, peer-reviewed JIT
+defect prediction model, and caught only because someone ran a replication.
+It is external corroboration for the methods framing: the apparatus findings
+here are not a local accident, they are the field's normal failure mode.
+
+**What this data cannot do.** The code channel in the released DeepJIT pickles
+is the placeholder string `"added _ code removed _ code"` in every entry of all
+four splits — checked exhaustively, not sampled. So Stage 2 cannot be run on
+QT/OPENSTACK without re-mining both repositories by commit hash. This is a
+Stage 1 comparison and must be labelled as one.
 
 ## 0. Trivial baselines
 
@@ -2049,3 +2472,39 @@ the verifier would call it `BAD LABEL`. **The harness conflates
 refactors, which is all 13 clean cases are today, and wrong for fixes. Any
 control that asks "does the model over-report on a commit that removes a
 defect" needs a third label, not a `buggy` flag.
+
+### The locus/mechanism split shows up on real commits too (26 Aug)
+
+`mechanism-v1-merged` served on the box, TUI run against a real repository
+through the tunnel. **Unquantified — no counts, no execution checks, an
+impression from reading output.** Recorded for what was observed, not how
+strongly.
+
+Reading the findings unprompted, the split was: some correct; some **name the
+right thing but the explanation misses**; some wrong. That is the three-way
+taxonomy the 25 Aug hand-grade named, arrived at independently, by eye, on
+real code.
+
+This is the third reproduction of that taxonomy:
+
+| # | where | gap between locus and mechanism |
+|---|---|---|
+| 1 | hand-grade of the 46 (`oracle-merged`) | 89% -> 67%, 22 points |
+| 2 | `gpt-oss-120b` on the same 46 | 98% -> 93%, 5 points |
+| 3 | this TUI session, real commits | observed, not measured |
+
+**Why the third one matters.** The strongest objection to the whole
+explanation result is that the 46 cases are hand-written toy programs, so the
+locus/mechanism gap could be an artifact of synthetic code. It is not: the same
+split appears on real commits the model has never seen, and it was noticed
+without anyone looking for it.
+
+**What it is not.** A number. "Some / some / some" is consistent with anything
+from 60% to 85% and cannot go in a paper. Turning it into evidence needs the
+repo and revisions recorded, each finding graded locus / mechanism / wrong,
+and every mechanism claim checked by running the code — the same discipline
+the 46 got. That is also the cheapest available fix for the two weakest points
+in this evaluation, n=46 and all-synthetic, since the repos are already cloned
+in `data/repos/`. Use only the five held-out projects (`axios`, `clap`, `gin`,
+`fastapi`, `spring-boot`); the `apache__*` repos are leaked into the gate's
+training set.

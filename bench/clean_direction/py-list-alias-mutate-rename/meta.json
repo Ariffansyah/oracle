@@ -1,0 +1,13 @@
+{
+  "id": "py-list-alias-mutate-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-list-alias-mutate",
+  "category": "logic-error",
+  "note": "renames the local `data` to `data_x`; output stays '[1, 2, 3] [1, 2, 3, None]'",
+  "renamed": [
+    "data",
+    "data_x"
+  ]
+}

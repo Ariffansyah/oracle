@@ -25,3 +25,10 @@ graphify-out/
 
 # packaging (pip install -e .)
 *.egg-info/
+# 38M of published baseline data, re-fetchable (see corpus/deepjit.py)
+data/deepjit/
+
+# Results, not bulk data — these are small and must survive a fresh clone.
+# `data/*.jsonl` and `data/*.csv` above would otherwise swallow them.
+!data/real_commits.jsonl
+!data/handgrade_mechanism_v1.csv

@@ -33,6 +33,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 ROOT = Path(__file__).resolve().parent / "basic"
 
+# A case is labelled one of three ways, not two. `buggy` and `clean` are what
+# bench/basic carries; `fix` and `refactor` come from bench/clean_direction and
+# exist because "behaviour-preserving" and "introduces no defect" are different
+# claims. A commit that REPAIRS a bug changes behaviour and is still clean, so a
+# two-value flag has to call it buggy and cannot express it.
+#
+#   buggy     pre and post must differ    -> a finding is expected
+#   clean     pre and post must match     -> a finding is a PROVED false alarm
+#   refactor  pre and post must match     -> same as clean, named for what it is
+#   fix       pre and post must differ    -> a finding is a proved false alarm,
+#                                            and the one the model gets wrong by
+#                                            reporting the defect it just removed
+MUST_DIFFER = {"buggy": True, "clean": False, "refactor": False, "fix": True}
+
+# Case directories that are TRAINING data for the mechanism checkpoints. Scoring
+# a model on these measures memorisation, and the resulting number is not an
+# evaluation of anything. The guard exists because the directories sit beside
+# the eval sets and `--root` makes them one flag away from a headline figure —
+# which is precisely the class of mistake this project keeps finding in its own
+# apparatus. `bench/mechanism_heldout` and `bench/clean_heldout` are the
+# held-out counterparts: same style, families the training never saw.
+TRAINING_ROOTS = {"mechanism_pilot", "clean_direction"}
+
 # Languages that run a source file directly. Anything needing a compile or a
 # module file gets an explicit branch in _run().
 INTERP = {
@@ -96,9 +119,21 @@ def _run(case: dict, which: str) -> tuple[int, str]:
 
 
 def load_cases() -> list[dict]:
+    """Every case under ROOT, with `label` and `buggy` both filled in.
+
+    The two schemas are normalised here so the scorer never has to know which
+    directory a case came from: only `fix`/`buggy` expect a finding.
+    """
     out = []
     for meta in sorted(ROOT.glob("*/meta.json")):
-        out.append(json.loads(meta.read_text()))
+        c = json.loads(meta.read_text())
+        if "label" not in c:
+            c["label"] = "buggy" if c.get("buggy") else "clean"
+        c["buggy"] = c["label"] == "buggy"
+        if c["label"] not in MUST_DIFFER:
+            raise SystemExit(f"{meta}: unknown label {c['label']!r}; "
+                             f"expected one of {sorted(MUST_DIFFER)}")
+        out.append(c)
     return out
 
 
@@ -106,22 +141,22 @@ def verify(cases: list[dict]) -> int:
     """Prove each label by execution. Returns the number of bad cases."""
     bad = 0
     w = _idw(cases)
-    print(f"{'case':<{w}}{'lang':<12}{'label':<8}{'pre':>6}{'post':>6}  verdict")
+    print(f"{'case':<{w}}{'lang':<12}{'label':<9}{'pre':>6}{'post':>6}  verdict")
     for c in cases:
         rc_pre, out_pre = _run(c, "pre")
         rc_post, out_post = _run(c, "post")
         differs = (rc_pre, out_pre) != (rc_post, out_post)
-        ok = differs if c["buggy"] else not differs
+        ok = differs == MUST_DIFFER[c["label"]]
         bad += not ok
         print(f"{c['id']:<{w}}{c['language']:<12}"
-              f"{'buggy' if c['buggy'] else 'clean':<8}{rc_pre:>6}{rc_post:>6}  "
+              f"{c['label']:<9}{rc_pre:>6}{rc_post:>6}  "
               f"{'OK' if ok else 'BAD LABEL'}"
               + ("" if ok else f"   pre={out_pre[:40]!r} post={out_post[:40]!r}"))
     print(f"\n{len(cases) - bad}/{len(cases)} cases verified by execution")
     return bad
 
 
-def diff_of(case: dict, word: bool = False) -> str:
+def diff_of(case: dict, word: bool = False, module: bool = False) -> str:
     """Render one case as a diff. `word` switches to --word-diff=plain.
 
     A unified diff shows an edited line as a removal plus an addition, and the
@@ -130,7 +165,18 @@ def diff_of(case: dict, word: bool = False) -> str:
     --word-diff marks the change inside the line - [-gone-]{+added+} - which
     makes an in-place edit unmistakable. It is a representation the model was
     NOT fine-tuned on, so it is measured, not assumed.
+
+    `module` renders word-diffs with `dataset_builder.worddiff` instead of git,
+    and that distinction is not cosmetic. The SFT corpora carry only diff text —
+    the original blobs are gone — so `sft_mechanism_v2` was rendered by that
+    module, whose output matches real git on 76% of cases and differs in
+    difflib-vs-git alignment on the rest. Scoring a word-diff-trained checkpoint
+    against git's rendering measures a train/inference mismatch, which is the
+    exact failure the module was written to avoid. Use `module` for any model
+    trained on word-diffs; `word` reproduces the 25 Aug inference-swap result.
     """
+    if word and module:
+        raise ValueError("pick one word-diff renderer, not both")
     d = ROOT / case["id"]
     name = f"{case['id']}.{case['ext']}"
     p = subprocess.run(
@@ -141,6 +187,9 @@ def diff_of(case: dict, word: bool = False) -> str:
         capture_output=True, text=True)
     # git diff --no-index exits 1 when files differ, which is the normal case
     out = p.stdout
+    if module:
+        from dataset_builder.worddiff import to_word_diff
+        out = to_word_diff(out)
     return (out.replace(str(d / f"pre.{case['ext']}"), name)
                .replace(str(d / f"post.{case['ext']}"), name))
 
@@ -233,14 +282,33 @@ def grade(case: dict, said: dict) -> dict:
             "hallucinated": false_alarm or unconfirmed}
 
 
+# A call that raises is scored as "said nothing", which on a clean case reads
+# as a pass. That is the right treatment for one flaky request and the wrong
+# one for an outage: pointing the runner at a dead port, or at a python without
+# `requests`, produced "13/46, 0 false alarms" — every clean case passing by
+# default — which looks like a result and is the absence of one. Anything above
+# this share of errored calls is an apparatus failure, not a model score.
+MAX_ERROR_RATE = 0.20
+
+
 def summarise(rows: list[dict], label: str = "") -> None:
     n = len(rows)
+    errs = sum(bool(r.get("error")) for r in rows)
+    if n and errs / n > MAX_ERROR_RATE:
+        kinds = sorted({str(r["error"]).split(":")[0] for r in rows if r.get("error")})
+        raise SystemExit(
+            f"\n{errs}/{n} calls FAILED ({100*errs/n:.0f}%) — {', '.join(kinds)}\n"
+            f"No score is printed: a failed call is scored as 'no finding', so an\n"
+            f"outage would report every clean case as a pass and look like a\n"
+            f"result. Fix the backend and rerun.")
     v = sum(r["verdict_ok"] for r in rows)
     fully = sum(r["verdict_ok"] and (r["identified"] or not r["buggy"]) for r in rows)
     fa = sum(r.get("false_alarm", False) for r in rows)
     un = sum(r.get("unconfirmed", False) for r in rows)
     if label:
         print(f"\n{label}")
+    if errs:
+        print(f"\n  !! {errs}/{n} calls errored and are scored as 'no finding'")
     print(f"\n  verdict correct     {v}/{n}   ({100*v/n:.0f}%)")
     print(f"  fully correct       {fully}/{n}   ({100*fully/n:.0f}%)   <- the 8/10 target")
     print(f"  false alarms        {fa}/{n}   ({100*fa/n:.0f}%)   <- findings on code proved unchanged; must be 0")
@@ -278,12 +346,33 @@ def main(argv=None) -> int:
     ap.add_argument("--model-name", help="served model name")
     ap.add_argument("--host", help="served host")
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--root", type=Path,
+                    help="directory of case dirs to score (default bench/basic). "
+                         "bench/mechanism_pilot and bench/clean_direction have "
+                         "never been scored as benchmarks, only used as training "
+                         "data — this is how you score them.")
     ap.add_argument("--word-diff", action="store_true",
-                    help="render cases with --word-diff=plain instead of unified")
+                    help="render cases with git --word-diff=plain instead of unified")
+    ap.add_argument("--word-diff-module", action="store_true",
+                    help="render word-diffs with dataset_builder.worddiff, the "
+                         "renderer that built the sft_mechanism_v2 corpus. Use "
+                         "this for word-diff-trained checkpoints: git and the "
+                         "module agree on only 76%% of cases, so the other "
+                         "renderer measures a train/inference mismatch.")
     ap.add_argument("--score", type=Path, metavar="ROWS.jsonl",
                     help="re-grade a stored run with the current scorer and exit; "
                          "runs no model and needs no language toolchain")
     args = ap.parse_args(argv)
+
+    if args.root:
+        globals()["ROOT"] = args.root.resolve()
+        if not ROOT.is_dir():
+            raise SystemExit(f"{ROOT} is not a directory")
+        if ROOT.name in TRAINING_ROOTS and not args.verify:
+            print(f"\n!!! {ROOT.name} is TRAINING data for the mechanism\n"
+                  f"!!! checkpoints. A score here measures memorisation, not\n"
+                  f"!!! ability, and must not be reported as an evaluation.\n"
+                  f"!!! Use bench/mechanism_heldout or bench/clean_heldout.\n")
 
     if args.score:
         rows = rescore(args.score)
@@ -320,7 +409,7 @@ def main(argv=None) -> int:
     w = _idw(cases)
     print(f"\n{'case':<{w}}{'label':<8}{'said':<8}{'findings':>9}  outcome")
     for c in cases:
-        diff = diff_of(c, word=args.word_diff)
+        diff = diff_of(c, word=args.word_diff, module=args.word_diff_module)
         try:
             a = client.analyze(diff, subject=f"({c['id']})",
                                files=f"{c['id']}.{c['ext']}", chunked=False)

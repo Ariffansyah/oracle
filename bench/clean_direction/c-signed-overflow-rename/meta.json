@@ -1,0 +1,13 @@
+{
+  "id": "c-signed-overflow-rename",
+  "language": "c",
+  "ext": "c",
+  "label": "refactor",
+  "parent": "c-signed-overflow",
+  "category": "logic-error",
+  "note": "renames the local `safe_add` to `safe_add_x`; output stays '2147483647'",
+  "renamed": [
+    "safe_add",
+    "safe_add_x"
+  ]
+}

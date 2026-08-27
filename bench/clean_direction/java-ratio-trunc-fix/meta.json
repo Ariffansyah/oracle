@@ -1,0 +1,9 @@
+{
+  "id": "java-ratio-trunc-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-ratio-trunc",
+  "category": "logic-error",
+  "note": "reverses java-ratio-trunc: '0.00' -> '33.33'"
+}

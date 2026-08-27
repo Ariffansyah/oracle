@@ -1,0 +1,13 @@
+{
+  "id": "py-precedence-avg-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-precedence-avg",
+  "category": "logic-error",
+  "note": "renames the local `weighted` to `weighted_x`; output stays '30'",
+  "renamed": [
+    "weighted",
+    "weighted_x"
+  ]
+}

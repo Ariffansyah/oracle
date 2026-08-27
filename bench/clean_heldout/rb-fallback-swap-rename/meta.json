@@ -1,0 +1,13 @@
+{
+  "id": "rb-fallback-swap-rename",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "refactor",
+  "parent": "rb-fallback-swap",
+  "category": "logic-error",
+  "note": "renames the local `name` to `name_x`; output stays 'anonymous\\nada'",
+  "renamed": [
+    "name",
+    "name_x"
+  ]
+}

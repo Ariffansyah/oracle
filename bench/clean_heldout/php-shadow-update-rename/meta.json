@@ -1,0 +1,13 @@
+{
+  "id": "php-shadow-update-rename",
+  "language": "php",
+  "ext": "php",
+  "label": "refactor",
+  "parent": "php-shadow-update",
+  "category": "logic-error",
+  "note": "renames the local `total` to `total_x`; output stays '6'",
+  "renamed": [
+    "total",
+    "total_x"
+  ]
+}

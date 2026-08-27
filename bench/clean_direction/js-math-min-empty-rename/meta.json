@@ -1,0 +1,13 @@
+{
+  "id": "js-math-min-empty-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-math-min-empty",
+  "category": "logic-error",
+  "note": "renames the local `nums` to `nums_x`; output stays 'null'",
+  "renamed": [
+    "nums",
+    "nums_x"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "go-boundary-flip", "language": "go", "ext": "go", "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [["<=", "boundary", "exactly 100", "excluded", "off-by-one"]],
+  "note": "<= to < rejects the boundary value. Verified: true true false -> true false false"
+}

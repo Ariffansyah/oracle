@@ -1,0 +1,9 @@
+{
+  "id": "py-str-concat-typeerror-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-str-concat-typeerror",
+  "category": "logic-error",
+  "note": "reverses py-str-concat-typeerror: 'Traceback (most recent call last):\\n  File \"/home/arp/Documents/oracle/bench/mechanism_pilot/py-str-concat-typeerror/post.py\", line 4, in <module>\\n    print(build_message(3, \"items\"))\\n          ~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \"/home/arp/Documents/oracle/bench/mechanism_pilot/py-str-concat-typeerror/post.py\", line 2, in build_message\\n    return count + \" \" + label\\n           ~~~~~~^~~~~\\nTypeError: unsupported operand type(s) for +: \\'int\\' and \\'str\\'' -> '3 items'"
+}

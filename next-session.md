@@ -1,9 +1,165 @@
 Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first (every
 measurement plus the command that reproduces it), then `docs/ROADMAP.md`.
 
-**First action this session:** nothing is running and the GPU box is free.
-Read "Where this landed" — the retrain finished and is a regression, so the
-obvious next move (ship it) is the wrong one.
+**The GPU is free. `sft-mechanism-v2` finished 27 Aug 09:36 WIB and has been
+benchmarked on all three evaluation sets.** A server may still be up on the box
+serving it — check before launching anything, a second 3B does not fit the 6GB
+card:
+
+    ssh oracle-gpu 'nvidia-smi --query-gpu=memory.used --format=csv,noheader'
+    ssh oracle-gpu 'pkill -f llm_explainer.serve'     # if you need it free
+
+**Do this first, before any new measurement: commit.** Three sessions of work
+sit untracked — `corpus/deepjit.py`, `dataset_builder/worddiff.py` and
+`build_mechanism_corpus.py`, 95 new benchmark cases across four directories,
+the rater packet, the real-commit sampler, and today's v2 results. None of it
+is reproducible from git as things stand, and several results in
+`docs/RESULTS.md` now depend on files that exist only in the working tree.
+
+# Where v2 landed, and the one finding worth carrying forward
+
+Full write-up in `docs/RESULTS.md`, first section. The short version:
+
+| set | n | fully correct | false alarms |
+|---|---|---|---|
+| `bench/basic` | 46 | 37 (80%) | 5 |
+| `mechanism_heldout` | 14 | 12 (86%) | 0 |
+| `clean_heldout` | 27 | 27 (100%) | 0 |
+
+**v2 is the weakest of the three checkpoints on locus** (41 -> 39 -> 37). It is
+also the first run whose corpus fully trained: 1995 x 1 epoch / 8 = 250 steps,
+which is what the log shows. Run that arithmetic on every future run.
+
+**Word-diff did its job.** Six of v1's seven false alarms claimed a call was
+*removed* when it was edited in place; **zero of v2's five do.** That
+fabrication class is closed. It cost a new one: word-diff renders a whole-block
+rewrite as interleaved noise (git does the same, so this is not our renderer),
+and four of the five remaining false alarms are on extract/refactor cases,
+which are exactly block rewrites.
+
+**The finding that outranks the numbers.** All four lost buggy cases are
+off-by-one; that category goes 9/9 -> 5/9 while every other category holds at
+100%. Three of them draw the `fix` template verbatim, with no findings:
+
+    for (int i = 0; i [-<-]{+<=+} 5; i++)
+      -> "This commit repairs the logic-error ... goes back to its correct
+          behavior, and no new defects are introduced."
+
+while the held-out boundary cases come back **right**:
+
+    n [-<=-]{+<+} 100    buggy -> flagged   correct
+    n [-<-]{+<=+} 100    fix   -> clean     correct
+
+The model learned a **surface rule on the direction of the operator swap** —
+loosening a comparison means someone fixed a bug, tightening it means someone
+broke one. True of a range predicate, false of a loop bound. 162
+clean-direction records, all `findings: []` and all "removes a defect and
+introduces none", made that prior strong enough to beat reading the code. It
+generalised the template to loop bounds, **a family that appears nowhere in the
+fix corpus.**
+
+**So the held-out numbers are inflated.** Every boundary case in both held-out
+sets is aligned with that rule; none tests it adversarially. 12/14 and 27/27
+are not evidence the rule is understood. Do not quote a held-out boundary
+number until the counter-aligned cases below exist.
+
+# What to do, in order
+
+**1. Commit.** See above. Nothing else is safe until this is done.
+
+**2. Settle the configuration confound. Cheap, no training, do it before any
+new comparison.** v2 was measured short-hint with module word-diffs, matching
+its training; `oracle-merged` and `mechanism-v1` were measured with the JSON
+Schema in the prompt and unified diffs. **Some unknown share of 89% -> 80%
+belongs to the configuration, not the checkpoint.** One rerun settles it —
+either v2 under the old shape, or both older checkpoints under the new one.
+Until then the three-way table must carry the caveat everywhere it appears.
+
+**3. Build the counter-aligned boundary cases.** This is the gap the surface
+rule exposed and the cheapest real repair available: a loosening that IS a bug
+(loop bounds — `bench/basic` already has three) and a tightening that IS a fix,
+in both held-out sets, execution-proved like everything else. **Do not retrain
+before these exist** — without them there is no way to tell whether a fix
+worked or the rule just pointed the right way again.
+
+**4. Hand-grade v2's 46 for mechanism.** 37/46 is a locus floor and is not
+comparable to the 31/46 that `oracle-merged` and `mechanism-v1` both scored on
+locus+mechanism. Predictions are already in
+`data/basic_bench_mechanism_v2.jsonl`; the grade needs no GPU, only execution.
+Grades are data — put them in `data/handgrade_mechanism_v2.csv` beside v1's.
+
+**5. Decide the hallucination question and write it down.** Still open from
+26 Aug: does a fabricated worked example inside an otherwise-correct
+explanation count as a hallucination? Under a strict reading `mechanism-v1` is
+21/46, not 31/46. **Decide once, apply to all three checkpoints, do not let it
+drift between runs.**
+
+**6. The 40 real commits — still the strongest evidence available and still
+not run.** `data/real_commits.jsonl`, 40 commits from the five held-out
+projects, seed 20260826. Random sample, no family selection, no relationship to
+training data. Run on **v2 and `mechanism-v1` both** or the numbers cannot be
+attributed.
+
+    .venv/bin/python bench/real_commits.py --run data/real_commits.jsonl
+    .venv/bin/python bench/real_commits.py --sheet data/real_commits.jsonl
+
+**7. Inter-rater agreement.** `data/rater_packet.md` is ready and blinded.
+Needs a person, not a GPU. Cheapest open item and it closes "every mechanism
+number in this project has one rater".
+
+**8. Cost and latency, 3B vs 120B.** Untouched. The teacher scores 93% against
+the student's 67%, so a reviewer will ask what the small model buys.
+
+**Do not** retrain before item 3, add more prompt rules (five attempts, all
+lost), or spend GPU on DPO (closed as a null).
+
+# The honest read, for the paper
+
+Four moons, three checkpoints, and locus+mechanism has not moved off 67%. Each
+intervention closes the failure it targets and opens another: v1 bought recall
+and sold precision, v2 bought back precision and sold boundary reading. **The
+checkpoint chase is not where this project's contribution is.**
+
+The contribution is the measurement work, and it got stronger today. Locus-only
+scoring overstates explanation correctness by 22 points and only execution
+catches it. Targeted training data moves explanation where prompting cannot —
+five times. Training data can install a **surface rule that the held-out set
+cannot see**, which is a general result about evaluation design, not a fact
+about this model. Add the run-level findings — half of every corpus silently
+dropped, prompt shape never matching between training and inference, a
+published model (CC2Vec) trained on its own test set, a gate whose advantage
+over one churn feature is 0.03 AUC — and the paper is a measurement
+contribution with an existence proof attached. That paper survives review. A
+"we beat JITLine" paper does not.
+
+# Apparatus fixed on 27 Aug
+
+- `bench/basic_bench.py --word-diff-module` — renders with
+  `dataset_builder/worddiff`, the module that built the v2 corpus. **Use this
+  for any word-diff-trained checkpoint**; `--word-diff` (git) disagrees on 24%
+  of cases and measures a train/inference mismatch.
+- `bench/basic_bench.py` now refuses to print a score when >20% of calls
+  errored. It had reported a total backend outage as "13/46, 0 false alarms" —
+  every clean case passing by default, formatted like a real result.
+- `dashboard.sh`: the benchmark panel's hallucination column had been empty
+  since `summarise()` renamed it to "false alarms"; the progress bar scored
+  held-out runs against `bench/basic` and printed "160%, ~74/46"; 12- and
+  44-case runs sat flush against 46-case runs unmarked; the artifacts panel had
+  never listed `sft-mechanism-v1` or `-v2`; the error panel showed a 67-hour-old
+  traceback with no name or age. All six fixed.
+
+# Case inventory — read before quoting any benchmark number
+
+| directory | n | role |
+|---|---|---|
+| `bench/basic` | 46 | eval, the headline set |
+| `bench/mechanism_pilot` | 28 | **TRAINING** — never report a score |
+| `bench/clean_direction` | 54 | **TRAINING** — never report a score |
+| `bench/mechanism_heldout` | 14 | eval, held-out families |
+| `bench/clean_heldout` | 27 | eval, held-out families |
+
+`basic_bench.py` prints a block warning if you point `--root` at the two
+training directories.
 
 # The project
 
@@ -151,6 +307,70 @@ times, keep what a majority agrees on" defence is a no-op on the backend where
 every measurement is taken. `_env()` now warns when a bare name is set and the
 prefixed one is not. Full write-up in `docs/RESULTS.md`.
 
+# The path from here (26 Aug — SUPERSEDED by "What to do, in order" at the top)
+
+**Kept for the reasoning, not the ordering.** v2 has since trained and been
+benchmarked; item A below is done. Read the head of this file for what is open.
+
+The thing that was in doubt is no longer in doubt: **a 3B task-specific model
+can be taught mechanism.** 27 examples fixed three of four inverted-direction
+failures where four prompt-rule attempts fixed none. That is the premise of
+the whole thesis — a small model that explains, not a wrapper around a large
+one — and it now has evidence behind it. The 25 Aug pivot recommendation was
+written before this and should not be acted on without re-reading it.
+
+What to do, in order of how much it changes the outcome:
+
+**A. The combined retrain. DONE — trained 27 Aug, benchmarked 27 Aug: 37/46,
+and it taught the model a boundary surface rule. See the head of this file and
+`docs/RESULTS.md`.**
+Regenerate the SFT corpus as word-diffs, keep the
+27 mechanism cases, and **add clean-direction examples** (the same constructs
+where they are not defects, and commits that *fix* these bugs). This addresses
+both halves at once and nothing about it is speculative: word-diff is the
+measured fix for the six "removed" fabrications, mechanism cases are the
+measured fix for direction, and clean-direction examples are the missing
+counterweight to a 100%-buggy corpus. ~14h on the card.
+
+**B. The head-to-head with DeepJIT / CC2Vec / JITLine. DONE 26 Aug — see the
+night-session block below.** `corpus/deepjit.py` did NOT exist when this was
+written; `docs/RESULTS.md:431` lists it under *Phase 2 comparability*, i.e.
+future work, and this paragraph misread that as present tense. It exists now,
+and the gate lands inside the published range. The
+project claims to close a gap with these systems and has never measured
+against them. Either the gate lands inside their published range (AUC 0.829 on
+ApacheJIT suggests it can) and the framing becomes real, or it does not and a
+claim that would not have survived review is caught early.
+
+**C. Grade real commits, not just the 46. SAMPLED 26 Aug night, model run still
+owed** — `data/real_commits.jsonl`, 40 commits, seed 20260826.
+The TUI session above showed the
+locus/mechanism split on real code but produced no number. Record the repo and
+revisions, grade each finding locus / mechanism / wrong, verify every mechanism
+claim by execution. This is the cheapest fix for the two biggest weaknesses in
+the evaluation — n=46, and all-synthetic — and the repos are already cloned.
+Use only the five held-out projects.
+
+**D. A second grader.** Every mechanism number in this project has one rater.
+For a claim that is entirely about explanation quality, that is the weakest
+evidence for the strongest claim. Inter-rater agreement on even 20 cases would
+fix it.
+
+**E. Cost and latency, 3B vs 120B.** The teacher scores 93% against the
+student's 67%, so a reviewer will ask what the small model buys. "Not a chat
+wrapper" is a design principle, not a result. Measure tokens/sec, memory, and
+per-commit cost on both and the argument becomes a number.
+
+**Paper framing, honestly.** The detection half loses to a trivial baseline
+(F1 0.64 vs always-buggy 0.665, and on a leaked corpus at that), so a
+"we beat JITLine on detection" paper is not supported. What *is* supported is
+a measurement contribution: locus-only scoring overstates explanation
+correctness by 22 points, only execution catches it, the gap is 4x wider on a
+3B than a 120B, and targeted training data moves it where prompting cannot —
+plus execution-proved labels instead of SZZ, the random-pairing control, and
+the rendering-variance result. That paper survives a reviewer who notices the
+F1. The other one does not.
+
 # Next steps, in order
 
 **1. DONE (25 Aug, later in the day).** Hand-graded the 46 for mechanism, not
@@ -253,6 +473,51 @@ to word-diff (measured, loses 5 cases), retraining on the same corpus
 (`sft-ml8-grounded` came out worse), and more class mining (guard mining moved its class
 28.4% -> 33.9% for a 0.04 F1 gap, under the noise floor).
 
+# 26 Aug: first look at `mechanism-v1` in the TUI, on real commits
+
+Ran the TUI against a real repo through the tunnel
+(`ORACLE_BACKEND=ollama ORACLE_OLLAMA_HOST=http://localhost:8111`,
+`mechanism-v1-merged` served on the box). **Unquantified — no counts, no
+execution checks, an impression from reading the output.** Recorded because of
+*what* the impression was, not how strong it is.
+
+The user's own summary of what came back, unprompted: some findings correct;
+some **name the right thing but the explanation misses**; some wrong. Overall
+"pretty good".
+
+That is the locus/mechanism split, observed directly, on real code, by
+someone reading output rather than running a scorer. It is the **third
+independent reproduction** of the taxonomy the 25 Aug hand-grade named:
+
+1. the hand-grade on the 46 (89% locus vs 67% locus+mechanism — a 22-point gap)
+2. `gpt-oss-120b` on the same 46 (98% vs 93% — a 5-point gap, so the size of
+   the gap is a property of the model, not of the task)
+3. this session, in the TUI, on real repository commits
+
+**Why 3 matters more than it looks.** The strongest objection to the whole
+explanation result is that the 46 cases are hand-written toy programs, so the
+locus/mechanism gap might be an artifact of synthetic code. It is not — the
+same three-way split shows up on real commits the model has never seen, and it
+was noticed without anyone looking for it.
+
+**What it is not:** a number. "Some / some / some" cannot go in a paper, and
+"pretty good" is consistent with anything from 60% to 85%. To turn this into
+evidence it needs: the repo and revisions recorded, each finding graded
+locus/mechanism/wrong, and every mechanism claim checked by running the code —
+the same discipline the 46 got. That is the cheapest remaining path to the
+"n=46 is thin, and synthetic" problem, because real commits are free and
+already cloned in `data/repos/` (use the five held-out projects — `axios`,
+`clap`, `gin`, `fastapi`, `spring-boot` — the `apache__*` repos are leaked
+into the gate's training set).
+
+**Also worth noting:** the model is now biased toward reporting (33/33 recall,
+7 false alarms on the benchmark), so on real commits expect over-firing. Watch
+specifically for it claiming a call or line was *removed* when the diff shows
+it edited in place — that single fabrication is behind 6 of the 7 benchmark
+false alarms, and real commits contain far more in-place edits than the
+benchmark's 13 clean refactors do. If that is what the "incorrect" ones look
+like, it is the rendering artifact again and the word-diff retrain is the fix.
+
 # 26 Aug: the mechanism retrain finished, and it is the first real movement
 
 `sft-mechanism-v1` trained overnight (14h, 224 steps, 2 epochs, exit 0),
@@ -315,10 +580,391 @@ checkpoint-224), `artifacts/mechanism-v1-merged` (6.2G). Logs
 `sft_mechanism_v1.log`, `merge_mechanism.log`, `serve_mechanism.log`.
 Rows in `data/basic_bench_mechanism_v1.jsonl`.
 
-# In progress, uncommitted (night of 25 Aug)
+# Where the 26 Aug night session landed
 
-Started after the pivot-recommendation commit. The training run described
-above has since consumed these. Two pieces:
+Three things were asked for: build the combined corpus and launch, run the
+head-to-head, grade real commits. Two are done, one is half-blocked. **Nothing
+was committed** — the whole session is in the working tree.
+
+## 1. The corpus finding, which outranks everything else here
+
+**Half of every SFT corpus this project has ever trained on was silently
+discarded before training.** `MAX_SEQ_LENGTH` is 1024, TRL truncates
+`keep_start`, so a record whose *prompt* alone reaches 1024 tokens loses its
+entire assistant turn — and TRL then drops it, printing "Dropping fully masked
+examples from train dataset" while it does.
+
+    sft_mechanism_v1   1748 records -> 890 trained   (858 dropped, 49%)
+    sft_ml8_grounded   1286 records -> 616 trained   (670 dropped, 52%)
+
+The step counts prove it without any tokenizer work and were in the logs the
+whole time: 224 steps x 8 grad-accum / 2 epochs = **896**, not 1748. Any run
+whose step count does not match `records x epochs / (batch x grad_accum)` is
+training on a subset of its corpus. **Check that arithmetic before quoting any
+training run in this project.**
+
+Consequences, all in `docs/RESULTS.md`:
+
+- The mechanism dose was never 4.6%. Every pilot record fit (max 1055 tokens)
+  while half the bulk did not, so the real share was **9%**. The 26 Aug
+  write-up's "the dose was small" paragraph is wrong by a factor of two.
+- It does **not** explain the precision collapse. Truncation drops slightly
+  more buggy records than clean (34.6% nominal -> 30.1% effective), far too
+  small to produce recall 33/33 with precision 6/13. The one-directional
+  mechanism corpus remains the explanation. *Hypothesis tested and rejected,
+  not assumed.*
+- `config.py:73` is stale — "414 tokens median, 476 p90, 795 max" was the DPO
+  set. The real corpus is 1121 median, 1916 p90, 3996 max.
+
+## 2. The prompt-shape mismatch, which is a confound in the v1 result
+
+`basic_bench.py` never sets `include_schema`, and `client.py:170` resolves it to
+**True** for the `ollama` backend. So every benchmark number in this project was
+taken with the full JSON Schema in the prompt, while `sft_base`,
+`sft_multilang8` and `sft_ml8_grounded` are **100% short-hint**.
+`config.py:160` already prescribes `ORACLE_INCLUDE_SCHEMA=false` when serving
+from `serve.py`, and no run has ever set it.
+
+The 81 mechanism-pilot records are the *only* training data ever built with the
+schema — 82 of 1748 in `sft_mechanism_v1`. They matched the inference shape and
+the other 95% did not, which is a confound in the 26 Aug mechanism result that
+nobody has controlled for. **Re-baselining `oracle-merged` and
+`mechanism-v1-merged` under `ORACLE_INCLUDE_SCHEMA=false` is cheap, needs no
+training, and should happen as soon as the GPU frees up.**
+
+`sft_mechanism_v2` is built short-hint, deliberately: it keeps the corpus change
+isolated to word-diff + mechanism + clean-direction + budgeting, rather than
+stacking a prompt-shape change on top — which is the mistake `sft-ml8-grounded`
+made when it changed three things at once.
+
+## 3. `sft-mechanism-v2` — FINISHED 27 Aug 09:36, benchmarked. See the head.
+
+    data/sft_mechanism_v2.jsonl   1995 records, 0 dropped, 65% clean
+                                  1745 distinct assistant turns, top repeat 6x
+    artifacts/sft-mechanism-v2    250 steps, 1 epoch, ~14h
+
+Built by **`dataset_builder/build_mechanism_corpus.py`** — the builder the
+26 Aug handoff said was owed. It reproduces the old bulk corpus byte-for-byte
+(`--unified --mechanism-times 0 --clean-times 0` gives 1667/1667 records
+identical to `data/sft_multilang8.jsonl`), so `sft_mechanism_v1` is now
+retroactively explicable and v2 is reproducible from committed code.
+
+Composition: 1667 bulk + 168 mechanism (28 cases x6) + 162 clean-direction
+(54 cases x3).
+
+**1 epoch, not 2, and that was a judgement call.** Matching v1's compute is
+~1.5M tokens. v2 at 2 epochs is ~3.4M (~31h); at 1 epoch it is ~1.68M (~14.5h).
+The mechanism cases are upsampled 6x so each is still seen exactly 6 times,
+identical to v1's 3x over 2 epochs — the dose is preserved and the trade is more
+unique data for fewer repeats.
+
+New pieces it depends on:
+
+- **`dataset_builder/worddiff.py`** — converts unified-diff text to word-diff.
+  Needed because the corpus records carry only diff text; the original blobs are
+  gone, so re-rendering with git is not an option. Self-tests against real
+  `git --word-diff=plain` over every case under `bench/*/*/`: **128 of 169 match
+  exactly** (76%), the rest differ only in difflib-vs-git alignment. The count
+  grows as cases are added — the rate is what to watch, not the numerator. Since the same renderer can be
+  used at inference, exact git parity is a nice-to-have, not a requirement —
+  but **if you render word-diffs at inference, use this module, not git**, or
+  training and inference disagree again.
+- **`bench/clean_direction/`** — 54 cases, **every one verified by execution**,
+  generated by `bench/make_clean_direction.py`. 28 *fix* (each pilot case run
+  backwards, so the commit removes the defect) and 26 *refactor*
+  (behaviour-preserving renames, aimed straight at the "a call was removed"
+  fabrication). They carry a three-value `label` instead of a `buggy` flag,
+  which is the third label the 26 Aug harness note said was needed. Execution
+  caught and dropped 6 bad generations (`#include` -> `#include_x`,
+  `put` -> `put_x`).
+- **`bench/mechanism_pilot/*/analysis.json`** — the 27 hand-written assistant
+  turns now live beside their cases instead of only inside an unreproducible
+  JSONL. A 28th case, **`php-compound-assign-coerce`, had never made it into
+  training at all** — it has a `meta.json` and pre/post files but was missing
+  from `sft_mechanism_pilot.jsonl`. Verified by execution (`php post.php` ->
+  fatal TypeError, exit 255) and its analysis written.
+
+## 4. The head-to-head: the gate lands inside the published range
+
+`corpus/deepjit.py` now exists. QT and OPENSTACK on the **authors' splits
+unchanged** — 23133/2571 and 11973/1331 — matched 100% on commit hash.
+
+    python -m corpus.deepjit --eval
+
+| project | ORACLE gate AUC | JITLine AUC | ORACLE F1 | JITLine F1 |
+|---|---|---|---|---|
+| qt | 0.805 | 0.82 | 0.333 | 0.24 |
+| openstack | 0.837 | 0.83 | 0.442 | 0.33 |
+
+On **process metrics alone**, where JITLine adds code-token features and SMOTE.
+JITLine's numbers are read out of the stored cell outputs of its own replication
+notebook (Zenodo 4596503, cells 11-12), not transcribed from the paper.
+
+**This is Stage 1 against Stage 1, and it cannot be anything else.** The code
+channel in the released DeepJIT pickles is the placeholder string
+`"added _ code removed _ code"` in every entry of all four splits — checked
+exhaustively. Running Stage 2 on QT/OPENSTACK means re-mining both repositories
+by commit hash, which is a real job and not started.
+
+Also carry the caveat that the gate's *own* operating point (95% recall) gives
+F1 0.177 / 0.354. Buying recall at a 7% base rate costs precision; that is the
+right trade for a cascade and a bad leaderboard number. **AUC is the honest
+comparison** — F1 here is at 0.5 against JITLine's own operating point.
+
+**A seventh apparatus finding, and this one is external.** The JITLine abstract
+(arXiv 2103.07068v2) records that **CC2Vec trained on the test set**, and that
+excluding it drops CC2Vec's F-measure by **38.5% on OpenStack and 45.7% on Qt**.
+That is precisely this project's own gate-leak finding — 0.495 F1, 0.21 AUC —
+occurring in a published, peer-reviewed JIT defect prediction model, caught only
+because someone ran a replication. It is corroboration that the apparatus
+findings are the field's normal failure mode rather than a local accident, and
+it belongs in the paper's opening.
+
+Data lives in `data/deepjit/` (38MB, gitignored, re-fetchable — the module
+prints the URLs).
+
+## 5. Real commits: sampled and scaffolded, model run blocked
+
+Blocked for a hard reason: serving a 3B while the card holds a training run
+risks an OOM that kills the run. Everything that does not need the GPU is done.
+
+    python bench/real_commits.py --sample 40      # DONE, seed 20260826
+    python bench/real_commits.py --run  data/real_commits.jsonl   # NEEDS a server
+    python bench/real_commits.py --sheet data/real_commits.jsonl  # worksheet
+
+`data/real_commits.jsonl` holds **40 commits, 8 from each held-out project**
+(axios, clap, fastapi, gin, spring-boot), revisions recorded, seed fixed. Filter:
+non-merge, touches code, <=5 files, 343-5238 chars — a grader who cannot hold
+the diff in their head cannot verify a mechanism claim about it. Range
+2014-12-15 to 2026-07-29, median 1686 chars.
+
+`--sheet` emits one section per finding with `grade` (locus | mechanism | wrong)
+and `verified_by` fields. **Leave `grade` blank rather than guess when a
+mechanism claim was not actually executed** — an unverified grade is what the
+locus scorer already does, and reproducing it by hand adds nothing.
+
+Run this against **v2 and `mechanism-v1-merged` both**, or the numbers cannot be
+attributed to the retrain.
+
+## 6. What this session did NOT do
+
+- **Nothing was committed.** Deliberate — the user asked for the work, not the
+  history. See the file list below.
+- No full 46-case mechanism hand-grade on `mechanism-v1` (still outstanding from
+  26 Aug morning; 39/46 remains a locus floor).
+- No runner for `bench/mechanism_pilot` — `basic_bench.py`'s `ROOT` still points
+  at `bench/basic`, so those 28 cases have still never been scored as a
+  benchmark, only used as training data. `bench/clean_direction`'s 54 cases have
+  the same problem and the same fix.
+- The `_analyze_consensus` decision (step 2 below) is still open.
+
+# Improvements made after the first handoff pass (26 Aug, later)
+
+Asked "is it good for the paper?", the answer was no — one limitation would
+sink it. These four items are the response. **Still nothing committed.**
+
+## The limitation, named
+
+**The mechanism training families were chosen by looking at test failures.**
+`bench/mechanism_pilot` was built from the hand-grade's 10 mechanism failures,
+one case per failure family, and checked mechanically the correspondence is
+**10 of 10 — there is no held-out family.** Different programs and different
+languages, so not literal test-set training, but the *selection* of what to
+teach came from which tests failed.
+
+This licenses an **existence proof** — a 3B can be taught mechanism where four
+prompt-rule attempts moved nothing — and it does **not** license the rate.
+"5 of 10 fixed" must not appear beside a baseline. Full write-up with the
+correspondence table in `docs/RESULTS.md`, first section.
+
+## The repairs
+
+**1. Held-out families that no training corpus has seen.**
+
+    bench/mechanism_heldout   14 buggy cases
+    bench/clean_heldout       27 cases (14 fix + 13 refactor)
+
+Six mechanisms absent from the pilot: operator precedence, boundary-comparison
+direction, fallback/default order, unit scale, shadowed-variable update,
+rounding direction, swallowed errors. All 41 proved by execution. **Score v2 and
+`mechanism-v1` on these** — it is the generalisation test the project has never
+had.
+
+    python bench/basic_bench.py --root bench/mechanism_heldout --verify
+    python bench/basic_bench.py --root bench/clean_heldout --verify
+
+**2. A runner that can score any case root, and a guard on the ones it must
+not.** `basic_bench.py` grew `--root`, so the 82 cases in `mechanism_pilot` and
+`clean_direction` are finally scoreable — they had *never* been scored, only
+used as training data. It also grew the three-value label the 26 Aug harness
+note said was needed (`buggy` / `clean` / `refactor` / `fix`, via `MUST_DIFFER`),
+because "behaviour-preserving" and "introduces no defect" are different claims
+and a fix satisfies the second but not the first.
+
+**The guard matters as much as the flag.** `mechanism_pilot` and
+`clean_direction` are training data sitting one `--root` away from a headline
+number, so the runner now prints a block warning when you score them. That is
+the same class of mistake this project keeps finding in its own apparatus;
+this time something warns.
+
+    python bench/basic_bench.py --verify                              # 46/46
+    python bench/basic_bench.py --root bench/mechanism_pilot --verify # 28/28
+    python bench/basic_bench.py --root bench/clean_direction --verify # 54/54
+    python bench/basic_bench.py --root bench/mechanism_heldout --verify # 14/14
+    python bench/basic_bench.py --root bench/clean_heldout --verify   # 27/27
+
+**Case inventory — read this before quoting any benchmark number:**
+
+| directory | n | role |
+|---|---|---|
+| `bench/basic` | 46 | eval, the headline set |
+| `bench/mechanism_pilot` | 28 | **TRAINING** — never report a score |
+| `bench/clean_direction` | 54 | **TRAINING** — never report a score |
+| `bench/mechanism_heldout` | 14 | eval, held-out families |
+| `bench/clean_heldout` | 27 | eval, held-out families |
+
+**3. The second-rater packet.** `bench/rater_packet.py --emit` writes
+`data/rater_packet.md`: 20 cases, seed 20260826, **blinded** — it withholds
+`meta.json`'s `note` (which states the true mechanism) and rater one's grade, so
+the second rater checks the model against the program rather than an answer key.
+`--score rater2.csv` reports raw agreement, Cohen's kappa and the confusion
+matrix. Rater one's grades for all 46 are encoded in the module, transcribed
+from the `RESULTS.md` hand-grade table.
+
+This needs a human and is the cheapest open item: an afternoon of someone
+else's time closes "every mechanism number in this project has one rater".
+
+**4. Still the top priority when the GPU frees: the 40 real commits.** They were
+sampled at random from held-out projects — no family selection, no relationship
+to training data. That makes them the *cleanest* evidence for the central claim,
+not merely more n. Run them on **v2 and `mechanism-v1` both**.
+
+## What is still missing for the paper
+
+- ~~**v2's result.** Unknown until the run ends.~~ **DONE 27 Aug: 37/46 on the
+  46, 12/14 and 27/27 held-out — and the held-out boundary numbers are
+  inflated by a surface rule. See the head of this file.**
+- **Inter-rater agreement.** Packet ready, needs a person.
+- **Real-commit grades.** Sampled, needs the GPU.
+- **Cost and latency, 3B vs 120B** (item E). Untouched. Needs the GPU for the
+  3B side; the Groq teacher side can be measured any time.
+- ~~The full 46-case mechanism hand-grade on `mechanism-v1`.~~ **DONE — 31/46,
+  tied with `oracle-merged`. See the section below.**
+
+## One operational note learned the hard way tonight
+
+**Launch long runs with `python -u`.** `sft_mechanism_v2.log` shows step
+progress but no loss lines, because tqdm writes to stderr (unbuffered) while the
+loss dicts go to stdout, which Python block-buffers at 8KB when it is not a tty.
+`sft_mechanism_v1.log` has exactly 45 loss lines — about one 8KB buffer — all of
+which appeared only when the process exited. The run is fine; you just cannot
+watch the loss. Add `-u` next time.
+
+# Two more things done while the GPU was busy (26 Aug, late)
+
+Both were listed as blocked and neither actually was.
+
+## The count control on the head-to-head — it changes what that result means
+
+The repo's own rule is "run `count_control.py` beside every detection number",
+and the DeepJIT table went in without one. Corrected:
+
+| project | la only | la+ld | la+ld+nf | full gate | JITLine |
+|---|---|---|---|---|---|
+| qt | 0.741 | 0.735 | 0.744 | 0.805 | 0.82 |
+| openstack | **0.797** | 0.809 | 0.807 | 0.837 | 0.83 |
+
+**One feature — lines added — is 0.033 AUC from JITLine's published number on
+OPENSTACK.** QT and OPENSTACK have very little headroom above commit size, and
+DeepJIT, CC2Vec, JITLine and this gate are all competing inside it.
+
+This settles what the head-to-head licenses: **"the gate is a credible Stage 1"
+is supported; "we closed the gap with DeepJIT" is not**, because the gap is
+mostly churn. It is also the eighth apparatus finding, and the second from
+outside this project. The control now runs inside `corpus/deepjit.py --eval`
+so the AUC cannot be quoted without it.
+
+## The full 46-case mechanism hand-grade of `mechanism-v1` — 31/46, a tie
+
+Outstanding since the retrain landed and it never needed the GPU: the
+predictions were already in `data/basic_bench_mechanism_v1.jsonl`. Every
+mechanism verdict was settled by executing pre and post. Grades are data, in
+`data/handgrade_mechanism_v1.csv`.
+
+| | `oracle-merged` | `mechanism-v1` |
+|---|---|---|
+| buggy located | 30/33 | **33/33** |
+| of those, mechanism correct | 20 | **25** |
+| clean passed | **11/13** | 6/13 |
+| **locus + mechanism** | **31/46 (67%)** | **31/46 (67%)** |
+
+**Exactly tied.** +5 correct explanations on buggy cases, −5 on clean ones. The
+26 Aug "first real movement" claim stands as a description of what moved and is
+wrong as a claim about net correctness; that session re-read only the 10 known
+failures, so it could not see the wash.
+
+**The finding that matters most:** `java-string-equals` is a **new
+inverted-direction failure** — the model says `==` returns true for two
+equal-content strings, the program prints false. The retrain did not remove
+inverted direction as a class; it fixed the four instances it was trained on
+and grew a fresh one elsewhere. **That is exactly what the family-selection
+limitation predicts, and it is the strongest in-house evidence for it.**
+`go-offbyone` is a second regression on a case `oracle-merged` got right.
+
+Two sub-species separated for the first time, both of which the automated
+scorer is blind to:
+
+1. **Summary contradicts its own finding** — `java-array-bound` (NPE vs
+   ArrayIndexOutOfBounds), `php-divzero-guard` (non-empty vs empty),
+   `ts-reduce-empty` (TypeError vs RangeError). A grader reading one field
+   scores these differently from one reading the other. Scorer-design problem.
+2. **Right mechanism, fabricated illustration** — `rb-int-division` claims
+   `mean([1,2])` is 0 (it is 1), `rb-range-bound` claims zero (it is 10),
+   `py-range-bound` claims "one less" (short by 5), `rs-int-division` claims
+   2.5→2 (it is 1.50→1.00). Graded **locus** here because the causal claim is
+   true, but **4 of the 25 "correct" explanations carry a false number** and a
+   stricter rater would grade them down. Expect the inter-rater disagreement to
+   concentrate here — it is why the packet exists.
+
+**Open question for the next session, and it is a real one:** should a
+fabricated worked example inside an otherwise-correct explanation count as a
+hallucination? The project's goal says "no hallucination". Under a strict
+reading `mechanism-v1` is 21/46, not 31/46. **Decide it once, write it down,
+and apply it to both checkpoints** — do not let it drift between runs.
+
+# Uncommitted at handoff (night of 26 Aug)
+
+Modified: `.gitignore` (adds `data/deepjit/`), `docs/RESULTS.md` (five new
+sections), `bench/basic_bench.py` (`--root`, three-value labels, training-data
+guard), `bench/make_clean_direction.py` (`--from`/`--out`), `next-session.md`.
+
+New, untracked:
+
+    bench/mechanism_heldout/          14 held-out cases
+    bench/clean_heldout/              27 held-out cases
+    bench/rater_packet.py
+    data/rater_packet.md              20-case blinded packet
+    data/handgrade_mechanism_v1.csv   all 46 grades, execution-verified
+    dataset_builder/worddiff.py
+    dataset_builder/build_mechanism_corpus.py
+    corpus/deepjit.py
+    bench/make_clean_direction.py
+    bench/real_commits.py
+    bench/clean_direction/            54 cases, 162 files
+    bench/mechanism_pilot/*/analysis.json      28 files
+    data/real_commits.jsonl           40 sampled commits
+    data/deepjit/                     38MB, gitignored
+
+On the box: `data/sft_mechanism_v2.jsonl`, `artifacts/sft-mechanism-v2`
+(training), `sft_mechanism_v2.log`, plus `data/labelled_all.jsonl` which was
+copied over because the builder needs it.
+
+# Historical: what was uncommitted on the night of 25 Aug
+
+**Superseded — kept for provenance.** These were committed in 0eb90b9, and the two
+debts they named (a builder script, and the assistant turns living only in
+an unreproducible JSONL) are both paid off by the 26 Aug night session
+above. Read it for the reasoning behind the mechanism cases. Two pieces:
 
 **`bench/mechanism_pilot/`** — 27 new hand-authored cases, `meta.json` schema
 identical to `bench/basic_bench.py`'s (`buggy`, `category`, `must_mention`,
@@ -464,6 +1110,22 @@ than assumed — which is what showed the refactor failure to be a rendering
 artifact rather than a reasoning failure. An SZZ-labelled corpus cannot produce
 that diagnosis.
 
+**26 Aug night, and it moves the framing:** the detection half now has a real
+comparison. On QT and OPENSTACK, authors' splits, the gate scores AUC 0.805 and
+0.837 against JITLine's own 0.82 and 0.83 — **inside the published range, on
+process metrics alone.** That does not resurrect "we beat JITLine on detection"
+(it is a tie on AUC, at Stage 1, and F1 is not comparable across operating
+points), but it does retire the worry that the gate is not a credible Stage 1.
+The paper can now say the cascade's front half is competitive with the
+literature and spend its argument on the explanation half, which is where the
+contribution actually is.
+
+It also adds a seventh apparatus finding, and the first one from outside this
+project: **CC2Vec's published numbers were inflated by training on the test
+set** — F-measure drops 38.5% / 45.7% once it is excluded (JITLine abstract,
+arXiv 2103.07068v2). Same failure as this project's own gate leak, in a
+peer-reviewed model. Lead with that pairing.
+
 **Three gaps, in order — two now closed, one remains:**
 
 1. **The hand-grade — DONE 25 Aug.** No longer a gap, it's a result: 31/46
@@ -545,6 +1207,19 @@ regression — keep it, step 3 compares against it), `artifacts/dpo-adapter-v2`,
 
   `ssh oracle-gpu 'bash -lc "..."'` works only while the inner string contains
   no `$`.
+- **Check the step count against the corpus size before trusting a run.**
+  `steps == records * epochs / (batch_size * grad_accum)` must hold. When it
+  does not, TRL truncated records past `MAX_SEQ_LENGTH` (1024, `keep_start`),
+  their assistant turn was cut off, and TRL dropped them as fully masked — 49%
+  of `sft_mechanism_v1` and 52% of `sft_ml8_grounded` went that way. Build
+  corpora with `dataset_builder/build_mechanism_corpus.py --tokenizer`, which
+  shrinks each diff until the answer survives; it reports
+  "N fit as written, M had the diff shrunk, K dropped".
+- **`include_schema` does not default the way the corpora were built.**
+  `client.py:170` gives the `ollama` backend `include_schema=True`, so every
+  benchmark run sends the full JSON Schema while the corpora are short-hint.
+  Pin it: `ORACLE_INCLUDE_SCHEMA=false` for a tuned checkpoint, and say which
+  setting a number was taken under. `basic_bench.py` does not set it at all.
 - **Every setting is read as `ORACLE_<NAME>`.** `config.py:18` is
   `os.getenv(f"ORACLE_{name}")`, so a bare `INFERENCE_SAMPLES=1` sets nothing
   and the run silently uses the default of 3. `_env()` now prints a warning to

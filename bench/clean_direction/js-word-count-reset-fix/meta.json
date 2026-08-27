@@ -1,0 +1,9 @@
+{
+  "id": "js-word-count-reset-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-word-count-reset",
+  "category": "logic-error",
+  "note": "reverses js-word-count-reset: '[ 2, 5, 6 ]' -> '[ 2, 3, 1 ]'"
+}

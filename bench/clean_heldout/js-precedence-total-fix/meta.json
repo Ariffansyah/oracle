@@ -1,0 +1,9 @@
+{
+  "id": "js-precedence-total-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-precedence-total",
+  "category": "logic-error",
+  "note": "reverses js-precedence-total: '7' -> '16'"
+}

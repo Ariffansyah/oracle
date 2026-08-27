@@ -1,0 +1,9 @@
+{
+  "id": "go-boundary-flip-fix",
+  "language": "go",
+  "ext": "go",
+  "label": "fix",
+  "parent": "go-boundary-flip",
+  "category": "off-by-one",
+  "note": "reverses go-boundary-flip: 'true false false' -> 'true true false'"
+}

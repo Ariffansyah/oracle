@@ -1,0 +1,10 @@
+{
+  "summary": "The change replaces floating-point division with integer division in score_percentage, causing the percentage to be truncated to zero for non‑whole ratios and introducing a possible DivisionByZeroError when total is zero.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "intdiv truncates the division, so score_percentage(1,3) returns 0 instead of 33.33, producing incorrect results for any non‑integer ratio. It also throws DivisionByZeroError if total is zero, which was not handled before.",
+      "file": "php-ratio-trunc.php"
+    }
+  ]
+}

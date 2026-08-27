@@ -1,0 +1,13 @@
+{
+  "id": "php-array-ref-alias-rename",
+  "language": "php",
+  "ext": "php",
+  "label": "refactor",
+  "parent": "php-array-ref-alias",
+  "category": "logic-error",
+  "note": "renames the local `data` to `data_x`; output stays 'Array\\n(\\n    [0] => 1\\n    [1] => 2\\n    [2] => 3\\n)\\nArray\\n(\\n    [0] => 1\\n    [1] => 2\\n    [2] => 3\\n    [3] => done\\n)'",
+  "renamed": [
+    "data",
+    "data_x"
+  ]
+}

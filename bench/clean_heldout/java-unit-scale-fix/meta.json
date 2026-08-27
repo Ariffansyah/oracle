@@ -1,0 +1,9 @@
+{
+  "id": "java-unit-scale-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-unit-scale",
+  "category": "logic-error",
+  "note": "reverses java-unit-scale: '500' -> '5000'"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "php-compound-assign-coerce-fix",
+  "language": "php",
+  "ext": "php",
+  "label": "fix",
+  "parent": "php-compound-assign-coerce",
+  "category": "logic-error",
+  "note": "reverses php-compound-assign-coerce: 'PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string + string in /home/arp/Documents/oracle/bench/mechanism_pilot/php-compound-assign-coerce/post.php:4\\nStack trace:\\n#0 /home/arp/Documents/oracle/bench/mechanism_pilot/php-compound-assign-coerce/post.php(7): build_label()\\n#1 {main}\\n  thrown in /home/arp/Documents/oracle/bench/mechanism_pilot/php-compound-assign-coerce/post.php on line 4' -> 'user-bob'"
+}

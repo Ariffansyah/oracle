@@ -1,0 +1,13 @@
+{
+  "id": "rb-swallowed-error-rename",
+  "language": "ruby",
+  "ext": "rb",
+  "label": "refactor",
+  "parent": "rb-swallowed-error",
+  "category": "error-handling",
+  "note": "renames the local `parse_port` to `parse_port_x`; output stays 'caught: bad port: http'",
+  "renamed": [
+    "parse_port",
+    "parse_port_x"
+  ]
+}

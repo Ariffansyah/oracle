@@ -1,0 +1,6 @@
+{
+  "id": "py-shadow-update", "language": "python", "ext": "py", "buggy": true,
+  "category": "logic-error",
+  "must_mention": [["subtotal", "never", "discard", "local", "total"]],
+  "note": "the accumulation is written to a new local that nothing reads, so total stays 0. Verified: 6 -> 0"
+}

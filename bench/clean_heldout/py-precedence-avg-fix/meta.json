@@ -1,0 +1,9 @@
+{
+  "id": "py-precedence-avg-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-precedence-avg",
+  "category": "logic-error",
+  "note": "reverses py-precedence-avg: '20' -> '30'"
+}

@@ -3,7 +3,181 @@
 Every measurement taken, with the command that reproduces it. Numbers only —
 interpretation lives in `ROADMAP.md`, corpus provenance in `DATASETS.md`.
 
-Status as of 2026-08-27.
+Status as of 2026-08-28.
+
+---
+
+## The v2 pilot: the contract is learned, and the evidence it emits is mostly wrong (2026-08-28)
+
+`sft-v2-pilot`, the first checkpoint trained on the v2 output contract. 318
+records, 2 epochs, 80/80 steps in 5h44m, finished 01:49 WIB. `train_loss` 0.279,
+final step 0.0091, token accuracy 0.9977, no divergence. Step arithmetic holds —
+318 x 2 / 8 = 79.5 -> 80 — so no record was silently dropped.
+
+Scored with the contract pinned on BOTH sides, which is what the configuration
+finding of 27 Aug exists to enforce:
+
+    ORACLE_OUTPUT_CONTRACT=v2 ORACLE_INCLUDE_SCHEMA=false ORACLE_INFERENCE_SAMPLES=1 \
+      .venv/bin/python bench/basic_bench.py --backend ollama \
+      --model-name sft-v2-pilot --host http://localhost:8111 --word-diff-module \
+      --out data/basic_bench_v2_pilot.jsonl
+    # --root bench/mechanism_heldout --out data/heldout_mech_v2_pilot.jsonl
+    # --root bench/clean_heldout     --out data/heldout_clean_v2_pilot.jsonl
+
+### Read this first: the live run reported the opposite of the truth
+
+The run printed `effect claimed 0/46 <- v1 contract`, which reads as "the model
+did not learn the contract". **It had learned it perfectly.** Two apparatus
+defects, both fixed:
+
+- `basic_bench.py` built each row by hand-picking keys out of `grade()` and
+  **dropped every `effect_*` key on the way in**, so `summarise()` saw no claim
+  on any row. A live run could not report a nonzero effect tier no matter what
+  the model emitted. Rows now spread `grade()` whole.
+- The zero-claims line **hardcoded** the string `v1 contract`, asserting a cause
+  it never checked. It now reads `OUTPUT_CONTRACT` and, under v2, says the zero
+  is a finding to investigate rather than an expected result.
+
+The full answer was already stored under `predicted` and `--score` re-grades
+stored rows, so nothing had to be re-run. **Every number below comes from
+`--score` over the stored rows, so all three sets are graded by one scorer.**
+
+`--score` needs `--root` for a non-default set; without it the ids do not
+resolve and it prints `no gradable rows`. It fails safe, but silently.
+
+### The format half of the contract: answered without qualification
+
+| | `bench/basic` | `mechanism_heldout` | `clean_heldout` |
+|---|---|---|---|
+| n | 46 | 21 | 34 |
+| well-formed `effect`, all four keys | **46/46** | **21/21** | **34/34** |
+| `direction` a legal value | 46/46 | 21/21 | 34/34 |
+| errored calls | 0 | 0 | 0 |
+
+`unclear` never fired. **The baseline was 0 claims on all seven stored runs** —
+re-verified here: `heldout_mech_v2_n21` and `heldout_clean_v2_n34` carry 0/21 and
+0/34 effect objects. This is the first checkable behavioural claim any checkpoint
+in this project has made, on 101/101 answers.
+
+### The claims themselves
+
+| | `bench/basic` | `mechanism_heldout` | `clean_heldout` |
+|---|---|---|---|
+| fully correct (locus) | 36/46 (78%) | 14/21 (67%) | 34/34 (100%) |
+| false alarms | 1/46 (2%) | 0/21 | 0/34 |
+| direction right | 35/46 (76%) | 19/21 (90%) | 30/34 (88%) |
+| observable right | 17/46 (37%) | 4/21 (19%) | 14/34 (41%) |
+| **FABRICATED** | **6/46 (13%)** | **1/21 (5%)** | **3/34 (9%)** |
+
+The acceptance criterion was written in advance with two halves: `direction_ok`
+materially above the rate implied by v1's six template misses, **and**
+`fabricated` at zero. **The first half is met — 84/101 overall, against a
+baseline where the question could not be asked. The second is not.**
+
+Against the previous checkpoint under identical rendering and schema settings,
+`bench/basic` locus is flat (36/46 against 37/46) while **false alarms fall 5 ->
+1**; `clean_heldout` is unchanged at 34/34; `mechanism_heldout` falls 19/21 ->
+14/21. That drop decomposes as **one verdict flip and four `unconfirmed`** —
+the model still detects 18/21 but stops citing the token `must_mention` asks
+for. At least some read as correct paraphrase (`go-boundary-flip`: "flips the
+inequality in inRange ... return true for inputs less than 100 instead of
+greater or equal", which never writes `<=` or `boundary`), so 14/21 is a floor
+and the true gap is smaller than five cases. **The matching rule was not
+touched** — this repo requires measuring any such change against random pairings
+first, and that control has not been run.
+
+### `direction_ok` earns its place; `observable_ok` and `trigger` do not
+
+Splitting the observable failures into their two kinds, over all 101 answers:
+**9 inverted** (the claim matches the opposite side exactly — `java-string-equals`
+claims `false -> true` where the truth is `true -> false`) and **57 invented**
+(`c-const` claims `3 -> 3` where the program prints `9 -> 9`: direction right,
+value fabricated).
+
+The tier that justifies the contract: on `bench/basic`, **4 of the 5 inverted
+and 3 of the 5 fabricated answers were graded CORRECT by the locus scorer.**
+`identified()` structurally cannot see an inverted claim; `direction_ok` can, and
+it catches 2 answers on `bench/basic` that locus passes.
+
+**`effect.trigger` is degenerate: it echoes the case filename in 101/101
+answers.** The builder fills it with `f"running {m['id']}.{m['ext']} as written"`
+(`build_mechanism_corpus.py:102`) while the schema specifies "One input or
+condition that exposes the difference, e.g. `xs = [1,2,3]`". The corpus
+contradicts its own field description, and the model learned the corpus. The
+field currently carries no information and **must not be searched by any scorer**
+— it contains the case name, so matching `must_mention` against it grounds the
+answer on its own filename. That was tested: searching `trigger` would flip three
+`mechanism_heldout` cases to "identified" purely on the case name (`boundary`
+from `go-boundary-flip`, `precedence` from `py-precedence-avg`). Searching only
+`before`/`after` flips 0 and 1. **The locus drop above is real, not a scoring
+artifact.**
+
+### The fabricated evidence has a mechanism, and it is in the corpus
+
+10 fabrications across 101 answers: 9 absolute paths, 1 behaviour-change claim on
+byte-identical output. The path rule is proof, not suspicion, and is now stronger
+than "the model was never handed a path": `outputs()` executes each case in a
+**fresh temp dir on every call**, so the real path differs between two runs of the
+scorer on the same file (`go-nil-map`: `tmpaswlmjkc`, then `tmppg2vk9c9`). The
+path is not a function of the input and cannot be known by anything.
+
+Where the fabricated paths come from:
+
+| cited | appears in `sft_v2_pilot.jsonl` | emitted on |
+|---|---|---|
+| `/tmp/tmpd6rhx_a0/` | **6 records** | `php-divzero-guard`, `rs-index-bound`, `rs-unwrap-none`, `js-swallowed-error-fix`, `rb-swallowed-error-fix` |
+| `/tmp/tmp8bzrai1/` | 0 — but `/tmp/tmp8bzrai1x` is in **6 records** | `go-loop-bound-loosen`, `go-loop-bound-loosen-fix` |
+| `/tmp/tmp7v1q1q1x/`, `/tmp/tmp_qlzz_hx/` | 0 | `go-nil-map`, `py-pop-guard` |
+
+**One memorized temp directory is re-emitted as execution evidence on five
+different cases in four languages**, and a second is emitted as a one-character
+truncation of a corpus token. Seven of nine are traceable to the training set;
+two are novel invention in the learned register.
+
+**The cause is `executed_effect`.** `obs()`
+(`build_mechanism_corpus.py:94`) takes the raw bytes of the executed output and
+truncates to 200 chars with no normalisation, so **66 of 318 records (21%) carry
+a per-execution random temp dir**, drawn from only 16 distinct values. The
+function's own docstring says it exists to stop the model inventing absolute
+paths; it put real, unlearnable ones into a fifth of the targets instead.
+
+The correction is one line and was verified read-only: collapsing
+`/tmp/tmp\w+/` takes 66 records to 0 while leaving the claim true —
+`-2147483648 main.c:5:14: runtime error: signed integer overflow ...` keeps
+everything informative and loses only the token nothing could have predicted.
+
+**This is not simply copying.** The v1 corpora contain **zero** absolute paths,
+yet the earlier checkpoint still fabricated `bench/mechanism_pilot/` paths
+(27 Aug). The register tracks whatever the corpus supplies; what v2 added was
+tokens that are impossible to get right.
+
+### `observable_ok` is not reproducible, and is slightly inflated
+
+Three identical `--score` runs over the same stored `clean_heldout` file gave
+**14, 15, 14**. Locus and `fabricated` are stable; `observable_ok` is not.
+
+The cause is the same temp dir. `rb-loop-bound-loosen-fix` claims `before = "3"`;
+the real pre-output is a Ruby `TypeError`, so the claim is **wrong**. But
+`_obs_match`'s numeric rule — "the claim's integers all appear in the real
+output" — matches `3` against the random directory name: `tmpoc3wg92t` contains a
+`3` and scores the wrong claim correct, `tmp5p5o2xzg` does not. **The tier is
+decided by a coin flip on a random string.**
+
+Stripping the temp dir before matching: 36/101 -> **35/101**. The inflation is
+one case today, but the mechanism is unbounded for any single-digit claim, and it
+makes the tier non-reproducible. Fix it in the same place as the corpus fix.
+
+### What this run does and does not answer
+
+It answers, exactly as scoped in advance: the model emits a well-formed `effect`
+(101/101) and `direction_ok` beats zero decisively (84/101). Both yes.
+
+It does **not** answer whether the contract fixes explanation correctness. 80
+unique targets heavily upsampled, and `observable_ok` at 35% is **ambiguous
+between "the contract is wrong" and "318 records is too little"** — and now a
+third reading is on the table and better supported than either: **the corpus
+teaches an unlearnable token, and the scorer rewards accidental matches on it.**
+Fix those two before spending a larger training run on the question.
 
 ---
 

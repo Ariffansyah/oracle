@@ -1,119 +1,117 @@
 Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first — the top
-four sections are 27 Aug, newest first, and the newest two overturn claims the
-older ones make. Then `docs/ROADMAP.md`.
+section is 28 Aug and the four below it are 27 Aug, newest first. Then
+`docs/ROADMAP.md`.
 
-# Status at handoff (27 Aug, ~19:00 WIB)
+# Status at handoff (28 Aug, ~06:30 WIB)
 
-**A pilot training run is on the GPU.** `sft-v2-pilot`, 80 steps, 2 epochs,
-~260s/step, started ~18:35 WIB, ETA ~00:20 WIB. Check it before anything else:
+**Nothing is running. The GPU is free** (confirmed with `nvidia-smi`, 74 MiB,
+kwin only — not with `pgrep`, which lies here). The explainer server was stopped.
 
-    ssh oracle-gpu 'pgrep -af fine_tuning.train_sft'
-    ssh oracle-gpu 'tail -c 600 ~/oracle/sft_v2_pilot.log | tr "\r" "\n" | tail -3'
-    ssh oracle-gpu 'ls ~/oracle/artifacts/sft-v2-pilot'
+`sft-v2-pilot` trained and was scored on all three eval sets. The adapter is at
+`~/oracle/artifacts/sft-v2-pilot` on the box, with `checkpoint-40` and
+`checkpoint-80`. Runs are in `data/basic_bench_v2_pilot.jsonl`,
+`data/heldout_mech_v2_pilot.jsonl`, `data/heldout_clean_v2_pilot.jsonl`.
 
-Working tree is clean at `2d67f58`. Three commits landed on 27 Aug:
-`de18986` session findings, `fe39e59` the v2 contract, `2d67f58` the v2 corpus
-build. The explainer server was stopped to free the card.
+# What 28 Aug established
 
-# What 27 Aug established
+**1. The v2 contract is learned, completely.** 101/101 answers carry a
+well-formed `effect` with all four keys and a legal `direction`; 0 errored
+calls; `unclear` never fired. **The baseline was 0 claims on all seven stored
+runs**, re-verified. This is the first checkable behavioural claim any
+checkpoint in this project has made. The format question is closed.
 
-**1. The three-way checkpoint table was a configuration artifact.** One
-no-training rerun put `oracle-merged` in v2's exact configuration:
+**2. `direction_ok` is 84/101 and it catches what locus cannot.** 35/46, 19/21,
+30/34. On `bench/basic`, **4 of 5 inverted and 3 of 5 fabricated answers were
+graded CORRECT by the locus scorer** — `identified()` structurally cannot see an
+inverted claim.
 
-| checkpoint | schema | rendering | locus |
-|---|---|---|---|
-| `oracle-merged` | on | unified | 41/46 |
-| `oracle-merged` | on | git `--word-diff` | 36/46 |
-| `oracle-merged` | off | module word-diff | **35/46** |
-| `mechanism-v2` | off | module word-diff | **37/46** |
+**3. The stated acceptance criterion is half met.** It was written in advance as
+`direction_ok` materially above v1's implied rate **and** `fabricated` at zero.
+Direction: met. **Fabricated: 10/101, not zero.**
 
-Same weights, configuration only: 41 -> 35, larger than the 41 -> 37 gap it was
-invoked to explain. **Measured identically, v2 is the better checkpoint.** Never
-quote the old three-way table.
+**4. The fabricated evidence is caused by the corpus, and the fix is one line.**
+`executed_effect`'s `obs()` (`build_mechanism_corpus.py:94`) writes raw executed
+bytes into the target, so **66 of 318 records (21%) carry a per-execution random
+temp dir** from only 16 distinct values. One of them, `/tmp/tmpd6rhx_a0/`, is in
+6 records and the model re-emits it as execution evidence on **five different
+cases in four languages**; another is emitted as a one-character truncation of a
+corpus token. 7 of 9 fabricated paths trace to the training set. Collapsing
+`/tmp/tmp\w+/` takes 66 records to 0 and keeps every claim true — verified
+read-only, not yet applied.
 
-**2. The surface-rule story is dead, refuted twice.** Off-by-one tracks the
-renderer, not the weights (8-9/9 unified, 4-5/9 word-diff, whichever
-checkpoint), and `oracle-merged` reproduces the collapse with no clean-direction
-training at all. Fourteen counter-aligned boundary cases were then built —
-a loosening that IS a bug, a tightening that IS a fix, seven languages,
-execution-proved — and **v2 answers all 14 correctly.**
-Denominators changed: `mechanism_heldout` 14 -> 21, `clean_heldout` 27 -> 34.
+**5. `observable_ok` is not reproducible and is slightly inflated.** Three
+identical `--score` runs on the same stored file gave **14, 15, 14**. Cause: the
+same temp dir. `rb-loop-bound-loosen-fix` claims `before="3"` against a Ruby
+`TypeError` — wrong — but `_obs_match`'s numeric rule matches the `3` inside the
+random directory name. **The tier is decided by a coin flip on a random string.**
+Stripping the dir: 36/101 -> 35/101. One case today; unbounded for any
+single-digit claim.
 
-**3. v2 fabricates executed program output.** It justifies a wrong verdict by
-quoting a Go panic trace from an absolute path inside `bench/mechanism_pilot`
-for a file that does not exist. Of 101 answers, 42 quote program output, 6 cite
-absolute paths, **0 of those paths exist**, and two name cases created after the
-checkpoint was trained. Five of the six sit inside answers the scorer graded
-correct.
+**6. `effect.trigger` is degenerate — it echoes the case filename in 101/101.**
+The builder fills it with `running {id}.{ext} as written` while the schema
+specifies "One input or condition that exposes the difference, e.g.
+`xs = [1,2,3]`". **No scorer may ever search `trigger`**: it contains the case
+name, so matching `must_mention` against it would ground an answer on its own
+filename. Tested — it would flip three `mechanism_heldout` cases on the case name
+alone.
 
-**4. The diagnosis, and it is the reason for everything below.** Of 54 buggy
-cases v2 missed six, and **five of the six reproduce a training template
-verbatim** — three the `fix` template, two the `rename` template — each ending
-in "no defect". `php-shadow-update` shows the mechanism: a shadowed variable
-looks like a rename, so the model matched the shape, printed the sentence, and
-the sentence carried it to a clean verdict. Two structural causes, neither
-reachable by prompting (which is why five prompt attempts lost):
+**7. Locus, measured identically.** `bench/basic` 36/46 against the previous
+checkpoint's 37/46, with **false alarms 5 -> 1**. `clean_heldout` 34/34,
+unchanged. `mechanism_heldout` 19/21 -> **14/21**, which decomposes into one
+verdict flip and four `unconfirmed` — the model still detects 18/21 but stops
+citing the `must_mention` token, and some of those read as correct paraphrase.
+14/21 is a floor. **The matching rule was NOT touched**; changing it requires the
+random-pairing control first.
 
-- `Analysis` emitted `summary` first, so the verdict was the first key
-  generated and generation only runs forwards. The v1 prompt asks the model to
-  "state to yourself what runtime behaviour differs now" and gives it **nowhere
-  to write that down**.
-- Matching a template is cheaper than reading the code.
+# Two apparatus bugs fixed on 28 Aug
 
-# The v2 contract (built, untrained until the pilot lands)
+- **`basic_bench.py` dropped every `effect_*` key when building a row**, so
+  `summarise()` could never report a nonzero effect tier from a live run. The
+  pilot's first run printed `effect claimed 0/46` while all 46 answers carried a
+  well-formed effect. Rows now spread `grade()` whole.
+- **The zero-claims line hardcoded `v1 contract`**, asserting a cause it had not
+  checked. It now reads `OUTPUT_CONTRACT` and, under v2, says the zero is a
+  finding to investigate.
 
-`config.OUTPUT_CONTRACT` = `v1` | `v2`, **default v1**. One switch moves prompt,
-format hint and expected keys together — they are deliberately not selectable
-apart, because finding 1 above is what happens when they drift.
+Both are in the class this project keeps hitting: **a status line that reports
+intent rather than observed state.** That list is now five entries long.
 
-`Effect` is the FIRST field of `Analysis`: `trigger`, `before`, `after`,
-`direction`. `grade_effect()` scores three tiers on every run and every
-`--score`:
+# Do this next, in order
 
-| tier | question | catches |
-|---|---|---|
-| `direction_ok` | which way did the code move | inversions, which `identified()` structurally cannot see |
-| `observable_ok` | does the claim match what ran | invented values |
-| `fabricated` | proof, not suspicion | an absolute path the model was never given, or a claimed change on byte-identical output |
+**1. Fix the two temp-dir defects before any further training.** They are the
+same token in two places, and both are cheap:
 
-**Baseline: 0 checkable claims on all seven stored runs.** No checkpoint in this
-project has ever made one.
+- `build_mechanism_corpus.py::obs()` — normalise `/tmp/tmp\w+/` out of the
+  executed output before it becomes a target.
+- `bench/basic_bench.py::outputs()` — normalise it out before `_obs_match`, so
+  the tier stops being a coin flip.
 
-# Do this first, in order
+Then rebuild the corpus and confirm 0/318 records carry a temp dir.
 
-**1. Score the pilot.** Serve it, then set the contract on BOTH sides or you
-reintroduce finding 1:
+**2. Give `trigger` something to say, or drop it.** It is 100% filename echo
+today. The executable cases have real entry points with literal arguments, so
+the builder could fill it with an actual input — which is what the schema asks
+for. This is the field the 1673 real commits would genuinely enrich.
 
-    ssh oracle-gpu 'cd ~/oracle && nohup .venv/bin/python -m llm_explainer.serve \
-        --port 8111 --model artifacts/sft-v2-pilot > ~/oracle/serve.log 2>&1 &'
-    ssh -f -N -L 8111:localhost:8111 oracle-gpu
+**3. Then the fork, which is still open — and step 1 changes its terms.**
+Whether to run a Groq `gpt-oss-120b` pass over the 1673 teacher-labelled commits
+so the full v2 corpus can carry an effect. The precondition ("does the model
+learn the format") is now met. **But those records have no pre/post to run, so
+their `before`/`after` would be teacher-GUESSED, not executed** — which is
+exactly the mechanism that produced 10 fabrications in 101 answers, scaled to
+83% of a 2000-record corpus. Options, honestly:
 
-    ORACLE_OUTPUT_CONTRACT=v2 ORACLE_INCLUDE_SCHEMA=false ORACLE_INFERENCE_SAMPLES=1 \
-      .venv/bin/python bench/basic_bench.py --backend ollama \
-      --model-name sft-v2-pilot --host http://localhost:8111 --word-diff-module \
-      --out data/basic_bench_v2_pilot.jsonl
-    # --root bench/mechanism_heldout --out data/heldout_mech_v2_pilot.jsonl
-    # --root bench/clean_heldout     --out data/heldout_clean_v2_pilot.jsonl
+  - **Fix the corpus and retrain the 318 as-is** (~250 steps if the fixed corpus
+    grows). Every claim stays true by construction. Small, clean, cheap.
+  - **Groq pass filling only `trigger` and `direction`** for the 1673 — both are
+    derivable without execution — leaving `before`/`after` to executable cases.
+    Requires a schema change: all four `Effect` fields are currently required
+    `str`, so a partial effect is not expressible today.
+  - **Groq pass filling all four.** Largest corpus, and the one that risks
+    teaching the model to state observables it cannot verify.
 
-Locus is comparable to 37/46, 19/21, 34/34. The three effect tiers have no
-prior — baseline is zero claims, so any well-formed claim is new information.
-
-**2. Read the result honestly.** This run answers TWO questions only: does the
-model emit a well-formed `effect`, and does `direction_ok` beat zero on
-held-out families. It does **not** answer whether the contract fixes explanation
-correctness in general — 80 unique targets, heavily upsampled, and the two
-shadow-update misses are a family the training never saw. **A poor
-`direction_ok` is ambiguous between "the contract is wrong" and "318 records is
-too little." Do not conclude the first from this run.**
-
-**3. Then decide the fork that is still open.** Only executable cases can carry
-a true `effect`; the 1673 teacher-labelled commits in `data/labelled_all.jsonl`
-have no pre/post to run, so the full v2 corpus would be 83% effect-free, which
-teaches the field is optional. The builder refuses to do this quietly — it
-prints the counts and points at `--no-bulk`. If the pilot shows the format is
-learned, the real experiment is a Groq `gpt-oss-120b` pass adding
-trigger/before/after to those 1673 records (all `hinted: False`, so the leak fix
-holds), then the full ~2000-record corpus at ~250 steps.
+  The measurement in RESULTS.md 28 Aug argues against the third. It is the
+  user's call.
 
 # Still open, unchanged by 27 Aug
 
@@ -160,6 +158,28 @@ is not deterministic the way the off-by-one cases are.
 - **No more prompt-rule fixes** (five attempts, all lost) and **no DPO**
   (null, and the pairs do not fit 6GB).
 - Locus is a floor, not a verdict. `identified()` cannot see an inverted claim.
+- **A summary line that hardcodes its own explanation is not evidence.**
+  `basic_bench.py` printed `effect claimed 0/46 <- v1 contract` for a run whose
+  46 answers all carried a well-formed effect: the row writer had dropped the
+  keys and the label asserted a cause nobody checked. Before believing a zero,
+  check that the thing which counts it can see the thing it counts.
+- **`--score` needs `--root` for any non-default set.** Without it the case ids
+  do not resolve and it prints `no gradable rows` — fails safe, fails silently.
+- **Never search `effect.trigger` in a scorer.** It is `running {id}.{ext} as
+  written`, so it contains the case name; matching `must_mention` against it
+  grounds an answer on its own filename. Verified: it would flip three
+  `mechanism_heldout` cases on the case name alone.
+- **The executed output embeds a fresh random temp dir on every call**, so any
+  rule that matches a claim against it is nondeterministic. `observable_ok`
+  scored 14, 15, 14 on three identical rescores of one file, because a claimed
+  `"3"` matched the `3` inside `tmpoc3wg92t`. Normalise `/tmp/tmp\w+/` out
+  before matching, and before writing a training target.
+- **The `pgrep` self-match trap fires in new costumes.** A background waiter
+  using `until ! pgrep -f "basic[_]bench.py --backend ollama"` deadlocked: the
+  bracket hid the pattern literal, but the wrapper shell's command line also
+  contained the real command text from the script body, so pgrep matched the
+  waiting shell itself. Exit 144, again. **Do not poll for a sibling process by
+  name** — run the steps sequentially in one job instead.
 
 # The honest read, for the paper
 

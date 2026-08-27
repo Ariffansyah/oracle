@@ -412,7 +412,14 @@ def summarise(rows: list[dict], label: str = "") -> None:
     # misread "did not answer this question" as "answered it wrongly".
     claimed = [r for r in rows if r.get("effect_claimed")]
     if not claimed:
-        print(f"  effect claimed      0/{n}   <- v1 contract: no checkable behavioural claim")
+        # Say WHICH contract produced the zero. Under v1 it is expected; under v2
+        # it is a finding, and the hardcoded "v1 contract" label hid exactly that
+        # distinction when the row writer was dropping the effect_* keys.
+        from config import OUTPUT_CONTRACT
+        why = ("v1 contract: no checkable behavioural claim" if OUTPUT_CONTRACT != "v2"
+               else "v2 contract: NO answer carried an effect - check the row writer "
+                    "and the served prompt before reading this as a model result")
+        print(f"  effect claimed      0/{n}   <- {why}")
         return
     c = len(claimed)
     d = sum(bool(r.get("effect_direction_ok")) for r in claimed)
@@ -530,10 +537,13 @@ def main(argv=None) -> int:
         g = grade(c, said)
         flagged, verdict_ok, ident, halluc = (
             g["flagged"], g["verdict_ok"], g["identified"], g["hallucinated"])
+        # Spread `g` whole. Hand-picking its keys dropped every effect_* tier on
+        # the way into the row, so summarise() saw no effect_claimed on any row
+        # and printed the hardcoded "0/n - v1 contract" line no matter what the
+        # model had emitted. The pilot's first run reported 0/46 effect claimed
+        # while all 46 answers carried a well-formed effect object.
         rows.append({**{k: c[k] for k in ("id", "language", "buggy", "category")},
-                     "false_alarm": g["false_alarm"], "unconfirmed": g["unconfirmed"],
-                     "predicted": said, "error": err, "verdict_ok": verdict_ok,
-                     "identified": ident, "hallucinated": halluc})
+                     **g, "predicted": said, "error": err})
         mark = ("correct" if (verdict_ok and (ident or not c["buggy"]))
                 else "HALLUCINATION" if halluc else "miss")
         print(f"{c['id']:<{w}}{'buggy' if c['buggy'] else 'clean':<8}"

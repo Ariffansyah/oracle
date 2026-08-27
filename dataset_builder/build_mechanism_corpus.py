@@ -280,16 +280,41 @@ def main(argv=None) -> int:
                     help="upsample factor for the 28 mechanism cases")
     ap.add_argument("--clean-times", type=int, default=3,
                     help="upsample factor for the 54 clean-direction cases")
+    ap.add_argument("--no-bulk", action="store_true",
+                    help="executable cases only. Under the v2 contract the 1673 "
+                         "teacher-labelled commits carry no pre/post to run, so "
+                         "they cannot get a true `effect`; this builds the "
+                         "pilot corpus in which every effect is executed.")
     ap.add_argument("--unified", action="store_true",
                     help="keep unified diffs (the v1 rendering) instead of word-diffs")
     args = ap.parse_args(argv)
 
     word = not args.unified
     parts = {
-        "bulk (8 langs, teacher-labelled)": bulk(args.labelled, word),
         f"mechanism x{args.mechanism_times}": mechanism(word, args.mechanism_times),
         f"clean-direction x{args.clean_times}": clean_direction(word, args.clean_times),
     }
+    if not args.no_bulk:
+        parts["bulk (8 langs, teacher-labelled)"] = bulk(args.labelled, word)
+    elif OUTPUT_CONTRACT != "v2":
+        print("  !! --no-bulk under the v1 contract drops 1673 records and buys "
+              "nothing; it exists for v2, where they cannot carry an effect.")
+
+    # Under v2 every record must carry the field or the model learns it is
+    # optional and stops emitting it. Say so loudly rather than shipping a
+    # corpus that quietly teaches the opposite of what the contract intends.
+    if OUTPUT_CONTRACT == "v2":
+        missing = {name: sum(1 for r in group
+                             if "effect" not in json.loads(r["messages"][-1]["content"]))
+                   for name, group in parts.items()}
+        bad = {k: v for k, v in missing.items() if v}
+        if bad:
+            print("\n  !! v2 contract, but these records carry NO `effect`:")
+            for k, v in bad.items():
+                print(f"       {k}: {v}")
+            print("     A mixed corpus teaches the field is optional. Use "
+                  "--no-bulk for the executable-only pilot, or give the bulk "
+                  "records an effect first.")
     rows = [r for group in parts.values() for r in group]
     for name, group in parts.items():
         print(f"  {name}: {len(group)}")

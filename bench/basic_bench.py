@@ -251,6 +251,97 @@ def identified(case: dict, said: dict) -> bool:
         for req in must)
 
 
+# Cache: grading the effect needs the real before/after, and `--score` would
+# otherwise re-run every case for every stored file.
+_OUT_CACHE: dict[str, tuple[str, str]] = {}
+
+
+def outputs(case: dict) -> tuple[str, str]:
+    """The executed (pre, post) output for a case, as the grader's ground truth."""
+    key = case["id"]
+    if key not in _OUT_CACHE:
+        rc_pre, out_pre = _run(case, "pre")
+        rc_post, out_post = _run(case, "post")
+        _OUT_CACHE[key] = (f"rc={rc_pre} {out_pre}", f"rc={rc_post} {out_post}")
+    return _OUT_CACHE[key]
+
+
+# The model is never handed a filesystem path: `build_user_message` passes a
+# bare `name.ext` and the diff headers carry `a/name.ext`. So an absolute path
+# in an answer is fabricated by construction, not recalled. On 27 Aug six v2
+# answers cited one, all under bench/mechanism_pilot/, none of which exist.
+_ABS_PATH = re.compile(r"(?<![\w-])/(?:[\w.-]+/)+[\w.-]+")
+
+_FAILURE_WORDS = (
+    "panic", "exception", "error", "overflow", "out of range", "out of bounds",
+    "index", "nil", "null", "undefined", "nan", "race", "deadlock", "timeout",
+    "divide by zero", "zerodivision", "segfault", "segmentation",
+)
+
+
+def _obs_match(claim: str, actual: str) -> bool:
+    """Does a claimed observable correspond to what the program actually did.
+
+    Deliberately lenient, because the model paraphrases: a real trace runs to
+    twenty lines and a correct answer says "panic: index out of range". Strict
+    equality would score correct answers as wrong, which is the mistake the
+    grounding checker already made once.
+
+    Three ways to match, in order of strength: containment either way; the
+    claim's integers all appear in the real output (a numeric result is the
+    commonest observable); or claim and reality name the same runtime failure.
+    """
+    c, a = _flat(claim), _flat(actual)
+    if not c or not a:
+        return False
+    if c in a or a in c:
+        return True
+    cn, an = set(re.findall(r"-?\d+", c)), set(re.findall(r"-?\d+", a))
+    if cn and cn <= an:
+        return True
+    return any(w in c and w in a for w in _FAILURE_WORDS)
+
+
+def grade_effect(case: dict, said: dict) -> dict:
+    """Grade the v2 behavioural claim. All keys are None when none was made.
+
+    Two tiers, because they answer different questions:
+
+      direction_ok  did the model get which way the code moved. This is the
+                    robust tier and the one that catches the failure that has
+                    dominated every hand-grade - an answer that names the right
+                    construct and describes the change backwards. `identified()`
+                    cannot see that; this can.
+      observable_ok did the claimed before/after correspond to what running the
+                    code actually prints. The strict tier.
+
+    `fabricated` is separate and is proof, not suspicion: an absolute path the
+    model was never given, or a claimed behaviour change on a case whose two
+    sides are byte-identical.
+    """
+    eff = said.get("effect")
+    if not isinstance(eff, dict):
+        return {"effect_claimed": False, "effect_direction_ok": None,
+                "effect_observable_ok": None, "effect_fabricated": None}
+
+    truth = {"buggy": "post-breaks", "fix": "post-fixes"}.get(case["label"], "unchanged")
+    claimed = str(eff.get("direction", "")).strip().lower()
+
+    pre_out, post_out = outputs(case)
+    before, after = str(eff.get("before", "")), str(eff.get("after", ""))
+    observable_ok = _obs_match(before, pre_out) and _obs_match(after, post_out)
+
+    blob = " ".join([eff.get("trigger", ""), before, after])
+    identical = pre_out == post_out
+    fabricated = bool(_ABS_PATH.search(blob)) or (
+        identical and claimed in ("post-breaks", "post-fixes"))
+
+    return {"effect_claimed": True,
+            "effect_direction_ok": claimed == truth,
+            "effect_observable_ok": observable_ok,
+            "effect_fabricated": fabricated}
+
+
 def grade(case: dict, said: dict) -> dict:
     """Grade one answer.
 
@@ -279,7 +370,8 @@ def grade(case: dict, said: dict) -> dict:
     unconfirmed = flagged and case["buggy"] and not ident
     return {"flagged": flagged, "verdict_ok": verdict_ok, "identified": ident,
             "false_alarm": false_alarm, "unconfirmed": unconfirmed,
-            "hallucinated": false_alarm or unconfirmed}
+            "hallucinated": false_alarm or unconfirmed,
+            **grade_effect(case, said)}
 
 
 # A call that raises is scored as "said nothing", which on a clean case reads
@@ -313,6 +405,23 @@ def summarise(rows: list[dict], label: str = "") -> None:
     print(f"  fully correct       {fully}/{n}   ({100*fully/n:.0f}%)   <- the 8/10 target")
     print(f"  false alarms        {fa}/{n}   ({100*fa/n:.0f}%)   <- findings on code proved unchanged; must be 0")
     print(f"  locus unconfirmed   {un}/{n}   ({100*un/n:.0f}%)   <- right verdict, defect not named")
+
+    # --- the v2 behavioural claim ------------------------------------------
+    # Reported over the answers that MADE a claim, not over n. A v1 checkpoint
+    # makes none, and printing 0/46 as though it had failed the tier would
+    # misread "did not answer this question" as "answered it wrongly".
+    claimed = [r for r in rows if r.get("effect_claimed")]
+    if not claimed:
+        print(f"  effect claimed      0/{n}   <- v1 contract: no checkable behavioural claim")
+        return
+    c = len(claimed)
+    d = sum(bool(r.get("effect_direction_ok")) for r in claimed)
+    o = sum(bool(r.get("effect_observable_ok")) for r in claimed)
+    f = sum(bool(r.get("effect_fabricated")) for r in claimed)
+    print(f"  effect claimed      {c}/{n}   ({100*c/n:.0f}%)")
+    print(f"  ├ direction right   {d}/{c}   ({100*d/c:.0f}%)   <- which way the code moved; catches inversions")
+    print(f"  ├ observable right  {o}/{c}   ({100*o/c:.0f}%)   <- claimed before/after matches what ran")
+    print(f"  └ FABRICATED        {f}/{c}   ({100*f/c:.0f}%)   <- invented path, or a change on identical output; must be 0")
 
 
 def rescore(path: Path) -> list[dict]:

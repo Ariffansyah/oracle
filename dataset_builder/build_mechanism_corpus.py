@@ -40,7 +40,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dataset_builder.schema import (SYSTEM_PROMPT, Analysis, build_user_message)
+from config import OUTPUT_CONTRACT
+from dataset_builder.schema import (SYSTEM_PROMPT, Analysis, Effect,
+                                    build_user_message)
 from dataset_builder.worddiff import to_word_diff
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -60,6 +62,49 @@ def case_diff(d: Path, cid: str, ext: str) -> str:
     name = f"{cid}.{ext}"
     return (p.stdout.replace(str(d / f"pre.{ext}"), name)
                     .replace(str(d / f"post.{ext}"), name))
+
+
+def executed_effect(root: Path, m: dict) -> Effect | None:
+    """Build the `effect` field by RUNNING the case, never by describing it.
+
+    This is the whole point of the v2 contract. The v1 fix template said "the
+    program's output changes from {was} to {now}" and filled it from the note,
+    which taught the model the *form* of citing executed output without teaching
+    that the citation must be real - and it went on to invent panic traces and
+    absolute paths for files that do not exist (RESULTS.md, 27 Aug).
+
+    Here `before` and `after` are the actual bytes the two versions printed, so
+    every target's behavioural claim is true by construction.
+
+    Returns None under the v1 contract, which keeps the old corpus byte-for-byte
+    reproducible.
+    """
+    if OUTPUT_CONTRACT != "v2":
+        return None
+    import bench.basic_bench as bb  # imported late: only v2 needs a runner
+    prev, bb.ROOT = bb.ROOT, root
+    try:
+        rc_pre, out_pre = bb._run(m, "pre")
+        rc_post, out_post = bb._run(m, "post")
+    finally:
+        bb.ROOT = prev
+    label = m.get("label") or ("buggy" if m.get("buggy") else "clean")
+    direction = {"buggy": "post-breaks", "fix": "post-fixes"}.get(label, "unchanged")
+
+    def obs(rc: int, out: str) -> str:
+        out = " ".join(out.split())[:200]
+        return out or f"exit status {rc}, no output"
+
+    return Effect(
+        # Thin on purpose, and the weakest part of this corpus: every case is a
+        # single file with one entry point, so the honest trigger is "run it".
+        # Real commits are what make this field carry information; do not invent
+        # variety here that the cases do not have.
+        trigger=f"running {m['id']}.{m['ext']} as written",
+        before=obs(rc_pre, out_pre),
+        after=obs(rc_post, out_post),
+        direction=direction,
+    )
 
 
 def record(diff: str, analysis: Analysis, subject: str, files: str,
@@ -112,6 +157,7 @@ def mechanism(word: bool, times: int) -> list[dict]:
             print(f"  !! {m['id']} has no analysis.json — skipped")
             continue
         a = Analysis.model_validate(json.loads(ap.read_text()))
+        a.effect = executed_effect(ROOT / "bench/mechanism_pilot", m)
         d = case_diff(meta.parent, m["id"], m["ext"])
         out += [record(d, a, f"({m['id']})", f"{m['id']}.{m['ext']}", word)] * times
     return out
@@ -141,24 +187,37 @@ def clean_direction(word: bool, times: int) -> list[dict]:
     for meta in sorted((ROOT / "bench/clean_direction").glob("*/meta.json")):
         m = json.loads(meta.read_text())
         d = case_diff(meta.parent, m["id"], m["ext"])
+        eff = executed_effect(ROOT / "bench/clean_direction", m)
         if m["label"] == "fix":
-            # The note carries the executed before/after output, so the summary
-            # states a behaviour change that was actually observed rather than
-            # one inferred from reading the diff.
-            was, _, now = m["note"].partition(": ")[2].partition(" -> ")
-            summary = (
-                f"This commit repairs the {m['category']} in "
-                f"{m['parent']}.{m['ext']}: the function goes back to its "
-                f"correct form, and the program's output changes from {was} to "
-                f"{now}. The change removes a defect and introduces none.")
+            if eff is not None:
+                # v2: the observable output lives in `effect`, where it is real
+                # and gradable. Keeping it in the prose as well is what taught
+                # the model to quote output it never ran.
+                summary = (
+                    f"This commit repairs the {m['category']} in "
+                    f"{m['parent']}.{m['ext']}: the function goes back to its "
+                    f"correct form, and introduces no new defect.")
+            else:
+                # The note carries the executed before/after output, so the
+                # summary states a behaviour change that was actually observed
+                # rather than one inferred from reading the diff.
+                was, _, now = m["note"].partition(": ")[2].partition(" -> ")
+                summary = (
+                    f"This commit repairs the {m['category']} in "
+                    f"{m['parent']}.{m['ext']}: the function goes back to its "
+                    f"correct form, and the program's output changes from {was} "
+                    f"to {now}. The change removes a defect and introduces none.")
         else:
-            old, new_name = m.get("renamed", ["a local", "a new name"])
+            old_name, new_name = m.get("renamed", ["a local", "a new name"])
+            tail = ("the program's behaviour is unchanged." if eff is not None
+                    else "the program's output is unchanged at "
+                         f"{m['note'].rsplit('stays ', 1)[-1]}.")
             summary = (
-                f"This commit renames `{old}` to `{new_name}` in "
+                f"This commit renames `{old_name}` to `{new_name}` in "
                 f"{m['parent']}.{m['ext']}. Every use is updated in place — the "
-                f"declaration and its readers are edited, not deleted — and the "
-                f"program's output is unchanged at {m['note'].rsplit('stays ', 1)[-1]}.")
-        out += [record(d, Analysis(summary=summary, findings=[]),
+                f"declaration and its readers are edited, not deleted — and "
+                f"{tail}")
+        out += [record(d, Analysis(effect=eff, summary=summary, findings=[]),
                        f"({m['id']})", f"{m['id']}.{m['ext']}", word)] * times
     return out
 

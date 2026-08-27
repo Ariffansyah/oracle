@@ -70,7 +70,42 @@ without teaching that the quote must be something you ran.
 `clean_heldout`'s 34/34. Right verdict, invented justification. This decides
 item 5 toward the strict reading: the fabrication is *evidence*, not decoration.
 
+# The v2 output contract is built and unmeasured (27 Aug)
+
+Diagnosis: **every missed defect is the model agreeing with its own first
+sentence.** Five of v2's six misses reproduce a training template verbatim, and
+every template ends in "no defect". Two causes: `summary` was the first key
+generated, so the verdict preceded the evidence and could not be revised; and
+the templates were cheaper than reading the code.
+
+Built, all no-GPU, all self-checks green, no existing number moved:
+
+- `config.OUTPUT_CONTRACT` = `v1` | `v2`, default **v1**. One switch moves
+  prompt, format hint and expected keys together.
+- `Effect` is the FIRST field of `Analysis`: `trigger`, `before`, `after`,
+  `direction`. v1 targets stay byte-identical (`exclude_none`).
+- `grade_effect()` scores three tiers on every run and every `--score`:
+  `direction_ok` (catches inversions, which `identified()` cannot see),
+  `observable_ok`, and `fabricated` (absolute path, or a claimed change on
+  byte-identical output).
+- `executed_effect()` fills the field by RUNNING the case, and the `fix`
+  template no longer quotes program output in prose.
+
+**Baseline: 0 checkable claims out of 46/21/34 on every stored run.** No
+checkpoint here has ever made one. `direction_ok` is the number to watch.
+
+**The v2 contract is untrained and therefore unproven.** Do not describe it as
+a fix until a run exists. Acceptance criterion, fixed in advance: `direction_ok`
+materially above what v1's six template misses imply, with `fabricated` at zero.
+
 # What to do, in order
+
+**0. Train one v2 checkpoint.** `ORACLE_OUTPUT_CONTRACT=v2` for corpus build,
+training and evaluation — all three, or the contract mismatch alone costs six
+cases in forty-six. Rebuild the corpus first (`executed_effect` needs to run),
+check the step arithmetic (records x epochs / (batch x grad_accum)), then score
+with the same env var set.
+
 
 **1. Count fabricated evidence on `oracle-merged` and `mechanism-v1`**, same
 three sets, same detector (absolute path, or a quoted output that no run

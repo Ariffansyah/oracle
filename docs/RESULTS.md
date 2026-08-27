@@ -7,6 +7,118 @@ Status as of 2026-08-27.
 
 ---
 
+## The v2 output contract: evidence before verdict, and a claim that can be checked (2026-08-27)
+
+The diagnosis first, because it is the reason for every change below.
+
+**Every missed defect is the model agreeing with its own first sentence.** Of
+54 buggy cases across `bench/basic` and `mechanism_heldout`, v2 missed six, and
+this is what its summary said on each:
+
+    c-array-bound      "This commit repairs the logic-error ... goes back to its correct behavior"
+    go-offbyone        "The commit repairs the logic-error ... goes back to its correct form"
+    java-array-bound   "This commit repairs the logic-error ... goes back to its correct form"
+    php-shadow-update  "The commit renames `total` to `sum`. Every use is updated in place ..."
+    py-shadow-update   "The commit renames `total` to `subtotal`. Every use is updated in place ..."
+    js-reverse-index   (its own wording)
+
+**Five of six are training templates, reproduced verbatim** — three the `fix`
+template, two the `rename` template — and every one of those templates ends in
+"no defect". `php-shadow-update` shows the mechanism plainly: the real defect is
+a shadowed variable, which on the surface looks like a rename, so the model
+matched the shape, printed the sentence, and the sentence carried it to a clean
+verdict.
+
+Two structural causes, both fixable, neither reachable by prompting:
+
+1. **The contract emits the verdict before the evidence.** `Analysis` declared
+   `summary` first, so `summary` is the first key generated. A model that has
+   written "this commit repairs the off-by-one" has no continuation available
+   except `findings: []` — generation runs forwards only. Meanwhile the v1
+   system prompt's step 1 asks it to "state to yourself what runtime behaviour
+   differs now" and gives it **nowhere to write that down**, so the reasoning
+   step has no slot and collapses into the conclusion.
+2. **The templates are cheaper than reading the code.** 162 clean-direction
+   records taught two fixed sentences that any superficially-matching diff can
+   trigger.
+
+This is why five prompt-rule attempts lost. The format forces the order; the
+corpus rewards the shortcut.
+
+### What changed
+
+**`config.OUTPUT_CONTRACT`** (`v1` | `v2`, default `v1`). One switch moves the
+system prompt, the short format hint and the expected keys together. They are
+deliberately not selectable apart: this session measured a checkpoint scored
+under a contract it was not trained on losing six cases in forty-six to that
+alone.
+
+**`Effect`** (`dataset_builder/schema.py`), the first field of `Analysis`:
+
+    {"effect": {"trigger": "...", "before": "...", "after": "...",
+                "direction": "post-breaks|post-fixes|unchanged"}, ...}
+
+`before` and `after` are what the program *does* — a value, an exception, a
+panic — not what the diff looks like. An unrecognised `direction` becomes
+`unclear` rather than being coerced onto `unchanged`; mapping garbage onto a
+clean verdict would hide the failure the grader exists to count. `to_json()`
+uses `exclude_none`, so v1 targets stay byte-identical.
+
+**Two grading tiers** (`bench/basic_bench.py::grade_effect`), scored on every
+run and every `--score`:
+
+| tier | question | catches |
+|---|---|---|
+| `direction_ok` | which way did the code move | inversions — the failure that has dominated every hand-grade, and which `identified()` structurally cannot see |
+| `observable_ok` | does the claimed before/after match what ran | invented values |
+| `fabricated` | proof, not suspicion | an absolute path the model was never given, or a claimed behaviour change on a case whose two sides are byte-identical |
+
+The absolute-path rule is sound by construction: `build_user_message` passes a
+bare `name.ext` and the diff headers carry `a/name.ext`, so the model is never
+handed a filesystem path. Any absolute path in an answer is fabricated.
+
+`observable_ok` is deliberately lenient — containment either way, or the
+claim's integers all appearing in the real output, or claim and reality naming
+the same runtime failure. Strict equality would fail correct paraphrases, which
+is the mistake the grounding checker already made once.
+
+**The corpus builder fills `effect` by executing the case**
+(`build_mechanism_corpus.py::executed_effect`), so every target's behavioural
+claim is true by construction, and the `fix` template no longer quotes program
+output in its prose — that string is what taught the model the *form* of citing
+executed output without teaching that the citation must be real.
+
+Target diversity survives the change: the `effect` object carries per-case real
+output, so `clean_direction` still yields **54/54 distinct assistant turns**.
+
+### The baseline, and what it is not
+
+    .venv/bin/python bench/basic_bench.py --score data/basic_bench_mechanism_v2.jsonl
+
+| run | locus | effect claimed |
+|---|---|---|
+| `oracle-merged` unified | 41/46 | **0/46** |
+| `mechanism-v1` unified | 39/46 | **0/46** |
+| `mechanism-v2` module word-diff | 37/46 | **0/46** |
+| `mechanism-v2` `mechanism_heldout` n=21 | 19/21 | **0/21** |
+| `mechanism-v2` `clean_heldout` n=34 | 34/34 | **0/34** |
+
+**No checkpoint in this project has ever made a checkable behavioural claim.**
+That is the honest starting point, and it is reported over the answers that
+made a claim rather than over `n`, so "did not answer this question" is never
+counted as "answered it wrongly".
+
+Every locus number above is unchanged by this work — verified by re-scoring all
+seven stored runs — so the new tiers add a measurement without moving an
+existing one.
+
+**Nothing here is evidence that the v2 contract works.** It is untrained. The
+next run is the test, and its acceptance criterion is stated in advance:
+`direction_ok` materially above the rate implied by v1's six template misses,
+with `fabricated` at zero.
+
+---
+
 ## Counter-aligned boundary cases: the surface rule is falsified, and a worse failure surfaces (2026-08-27)
 
 `next-session.md` item 3. Both held-out sets were aligned with the direction

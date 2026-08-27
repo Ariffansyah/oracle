@@ -159,6 +159,17 @@ OLLAMA_MODEL = _env("OLLAMA_MODEL", "oracle-merged")
 # *tuned* model gets the schema it never saw in training unless you say so here.
 # Set ORACLE_INCLUDE_SCHEMA=false when serving a checkpoint from serve.py.
 INCLUDE_SCHEMA = _env("INCLUDE_SCHEMA", "auto")   # auto | true | false
+
+# The output contract. "v1" is summary-then-findings, the shape every checkpoint
+# up to sft-mechanism-v2 was trained on. "v2" puts an `effect` object FIRST -
+# trigger, before, after, direction - so the model states observable behaviour
+# before it states a verdict, and the claim can be checked by running the code.
+#
+# It is one switch on purpose. The prompt, the format hint and the expected keys
+# move together, because the 27 Aug measurement showed a checkpoint scored under
+# a contract it was not trained on loses six cases in forty-six to that alone.
+# Leave it at v1 until a checkpoint is trained on v2.
+OUTPUT_CONTRACT = _env("OUTPUT_CONTRACT", "v1")   # v1 | v2
 # Sent explicitly on every request. Ollama otherwise falls back to whatever the
 # Modelfile baked in, or its own 4096 default - and a prompt carrying file
 # context silently overflows that without any error.

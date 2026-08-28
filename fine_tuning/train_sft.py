@@ -36,6 +36,12 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--lr", type=float, default=SFT_LR)
     ap.add_argument("--max-seq-length", type=int, default=MAX_SEQ_LENGTH)
     ap.add_argument("--warmup-steps", type=int, default=10)
+    # TRL defaults to seed=42 and nothing here ever overrode it, so every run in
+    # this project so far shares one seed. That makes two checkpoints trained on
+    # different corpora incomparable in one specific way: there is no measurement
+    # of how much a retrain moves on its own. Varying this is how you get one.
+    ap.add_argument("--seed", type=int, default=42,
+                    help="training seed; vary it to measure run-to-run variance")
     ap.add_argument("--no-4bit", dest="four_bit", action="store_false",
                     help="load in bf16 instead of 4-bit (needs much more VRAM)")
     ap.set_defaults(four_bit=LOAD_IN_4BIT)
@@ -83,6 +89,7 @@ def main(argv=None) -> None:
             save_strategy="epoch",
             **precision_flags(args.four_bit),
             report_to=[],
+            seed=args.seed,
             # The dataset is already conversational: TRL applies the chat
             # template and masks everything but the assistant turn.
             assistant_only_loss=True,

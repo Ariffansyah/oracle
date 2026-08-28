@@ -64,6 +64,12 @@ def case_diff(d: Path, cid: str, ext: str) -> str:
                     .replace(str(d / f"post.{ext}"), name))
 
 
+# Matches the per-execution temp directory `bench.basic_bench._run` creates.
+# Kept identical to `basic_bench._TMPDIR` on purpose: the corpus and the scorer
+# must strip the same token, or a target and its grading disagree.
+_TMPDIR = re.compile(r"/tmp/tmp[A-Za-z0-9_]+/")
+
+
 def executed_effect(root: Path, m: dict) -> Effect | None:
     """Build the `effect` field by RUNNING the case, never by describing it.
 
@@ -92,7 +98,23 @@ def executed_effect(root: Path, m: dict) -> Effect | None:
     direction = {"buggy": "post-breaks", "fix": "post-fixes"}.get(label, "unchanged")
 
     def obs(rc: int, out: str) -> str:
-        out = " ".join(out.split())[:200]
+        # Strip the per-execution temp directory before it becomes a target.
+        # `_run` makes a fresh one each call, so the name is not a function of
+        # anything the model can see - it is a token that CANNOT be predicted,
+        # only memorised. Left in, it put a random path into 66 of 318 records
+        # (21%), drawn from 16 distinct values, and sft-v2-pilot re-emitted one
+        # of them - `/tmp/tmpd6rhx_a0/`, present in 6 records - as execution
+        # evidence on five different cases in four languages, plus a
+        # one-character truncation of a second on two more. 7 of its 9
+        # fabricated paths trace back here.
+        #
+        # The rest of the trace is kept: `main.c:5:14: runtime error: signed
+        # integer overflow ...` stays true and stays informative. Only the
+        # unpredictable prefix goes.
+        # Strip BEFORE truncating: truncating first can cut a path mid-token and
+        # leave `/tmp/tmp8bzrai1` from `/tmp/tmp8bzrai1x`, which is precisely the
+        # one-character-truncated form the pilot emitted on two cases.
+        out = _TMPDIR.sub("", " ".join(out.split()))[:200]
         return out or f"exit status {rc}, no output"
 
     return Effect(

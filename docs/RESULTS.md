@@ -165,7 +165,19 @@ decided by a coin flip on a random string.**
 
 Stripping the temp dir before matching: 36/101 -> **35/101**. The inflation is
 one case today, but the mechanism is unbounded for any single-digit claim, and it
-makes the tier non-reproducible. Fix it in the same place as the corpus fix.
+makes the tier non-reproducible.
+
+**Both fixed the same day.** `outputs()` and `obs()` now strip the token, and the
+scorer change was measured against random pairings before it shipped, as this
+repo requires: own-case 35/101 against random-case 3/101, **unchanged** by the
+strip. Discrimination is identical; what it buys is determinism — over six
+independent executions of all 101 cases, raw gave 35 four times and 36 twice,
+normalised gave 35 six times. Every observable number in the tables above is the
+stable one.
+
+That `_obs_match` grounds only 3/101 against a randomly paired case is worth
+recording on its own: this rule discriminates, unlike the `identifiers()` bug
+that grounded 18-36% against unrelated diffs.
 
 ### What this run does and does not answer
 

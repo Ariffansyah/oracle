@@ -2,15 +2,54 @@ Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first — the top
 section is 28 Aug and the four below it are 27 Aug, newest first. Then
 `docs/ROADMAP.md`.
 
-# Status at handoff (28 Aug, ~06:30 WIB)
+# Status at handoff (28 Aug, ~07:10 WIB)
 
-**Nothing is running. The GPU is free** (confirmed with `nvidia-smi`, 74 MiB,
-kwin only — not with `pgrep`, which lies here). The explainer server was stopped.
+**A retrain is on the GPU.** `sft-v2-pilot2`, the same 318 executable records
+with the temp-dir defect fixed, 80 steps, 2 epochs, ~260s/step, started
+~07:05 WIB, **ETA ~12:50 WIB**. Check it before anything else:
 
-`sft-v2-pilot` trained and was scored on all three eval sets. The adapter is at
-`~/oracle/artifacts/sft-v2-pilot` on the box, with `checkpoint-40` and
-`checkpoint-80`. Runs are in `data/basic_bench_v2_pilot.jsonl`,
-`data/heldout_mech_v2_pilot.jsonl`, `data/heldout_clean_v2_pilot.jsonl`.
+    ssh oracle-gpu bash -s <<'EOF'
+    pgrep -af fine_tuning.train_sft
+    tail -c 600 ~/oracle/sft_v2_pilot2.log | tr "\r" "\n" | tail -3
+    ls ~/oracle/artifacts/sft-v2-pilot2
+    EOF
+
+Confirmed at launch: `318 SFT examples from data/sft_v2_pilot2.jsonl`, all 318
+survived the fully-masked drop, 80 steps (318 x 2 / 8 = 79.5 -> 80).
+
+`sft-v2-pilot`, the first v2 checkpoint, is trained and fully scored. Adapter at
+`~/oracle/artifacts/sft-v2-pilot` on the box. Runs are committed:
+`data/basic_bench_v2_pilot.jsonl`, `data/heldout_mech_v2_pilot.jsonl`,
+`data/heldout_clean_v2_pilot.jsonl`.
+
+**When it lands, score it exactly as the pilot was**, contract pinned on BOTH
+sides, and compare against the pilot's numbers in `docs/RESULTS.md` 28 Aug:
+
+    ssh oracle-gpu bash -s <<'EOF'
+    cd ~/oracle
+    export ORACLE_OUTPUT_CONTRACT=v2 ORACLE_INCLUDE_SCHEMA=false
+    setsid nohup .venv/bin/python -m llm_explainer.serve \
+        --model artifacts/sft-v2-pilot2 --port 8111 \
+        > ~/oracle/serve.log 2>&1 < /dev/null &
+    EOF
+    setsid ssh -f -N -L 8111:localhost:8111 -o ExitOnForwardFailure=yes \
+        -o ServerAliveInterval=30 -o ServerAliveCountMax=1000 oracle-gpu
+
+    ORACLE_OUTPUT_CONTRACT=v2 ORACLE_INCLUDE_SCHEMA=false ORACLE_INFERENCE_SAMPLES=1 \
+      .venv/bin/python bench/basic_bench.py --backend ollama \
+      --model-name sft-v2-pilot2 --host http://localhost:8111 --word-diff-module \
+      --out data/basic_bench_v2_pilot2.jsonl
+    # --root bench/mechanism_heldout --out data/heldout_mech_v2_pilot2.jsonl
+    # --root bench/clean_heldout     --out data/heldout_clean_v2_pilot2.jsonl
+
+**The one question this retrain answers:** does `fabricated` fall from 10/101
+toward zero once the corpus stops carrying unlearnable tokens. Everything else
+(locus, `direction_ok`, `observable_ok`) is a secondary read — the corpus is the
+same 318 records, so a large move in those would need explaining, not
+celebrating.
+
+**What it does NOT answer:** whether 318 records is enough. That was the other
+half of the ambiguity and this run holds it fixed on purpose.
 
 # What 28 Aug established
 
@@ -76,42 +115,55 @@ random-pairing control first.
 Both are in the class this project keeps hitting: **a status line that reports
 intent rather than observed state.** That list is now five entries long.
 
-# Do this next, in order
+# Done on 28 Aug after the pilot was read
 
-**1. Fix the two temp-dir defects before any further training.** They are the
-same token in two places, and both are cheap:
+**The two temp-dir defects are fixed**, both sides, and the corpus is rebuilt.
 
-- `build_mechanism_corpus.py::obs()` — normalise `/tmp/tmp\w+/` out of the
-  executed output before it becomes a target.
-- `bench/basic_bench.py::outputs()` — normalise it out before `_obs_match`, so
-  the tier stops being a coin flip.
+- `build_mechanism_corpus.py::obs()` strips `/tmp/tmp\w+/` **before** truncating
+  to 200 chars. Order matters: truncating first can cut a path mid-token and
+  leave `/tmp/tmp8bzrai1` from `/tmp/tmp8bzrai1x`, which is exactly the
+  one-character-truncated form the pilot emitted on two cases.
+- `bench/basic_bench.py::outputs()` strips the same token before `_obs_match`.
+  **Measured against random pairings first**, as this repo requires of any
+  matching-rule change: own-case 35/101 against random-case 3/101, unchanged by
+  the strip. Discrimination is identical; what it buys is determinism —
+  `observable_ok` went from 35/36 fluctuating over six executions to a stable 35.
+  (`_obs_match` grounding only 3/101 against a random case is itself worth
+  keeping: this rule is genuinely discriminating, unlike the `identifiers()` bug
+  that grounded 18-36%.)
+- `data/sft_v2_pilot2.jsonl` — same builder invocation as the pilot plus the
+  fix. 318 records, **0 carrying a temp dir** (was 66), 80 distinct assistant
+  turns, 51% clean. Budget improved as a side effect: 117 fit as written against
+  108, because the targets got shorter.
 
-Then rebuild the corpus and confirm 0/318 records carry a temp dir.
+`data/sft_v2_pilot.jsonl` (the pilot's own corpus, 66 temp dirs) is preserved
+unmodified. Note `data/*.jsonl` is gitignored, so corpora are not in the repo —
+provenance lives in commit messages and the builder being deterministic, which
+**the temp dir broke**: rebuilding the pilot corpus would have produced different
+random paths. That is one more reason the strip belongs in the builder.
+
+# Still to do, in order
+
+**1. Score `sft-v2-pilot2` when it lands** — commands in the status section
+above. The question is `fabricated`, 10/101 -> ?
 
 **2. Give `trigger` something to say, or drop it.** It is 100% filename echo
-today. The executable cases have real entry points with literal arguments, so
-the builder could fill it with an actual input — which is what the schema asks
-for. This is the field the 1673 real commits would genuinely enrich.
+today: the builder fills it with `running {id}.{ext} as written` while the
+schema asks for "One input or condition that exposes the difference, e.g.
+`xs = [1,2,3]`". The executable cases have real entry points with literal
+arguments, so the builder could fill it honestly. Until then the field is dead
+weight and **no scorer may search it**.
 
-**3. Then the fork, which is still open — and step 1 changes its terms.**
-Whether to run a Groq `gpt-oss-120b` pass over the 1673 teacher-labelled commits
-so the full v2 corpus can carry an effect. The precondition ("does the model
-learn the format") is now met. **But those records have no pre/post to run, so
-their `before`/`after` would be teacher-GUESSED, not executed** — which is
-exactly the mechanism that produced 10 fabrications in 101 answers, scaled to
-83% of a 2000-record corpus. Options, honestly:
-
-  - **Fix the corpus and retrain the 318 as-is** (~250 steps if the fixed corpus
-    grows). Every claim stays true by construction. Small, clean, cheap.
-  - **Groq pass filling only `trigger` and `direction`** for the 1673 — both are
-    derivable without execution — leaving `before`/`after` to executable cases.
-    Requires a schema change: all four `Effect` fields are currently required
-    `str`, so a partial effect is not expressible today.
-  - **Groq pass filling all four.** Largest corpus, and the one that risks
-    teaching the model to state observables it cannot verify.
-
-  The measurement in RESULTS.md 28 Aug argues against the third. It is the
-  user's call.
+**3. The Groq fork stays open, and its terms have changed.** The user chose on
+28 Aug to fix the corpus and retrain the executable set FIRST, rather than run
+the `gpt-oss-120b` pass over the 1673 teacher-labelled commits. Those records
+have no pre/post to execute, so their `before`/`after` would be teacher-guessed
+— the exact mechanism behind the 10 fabrications, at 83% of a 2000-record
+corpus. If the fork is reopened, the middle option is the defensible one: fill
+only `trigger` and `direction` for the bulk records, which are derivable without
+execution, and leave `before`/`after` to executable cases. **That needs a schema
+change** — all four `Effect` fields are required `str` today, so a partial
+effect cannot be expressed. `to_json()` already uses `exclude_none`.
 
 # Still open, unchanged by 27 Aug
 

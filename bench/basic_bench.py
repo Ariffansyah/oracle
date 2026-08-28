@@ -256,13 +256,29 @@ def identified(case: dict, said: dict) -> bool:
 _OUT_CACHE: dict[str, tuple[str, str]] = {}
 
 
+# `_run` executes each case in a FRESH temp dir, so a runtime trace carries a
+# random directory name that differs on every call. Left in, it makes the ground
+# truth non-reproducible and silently inflates `observable_ok`: on
+# `rb-loop-bound-loosen-fix` the model claimed `before="3"` against a Ruby
+# TypeError - wrong - and `_obs_match`'s numeric rule matched that `3` against
+# the `3` inside `tmpoc3wg92t`, scoring the wrong claim correct whenever the
+# random name happened to contain the digit. Three identical `--score` runs gave
+# 14, 15, 14. Stripping the directory makes it stably 14.
+#
+# Measured against random pairings before it shipped, as this repo requires of
+# any matching-rule change: own-case 35/101 vs random-case 3/101, unchanged by
+# the strip. Discrimination is identical; what the strip buys is determinism.
+_TMPDIR = re.compile(r"/tmp/tmp[A-Za-z0-9_]+/")
+
+
 def outputs(case: dict) -> tuple[str, str]:
     """The executed (pre, post) output for a case, as the grader's ground truth."""
     key = case["id"]
     if key not in _OUT_CACHE:
         rc_pre, out_pre = _run(case, "pre")
         rc_post, out_post = _run(case, "post")
-        _OUT_CACHE[key] = (f"rc={rc_pre} {out_pre}", f"rc={rc_post} {out_post}")
+        _OUT_CACHE[key] = (_TMPDIR.sub("", f"rc={rc_pre} {out_pre}"),
+                           _TMPDIR.sub("", f"rc={rc_post} {out_post}"))
     return _OUT_CACHE[key]
 
 

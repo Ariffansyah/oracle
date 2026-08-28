@@ -155,7 +155,11 @@ for probe in sft dpo; do
     # prefix is the useful half - it says whether DPO is still precomputing
     # reference log-probs or actually training.
     detail=$(R "tr \"\r\" \"\n\" < \$(ls -t ~/oracle/$probe*.log 2>/dev/null | head -1) 2>/dev/null | grep -E \"[0-9]+%\\|\" | tail -1")
-    job "$probe" green "running   ${detail:0:60}"
+    # Name the log. Two runs of the same corpus that differ only in seed write
+    # sft_v2_pilot2.log and sft_v2_pilot2_seed7.log, and a bare progress bar
+    # cannot tell you which one you are watching.
+    which=$(R "basename \$(ls -t ~/oracle/$probe*.log 2>/dev/null | head -1)")
+    job "$probe" green "running   ${which:-?}   ${detail:0:52}"
   else
     job "$probe" yellow "idle"
   fi
@@ -292,11 +296,22 @@ fi
 score_run() { # score_run <file> <root>
   local f=$1 root=$2 total
   total=$(ls -d "$root"/*/ 2>/dev/null | wc -l)
+  # OUTPUT_CONTRACT is pinned so the zero-claims line names the right contract.
+  # It does not change any number: grade_effect() reads predicted.effect and is
+  # contract-independent.
+  ORACLE_OUTPUT_CONTRACT=v2 \
   .venv/bin/python bench/basic_bench.py --root "$root" --score "$f" 2>/dev/null \
     | awk -v n="$(basename "$f" .jsonl | sed 's/^basic_bench_//;s/^heldout_/heldout /')" \
           -v total="$total" '
-        /fully correct/ {fully=$3; pct=$4}
-        /false alarms/  {fa=$3}
+        /fully correct/    {fully=$3; pct=$4}
+        /false alarms/     {fa=$3}
+        # The v2 tiers. A v1 checkpoint makes no claim and prints "0/n" with no
+        # percentage, so claimed stays "0/n" and the tier columns stay empty -
+        # which is the honest rendering: it did not answer this question, it did
+        # not answer it wrongly.
+        /effect claimed/   {clm=$3}
+        /direction right/  {dir=$4}
+        /FABRICATED/       {fab=$3}
         END {
           if (fully == "") exit
           split(fully, a, "/")
@@ -304,7 +319,12 @@ score_run() { # score_run <file> <root>
           # Printing "9/12 (75%)" flush against "37/46 (80%)" invites exactly the
           # denominator-mixing this project has already published once.
           part = (a[2] != total) ? sprintf("  <- only %d of %d cases", a[2], total) : ""
-          printf "    %-20s fully %-8s %-6s false alarms %-7s%s\n", n, fully, pct, fa, part
+          # fabricated is the tier with a stated acceptance criterion (must be 0),
+          # so it gets a marker rather than being one number among several.
+          flag = ""
+          if (fab != "") { split(fab, b, "/"); flag = (b[1]+0 > 0) ? " !" : " ok" }
+          printf "    %-24s fully %-8s %-6s FA %-6s eff %-7s dir %-7s fab %-7s%s%s\n", \
+                 n, fully, pct, fa, (clm=="")?"-":clm, (dir=="")?"-":dir, (fab=="")?"-":fab, flag, part
         }'
 }
 for f in data/basic_bench_*.jsonl;  do [ -f "$f" ] && score_run "$f" bench/basic; done
@@ -312,11 +332,14 @@ for f in data/heldout_mech_*.jsonl; do [ -f "$f" ] && score_run "$f" bench/mecha
 for f in data/heldout_clean_*.jsonl;do [ -f "$f" ] && score_run "$f" bench/clean_heldout; done
 
 sec "local corpus"
+# Hand-naming the training corpora missed the ones that mattered: sft_v2_pilot
+# and sft_v2_pilot2 are what the current work trains on, and neither was on this
+# list. Glob every sft_* corpus instead, same reason the artifacts and error
+# panels glob. The non-corpus files stay named because they are a fixed set.
 for f in data/labelled.jsonl data/labelled_multilang.jsonl data/multilang_commits.jsonl \
          data/guard_commits.jsonl data/labelled_guards.jsonl \
          data/contrastive_pairs.jsonl data/apachejit_commits.jsonl \
-         data/sft_ml8_grounded.jsonl data/sft_mechanism_v1.jsonl \
-         data/sft_mechanism_v2.jsonl data/real_commits.jsonl; do
+         data/real_commits.jsonl $(ls -1 data/sft_*.jsonl 2>/dev/null); do
   [ -f "$f" ] && printf '  %-34s %6d\n' "$(basename "$f")" "$(wc -l < "$f")"
 done
 # A training corpus is not what it says on the tin: TRL truncates at

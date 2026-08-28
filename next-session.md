@@ -1,12 +1,63 @@
+<!-- ============================================================
+     PROMPT FOR THE NEXT SESSION — paste everything between the
+     markers as the opening message.
+     ============================================================ -->
+
+<!-- BEGIN NEXT-SESSION PROMPT
+
+Continue ORACLE at ~/Documents/oracle.
+
+Read `next-session.md` first — its head is current as of 28 Aug 08:45 WIB and
+states what is running and what is open, in order. Then `docs/RESULTS.md`; its
+top section is 28 Aug and is the one that matters. The four 27 Aug sections
+below it are still true but are superseded on two points, which the 28 Aug
+section names.
+
+State: a retrain `sft-v2-pilot2` was on the GPU when the last session ended —
+80 steps, 2 epochs, started 08:32:34 WIB, 257.94 s/it, ETA ~14:15 WIB. It is
+the same 318 executable records as `sft-v2-pilot` with one thing changed: the
+per-execution temp dir is stripped out of the targets. Check whether it finished
+before anything else. The working tree is clean at 4805cbf and no server is
+running.
+
+Start here, in this order:
+
+1. Check the training run. If it finished, score it on all three eval sets.
+   Set ORACLE_OUTPUT_CONTRACT=v2 AND ORACLE_INCLUDE_SCHEMA=false on BOTH the
+   serving and the scoring side — the exact commands are in next-session.md.
+   Use --word-diff-module, never --word-diff. Getting this wrong reintroduces
+   the confound that cost six cases in forty-six.
+
+2. Read the result under one question only: does `fabricated` fall from 10/101
+   toward zero. That is what this run was built to answer. Locus,
+   `direction_ok` and `observable_ok` are secondary — the corpus is the same 318
+   records, so a large move in those needs explaining, not celebrating. This run
+   does NOT answer whether 318 records is enough; that was held fixed on
+   purpose.
+
+3. Then the two open items: whether to give `effect.trigger` something real to
+   say (it is 100% filename echo today), and the Groq fork, whose terms changed
+   on 28 Aug — see "Still to do, in order".
+
+Traps that have already cost this project a result are at the bottom of
+next-session.md. The ones that bite hardest: fix prompt shape and diff rendering
+across every arm of a comparison; check step arithmetic AND the clock before
+quoting any run; never mix benchmark denominators; never search `effect.trigger`
+in a scorer; no prompt-rule fixes and no DPO.
+
+END NEXT-SESSION PROMPT -->
+
 Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first — the top
 section is 28 Aug and the four below it are 27 Aug, newest first. Then
 `docs/ROADMAP.md`.
 
-# Status at handoff (28 Aug, ~07:10 WIB)
+# Status at handoff (28 Aug, 08:45 WIB)
 
 **A retrain is on the GPU.** `sft-v2-pilot2`, the same 318 executable records
-with the temp-dir defect fixed, 80 steps, 2 epochs, ~260s/step, started
-~07:05 WIB, **ETA ~12:50 WIB**. Check it before anything else:
+with the temp-dir defect fixed, 80 steps, 2 epochs. **Started 08:32:34 WIB**
+(verified against the process start and the log's creation time, not guessed),
+measured at **257.94 s/it** on step 1, so **ETA ~14:15 WIB**. Check it before
+anything else:
 
     ssh oracle-gpu bash -s <<'EOF'
     pgrep -af fine_tuning.train_sft
@@ -50,6 +101,45 @@ celebrating.
 
 **What it does NOT answer:** whether 318 records is enough. That was the other
 half of the ambiguity and this run holds it fixed on purpose.
+
+# Progress, 28 Aug, in one screen
+
+| | before | after |
+|---|---|---|
+| checkpoints trained | `sft-v2-pilot` (was training) | trained, **fully scored**; `sft-v2-pilot2` training |
+| checkable behavioural claims, ever | **0** | **101/101** well-formed |
+| `direction_ok` | no prior | **84/101** |
+| `observable_ok` | no prior | 35/101, now **reproducible** (was 35/36 flapping) |
+| `fabricated` | not gradeable — no claims to grade | **10/101**, cause found and fixed at the source |
+| corpus records carrying an unlearnable token | 66/318 (21%) | **0/318** |
+| apparatus bugs fixed | — | 3 (2 in the reporter, 1 in the scorer) |
+
+**On the one number that invites a bad comparison:** 27 Aug counted 6 fabricated
+absolute paths in `mechanism-v2`'s 101 answers, and this session counts 9 (plus
+one identical-output claim) in the pilot's 101. Same three sets, same rendering,
+same schema setting, so the denominators are honestly comparable — but the
+checkpoints and the contracts are not the same, so **do not report this as "the
+v2 contract increased fabrication."** What changed alongside it is that the
+corpus began carrying real unlearnable paths, which is the effect that was
+actually isolated and fixed. `sft-v2-pilot2` is the run that separates them.
+
+Commits: `8be80df` the pilot result, `4805cbf` the corpus + scorer fix.
+Run files committed: `data/basic_bench_v2_pilot.jsonl`,
+`data/heldout_mech_v2_pilot.jsonl`, `data/heldout_clean_v2_pilot.jsonl`.
+
+**The one-line version:** the v2 contract works as a *format* — every answer now
+states a behavioural claim, and 84/101 get the direction right, a question that
+could not previously be asked. The claims' *content* is mostly wrong (35/101
+observable), and the single biggest driver of the fabricated ones was a token
+the corpus could never have taught: a random temp directory, baked into 21% of
+targets by the builder that existed to stop exactly this. That is fixed and
+retraining now.
+
+**What did NOT move, and should not be claimed:** locus. 36/46 against 37/46 on
+`bench/basic`, 34/34 on `clean_heldout`, 14/21 against 19/21 on
+`mechanism_heldout`. False alarms did improve, 5 -> 1. The 67% locus+mechanism
+ceiling this project keeps hitting is untouched — consistent with the standing
+read that **the checkpoint chase is not where the contribution is.**
 
 # What 28 Aug established
 
@@ -226,6 +316,11 @@ is not deterministic the way the off-by-one cases are.
   scored 14, 15, 14 on three identical rescores of one file, because a claimed
   `"3"` matched the `3` inside `tmpoc3wg92t`. Normalise `/tmp/tmp\w+/` out
   before matching, and before writing a training target.
+- **Check the clock, not your memory, before quoting when a run started.**
+  This session wrote "started ~07:05 WIB, ETA ~12:50" into the handoff from a
+  guess; the process had actually started at 08:32:34 and the real ETA was
+  ~14:15. Verify with the process start time and the log's creation time
+  (`ps -o lstart`, `stat -c %w`), and take s/it from the run's own first step.
 - **The `pgrep` self-match trap fires in new costumes.** A background waiter
   using `until ! pgrep -f "basic[_]bench.py --backend ollama"` deadlocked: the
   bracket hid the pattern literal, but the wrapper shell's command line also

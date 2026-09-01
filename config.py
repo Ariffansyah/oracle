@@ -219,6 +219,23 @@ OUTPUT_CONTRACT = _env("OUTPUT_CONTRACT", "v1")   # v1 | v2 | v3
 #             one the corpora were NOT built with)
 #   unified   always send the raw diff, the v1 rendering
 DIFF_RENDERING = _env("DIFF_RENDERING", "auto")  # auto | word | unified
+
+# How much of each hunk's context to keep: "full" (whatever the diff carries)
+# or an integer number of lines around each changed line.
+#
+# OFF BY DEFAULT, and it should stay that way until it is measured. Everything
+# in docs/RESULTS.md was scored on "full", and `_render`'s docstring records
+# that a rendering mismatch between paths already cost two days and the one real
+# defect in five commits. Narrowing the context changes what every prompt looks
+# like, so switching the default silently would make every stored number
+# incomparable without anything failing loudly.
+#
+# The case FOR trying it: `analyze_commit` expands to `git show -U50`, which
+# routinely triples a diff (client.py:324), and on real commits the model
+# describes code that is in the context but not in the change. The case AGAINST
+# assuming it helps: with_context=True and False produced the IDENTICAL answer
+# on TestJIT/pyalgo 9227c63, so context volume is not always the lever.
+DIFF_CONTEXT_LINES = _env("DIFF_CONTEXT_LINES", "full")   # "full" | e.g. "3"
 # Sent explicitly on every request. Ollama otherwise falls back to whatever the
 # Modelfile baked in, or its own 4096 default - and a prompt carrying file
 # context silently overflows that without any error.

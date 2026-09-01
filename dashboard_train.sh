@@ -120,6 +120,66 @@ PYTBL
   printf '  %s./score_v4.sh --report is authoritative; a single seed is a point estimate%s\n' "$DIM" "$OFF"
 }
 
+# ---- control / eval runs (local driver, model served on the box) -----------
+# For the base-model and second-model controls run through
+# `bench/real_commits.py --run`, which are NOT part of score_v*.sh.
+#
+# Two reasons the obvious progress signals do not work here:
+#   - the rows file is written in ONE pass after the last commit
+#     (real_commits.py:196), so a row count reads 0/40 for the entire run;
+#   - the driver's own [i/n] lines were block-buffered into an 8KB buffer a
+#     40-commit run never fills, so its log stayed empty until exit (fixed
+#     1 Sep with line_buffering, but old logs still behave that way).
+# The signal that always works is on the BOX: serve.py logs one
+# "N chars in Xs" line per generation. Note it counts generations since the
+# SERVER started, so it over-reads if one server is reused for several runs.
+control_section() {
+  sec "control run (local driver -> $H)"
+  local pid target total served model elapsed base
+  pid=$(pgrep -af 'real_commits\.py --run' | grep -vE 'zsh -c|bash -c|grep' | head -1 | awk '{print $1}')
+  target=$(pgrep -af 'real_commits\.py --run' | sed -n 's/.*--run \([^ ]*\).*/\1/p' | head -1)
+  served=$(echo "$RAW" | grep '^SERVE_N=' | cut -d= -f2-)
+  model=$(echo "$RAW"  | grep '^SERVE_MODEL=' | cut -d= -f2-)
+  [ -z "$served" ] && served=0
+
+  if [ -n "$pid" ]; then
+    elapsed=$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')
+    base=$(basename "${target:-?}")
+    total=40; [ -f "$target" ] && total=$(wc -l < "$target")
+    job control green "running  pid $pid  elapsed ${elapsed:-?}  $base"
+    printf '  %-14s ' "generated"; bar "$served" "$total" 20; printf '  %s/%s\n' "$served" "$total"
+    printf '  %s%-14s %s%s\n' "$DIM" "rows" "written only at exit — 0 mid-run is normal" "$OFF"
+  else
+    job control yellow "idle — no real_commits.py --run in flight"
+  fi
+
+  # Which checkpoint is actually answering. Serving the wrong one is the single
+  # easiest way to spend an hour measuring nothing, and it has happened twice.
+  if [ -n "$model" ]; then
+    printf '  %s%-14s %s%s\n' "$DIM" "serving" "$model" "$OFF"
+  else
+    printf '  %s%-14s %s%s\n' "$DIM" "serving" "no llm_explainer.serve on $H" "$OFF"
+  fi
+
+  # Completed control runs: answered / total, so a half-finished file is visible
+  # rather than looking the same as a complete one.
+  local f
+  for f in data/real_commits_*.jsonl; do
+    [ -f "$f" ] || continue
+    case "$f" in *real_commits.jsonl) continue ;; esac
+    "$SCORE_PY" - "$f" <<'PYROW' 2>/dev/null
+import json, sys
+p = sys.argv[1]
+rows = [json.loads(l) for l in open(p) if l.strip()]
+ans = sum(1 for r in rows if isinstance(r.get("predicted"), dict) and r["predicted"].get("summary") is not None)
+err = sum(1 for r in rows if r.get("error"))
+find = sum(len((r.get("predicted") or {}).get("findings") or []) for r in rows)
+tag = p.split("real_commits_")[-1].removesuffix(".jsonl")
+print(f"  {'':14}{tag:<16} {ans}/{len(rows)} answered  {find:>3} findings  {err} err")
+PYROW
+  done
+}
+
 # ponytail: single SSH call for all remote state; split if you need per-field timeouts/retries.
 render() {
 printf '%sORACLE train%s   %s   box: %s   refresh %ss%s\n' "$BOLD" "$OFF" "$(date +%H:%M:%S)" "$H" "$INTERVAL" "$DIM(ctrl-c to stop)$OFF"
@@ -162,6 +222,17 @@ RAW=$(R '
   # keep this as its own line so the parser stays trivial
   nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader 2>/dev/null | tr -d "\n" | sed "s/^/GPU:/"
   echo ""
+  # Inference server: which checkpoint is being served, and how many generations
+  # it has completed. serve.py logs one "N chars in Xs" line per request, which
+  # is the only per-commit signal a control run has - see control_section().
+  SLOG=$(ls -t ~/oracle/serve*.log 2>/dev/null | head -1)
+  echo "SERVE_LOG=${SLOG:-none}"
+  if [ -n "$SLOG" ] && [ -f "$SLOG" ]; then
+    echo "SERVE_N=$(tr "\r" "\n" < "$SLOG" 2>/dev/null | grep -acE "chars in [0-9.]+s")"
+  else
+    echo "SERVE_N=0"
+  fi
+  echo "SERVE_MODEL=$(pgrep -af "[l]lm_explainer.serve" | sed -n "s/.*--model \([^ ]*\).*/\1/p" | head -1)"
   # checkpoints — newest first, with ages
   echo "CKPT_START"
   cd ~/oracle/artifacts 2>/dev/null && stat -c "%Y %n" */adapter_model.safetensors */model.safetensors 2>/dev/null | sort -rn | head -6 | while read ts path; do
@@ -229,6 +300,7 @@ else
 fi
 
 scoring_section
+control_section
 
 printf '\n%s tip: ./dashboard.sh for the full view (labelling/variance/bench) %s\n' "$DIM" "$OFF"
 }

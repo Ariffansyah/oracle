@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pydantic import ValidationError
 
 from config import (BACKEND, BASE_MODEL, CHUNK_MAX_FILES, CHUNK_OVER_CHARS,
-                    DIFF_RENDERING, INCLUDE_SCHEMA, INFERENCE_4BIT,
+                    DIFF_CONTEXT_LINES, DIFF_RENDERING, INCLUDE_SCHEMA, INFERENCE_4BIT,
                     INFERENCE_SAMPLES, OUTPUT_CONTRACT,
                     INFERENCE_SAMPLE_TEMPERATURE, CHUNK_SKIP_OVER_CHARS, MAX_DIFF_CHARS, MAX_NEW_TOKENS,
                     MERGED_MODEL_DIR, OLLAMA_HOST, OLLAMA_MODEL,
@@ -159,6 +159,80 @@ def _already_word_diff(diff: str) -> bool:
         if line[:1] in ("+", "-"):
             return False
     return True
+
+
+def narrow_context(diff: str, keep: int) -> str:
+    """Re-trim a unified diff to `keep` context lines around each change.
+
+    `analyze_commit` sends `git show -U50` plus whole post-commit files, which
+    routinely triples a diff (client.py:324). On real commits the model then
+    describes code that is present in the context but absent from the change -
+    the dominant failure in the 1 Sep hand-grade. This shrinks the window back
+    without touching what actually changed.
+
+    Structure is preserved rather than recomputed: file headers stay, and each
+    hunk keeps its `@@` line. The line COUNTS in that header are left as they
+    were - they would be wrong after trimming, but nothing downstream parses
+    them, and rewriting them risks a subtly malformed diff reaching the model,
+    which is worse than a stale count it never reads.
+
+    Opt-in via ORACLE_DIFF_CONTEXT_LINES; see the note in config.py for why the
+    default must not change without a measurement.
+    """
+    out: list[str] = []
+    hunk: list[str] = []
+
+    def flush() -> None:
+        if not hunk:
+            return
+        changed = [i for i, l in enumerate(hunk) if l[:1] in ("+", "-")]
+        if not changed:
+            out.extend(hunk)
+        else:
+            lo, hi = max(0, changed[0] - keep), min(len(hunk), changed[-1] + keep + 1)
+            keepset = set(range(lo, hi)) | set(changed)
+            out.extend(l for i, l in enumerate(hunk) if i in keepset)
+        hunk.clear()
+
+    for line in diff.splitlines():
+        if line.startswith("@@"):
+            flush()
+            out.append(line)
+        elif line.startswith(("diff --git", "index ", "+++", "---",
+                              "new file", "deleted file", "similarity ",
+                              "rename ")):
+            flush()
+            out.append(line)
+        else:
+            hunk.append(line)
+    flush()
+    return "\n".join(out)
+
+
+def _drop_retired_fields(a: Analysis) -> Analysis:
+    """Blank the fields the active contract retired, before anyone reads them.
+
+    v3 dropped `effect.before` / `effect.after` because a model that cannot run
+    the code cannot know a concrete value: measured across four checkpoints and
+    101 executable cases they were right 15-31% of the time, and 69-85% of
+    answers carried a concrete claim that running the code contradicts.
+
+    `Analysis` still ACCEPTS both, because a v1/v2 checkpoint fills them and
+    those runs must stay parseable. The gap is that a v3 checkpoint can emit
+    them anyway - unprompted, since 0 of 366 v6 targets populate either - and
+    then the retired field reaches the user as though it were contract. Observed
+    1 Sep in the TUI: "sum_to(5) returns 15 instead of 15", a before/after pair
+    with identical values, on a checkpoint whose corpus contains neither field.
+
+    Deleting a field from the training targets does not delete it from the
+    model's vocabulary. This enforces the contract at the boundary instead.
+    """
+    if OUTPUT_CONTRACT != "v3" or a.effect is None:
+        return a
+    if a.effect.before is None and a.effect.after is None:
+        return a
+    return a.model_copy(update={
+        "effect": a.effect.model_copy(update={"before": None, "after": None})})
 
 
 class OracleClient:
@@ -495,13 +569,25 @@ class OracleClient:
                 if f.category in keep and f.category not in seen:
                     seen.add(f.category)
                     merged.append(f)
-        summary = next((a.summary for a in analyses
-                        if bool(a.findings) == bool(merged)), analyses[0].summary)
+        # Pick the representative sample ONCE and take both its prose and its
+        # effect, so the two halves of the answer come from the same sample and
+        # cannot describe different things.
+        rep = next((a for a in analyses if bool(a.findings) == bool(merged)),
+                   analyses[0])
+        summary = rep.summary
         dropped = len(counts) - len(keep)
         if dropped > 0:
             summary += (f" ({dropped} finding(s) appeared in a minority of "
                         f"{len(analyses)} samples and were dropped.)")
-        return Analysis(summary=summary, findings=merged)
+        # `effect` was omitted here until 1 Sep, and it defaults to None, so
+        # consensus silently returned a v1-shaped answer from a v3 checkpoint:
+        # trigger, direction, `check` and confidence all discarded. INFERENCE_
+        # SAMPLES defaults to 3, so that was the DEFAULT path - every caller
+        # that did not pin samples to 1 (the TUI, main.py analyze, TestJIT's
+        # score.py) lost the whole v3 contract, while score_v6.sh pinned it and
+        # so every benchmark number was measured on a path nobody ran
+        # interactively.
+        return Analysis(summary=summary, findings=merged, effect=rep.effect)
 
     def _render(self, diff: str) -> str:
         """Render the diff the way the served checkpoint was TRAINED to see it.
@@ -517,6 +603,14 @@ class OracleClient:
         corpora were built with, so reaching for git here would swap one
         mismatch for a subtler one.
         """
+        # Narrow BEFORE rendering: to_word_diff strips the +/- prefixes that
+        # narrow_context needs to find the changed lines, so the order is not
+        # interchangeable. Off unless ORACLE_DIFF_CONTEXT_LINES is set.
+        if str(DIFF_CONTEXT_LINES).lower() != "full" and not _already_word_diff(diff):
+            try:
+                diff = narrow_context(diff, int(DIFF_CONTEXT_LINES))
+            except (TypeError, ValueError):
+                pass          # a bad value must not take the review with it
         mode = str(DIFF_RENDERING).lower()
         if mode == "auto":
             mode = "word" if OUTPUT_CONTRACT in ("v2", "v3") else "unified"
@@ -539,6 +633,7 @@ class OracleClient:
     def _analyze_single(self, diff: str, subject: str = "", files: str = "",
                         retries: int = 1, context: str = "",
                         temperature: float | None = None) -> Analysis:
+        # (see _drop_retired_fields below - applied to every parsed answer)
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_user_message(
@@ -551,7 +646,8 @@ class OracleClient:
                    if self.backend == "ollama"
                    else self._generate_local(messages, temperature))
             try:
-                return Analysis.model_validate(extract_json(raw))
+                return _drop_retired_fields(
+                    Analysis.model_validate(extract_json(raw)))
             except (InferenceError, ValidationError) as e:
                 last = e
                 if attempt == retries:

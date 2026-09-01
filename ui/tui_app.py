@@ -59,6 +59,66 @@ from ui.commands import CommandError, build_registry, run_command
 from variance import VARIANTS
 
 
+def _claim_check_text(analysis, diff: str) -> str:
+    """The claim check as plain text, for the copy/report path.
+
+    Same rule as the pane: annotate, never suppress. Returns "" when every
+    concrete claim holds or there are none, so an answer with nothing to flag
+    is not padded with a clean bill of health nobody asked for.
+    """
+    from llm_explainer.verify import UNVERIFIABLE, VERIFIED, check_against_diff
+
+    rep = check_against_diff(analysis.model_dump(), diff)
+    bad = [c for c in rep.claims if c.status not in (UNVERIFIABLE, VERIFIED)]
+    if not bad:
+        return ""
+    lines = [f"\nclaim check: {len(bad)} of {len(rep.claims)} concrete claim(s) "
+             f"do not hold"]
+    for c in bad:
+        actual = f"  (actually {c.actual})" if c.actual is not None else ""
+        lines.append(f"  {c.status:<13}{c.call} -> {c.claimed}{actual}")
+        if c.note:
+            lines.append(f"      {c.note}")
+    return "\n".join(lines)
+
+
+_CLAIM_STYLE = {"contradicted": "bold red", "degenerate": "bold red",
+                "incoherent": "bold red", "verified": "green"}
+
+
+def _append_claim_check(body: Text, analysis: Analysis, diff: str) -> None:
+    """Replay the answer's concrete claims and show the ones that do not hold.
+
+    ANNOTATES, never suppresses. The precedent is `evaluate.py`'s grounding
+    rule, which looked like an obvious output filter and, measured against the
+    hand grades, removed 100% of the true positives to remove 25% of the false
+    ones. A wrong claim beside a correct location is still worth reading; the
+    reader just needs to be told which half failed.
+
+    Observed 1 Sep on TestJIT/pyalgo 30dab2fd, and the reason this exists:
+      "sum_to(5) returns 15 instead of 15"              -> degenerate
+      "count_positive([1, -2, 3]) returns 2 instead of 1" -> incoherent
+    The second one's VALUE is right, so nothing that only checks values would
+    have flagged it.
+    """
+    from llm_explainer.verify import UNVERIFIABLE, check_against_diff
+
+    rep = check_against_diff(analysis.model_dump(), diff)
+    bad = [c for c in rep.claims if c.status not in (UNVERIFIABLE, "verified")]
+    if not bad:
+        return
+    body.append(f"claim check · {len(bad)} of {len(rep.claims)} "
+                f"concrete claim(s) do not hold\n", style="bold red")
+    for c in bad:
+        body.append(f"   {c.status}", style=_CLAIM_STYLE.get(c.status, "red"))
+        body.append(f"  {c.call} -> {c.claimed}")
+        if c.actual is not None:
+            body.append(f"   (actually {c.actual})", style="dim")
+        body.append("\n")
+        if c.note:
+            body.append(f"      {c.note}\n", style="dim")
+
+
 def _append_effect(body: Text, analysis: Analysis) -> None:
     """The v3 suggestion contract: where, which way, and the test that settles it.
 
@@ -377,6 +437,7 @@ class OracleTUI(App):
                 body.append(f"  {f.file}", style="cyan")
             body.append("\n")
             body.append(f"   {f.explanation}\n\n")
+        _append_claim_check(body, analysis, commit.diff)
         target.update(body)
 
     def _refresh_sidebar(self) -> None:
@@ -505,7 +566,12 @@ class OracleTUI(App):
         for i, f in enumerate(a.findings, 1):
             where = f"  [{f.file}]" if f.file else ""
             out.append(f"\n{i}. {f.category}{where}\n   {f.explanation}")
-        return "\n".join(out)
+        # The claim check has to be here as well as in _render_analysis: this is
+        # the text `c`/`e`/`y` copy and `w` writes to a file, so it is the
+        # version that gets pasted into a report or an issue. Annotating only
+        # the on-screen pane means the copy that travels is the unmarked one.
+        out.append(_claim_check_text(a, commit.diff))
+        return "\n".join(p for p in out if p)
 
     def _report_text(self, commit: Commit) -> str:
         return (f"commit {commit.sha}\n"

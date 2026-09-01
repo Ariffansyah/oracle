@@ -191,6 +191,11 @@ def main(argv=None) -> int:
         return 0
 
     if args.run:
+        # run_model prints one [i/n] line per commit, but redirected stdout is
+        # block-buffered and a 40-commit run emits ~3KB - less than one 8KB
+        # buffer - so the log stays EMPTY until the process exits and the run
+        # reads as hung. Same bug, same fix as train_sft.py:52.
+        sys.stdout.reconfigure(line_buffering=True)
         rows = [json.loads(l) for l in open(args.run) if l.strip()]
         rows = run_model(rows, args.backend, args.host, args.model_name)
         with open(args.run, "w") as fh:

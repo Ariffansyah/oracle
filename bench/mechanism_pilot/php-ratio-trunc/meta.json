@@ -4,6 +4,17 @@
   "ext": "php",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["intdiv", "integer division", "truncat"]],
-  "note": "PHP's / always returns a float for int operands; the commit replaces it with intdiv(), which explicitly truncates. Verified: 33.33 -> 0.00"
+  "must_mention": [
+    [
+      "intdiv",
+      "integer division",
+      "truncat"
+    ]
+  ],
+  "note": "PHP's / always returns a float for int operands; the commit replaces it with intdiv(), which explicitly truncates. Verified: 33.33 -> 0.00",
+  "check": {
+    "probe": "call `score_percentage(1, 3)`, two ints that do not divide evenly",
+    "watch": "`/` is replaced by `intdiv()`, which truncates by definition where `/` returned a float for int operands, so check what a non-exact ratio does now",
+    "restored": "`intdiv()` is replaced by `/`, which returns a float for int operands, so check that a non-exact ratio is no longer truncated by integer division"
+  }
 }

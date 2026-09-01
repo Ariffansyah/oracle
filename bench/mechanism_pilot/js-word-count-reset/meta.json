@@ -4,6 +4,19 @@
   "ext": "js",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["count", "hoisted", "outside the loop", "reset", "accumulator"]],
-  "note": "let count = 0 moved above the outer for-loop, so the word count no longer resets per line and accumulates across lines. Verified: [2,3,1] -> [2,5,6]"
+  "must_mention": [
+    [
+      "count",
+      "hoisted",
+      "outside the loop",
+      "reset",
+      "accumulator"
+    ]
+  ],
+  "note": "let count = 0 moved above the outer for-loop, so the word count no longer resets per line and accumulates across lines. Verified: [2,3,1] -> [2,5,6]",
+  "check": {
+    "probe": "call `lineWordCounts` with two or more lines",
+    "watch": "`let count = 0` is hoisted outside the loop, so check whether the count still resets per line or accumulates across lines",
+    "restored": "`let count = 0` is back inside the loop, so check that the count resets per line instead of accumulating across lines"
+  }
 }

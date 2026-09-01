@@ -4,7 +4,7 @@
     {
       "category": "input-validation",
       "explanation": "Calling `smallest([])` now raises `ValueError: min() arg is an empty sequence` because the guard that returned None for empty input was removed, leading to an unhandled exception on empty lists.",
-      "file": "bpy-min-empty-guard.py"
+      "file": "py-min-empty-guard.py"
     }
   ]
 }

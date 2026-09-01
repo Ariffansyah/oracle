@@ -4,6 +4,19 @@
   "ext": "rb",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["best", "hoisted", "outside", "reset", "nil"]],
-  "note": "best is now initialized once before the loop (only when nil) instead of fresh per row, so a low value from an earlier row survives into later rows. Verified: [1,2,5] -> [1,1,1]"
+  "must_mention": [
+    [
+      "best",
+      "hoisted",
+      "outside",
+      "reset",
+      "nil"
+    ]
+  ],
+  "note": "best is now initialized once before the loop (only when nil) instead of fresh per row, so a low value from an earlier row survives into later rows. Verified: [1,2,5] -> [1,1,1]",
+  "check": {
+    "probe": "call `row_mins` with two or more rows, the later ones holding larger values than the first",
+    "watch": "`best` is now seeded once outside the block and only reset when nil, so check whether a low value from an earlier row survives into later rows",
+    "restored": "`best = row[0]` is seeded fresh per row again rather than only when nil, so check that a low value from an earlier row no longer survives into later rows"
+  }
 }

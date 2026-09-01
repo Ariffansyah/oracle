@@ -4,6 +4,19 @@
   "ext": "c",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["integer division", "truncat", "cast", "before the division", "after the division"]],
-  "note": "cast moved outside the division: (double)(correct/total) truncates 1/3 to 0 before ever becoming a fraction; the earlier cast on correct alone made the whole division float. Verified: 33.33 -> 0.00"
+  "must_mention": [
+    [
+      "integer division",
+      "truncat",
+      "cast",
+      "before the division",
+      "after the division"
+    ]
+  ],
+  "note": "cast moved outside the division: (double)(correct/total) truncates 1/3 to 0 before ever becoming a fraction; the earlier cast on correct alone made the whole division float. Verified: 33.33 -> 0.00",
+  "check": {
+    "probe": "call `score_percentage(1, 3)`, two ints that do not divide evenly",
+    "watch": "the `(double)` cast now wraps the whole division instead of `correct` alone, so check whether `correct / total` runs as integer division and truncates before the cast reaches it",
+    "restored": "the `(double)` cast is back on `correct` alone, before the division, so check that the ratio is computed in floating point rather than truncated by integer division"
+  }
 }

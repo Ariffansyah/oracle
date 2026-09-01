@@ -4,6 +4,19 @@
   "ext": "py",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["best", "hoisted", "outside the loop", "reset", "accumulator"]],
-  "note": "best=0 moved outside the outer for-loop, so it stops resetting per row and the running max leaks across rows. Verified: [3,9,5] -> [3,9,9]"
+  "must_mention": [
+    [
+      "best",
+      "hoisted",
+      "outside the loop",
+      "reset",
+      "accumulator"
+    ]
+  ],
+  "note": "best=0 moved outside the outer for-loop, so it stops resetting per row and the running max leaks across rows. Verified: [3,9,5] -> [3,9,9]",
+  "check": {
+    "probe": "call `row_maxes` with two or more rows, the later ones holding smaller values than the first",
+    "watch": "`best = 0` is hoisted outside the loop, so check whether the running max still resets per row or a high value from an earlier row leaks into later ones",
+    "restored": "`best = 0` is back inside the loop, so check that the running max resets per row instead of leaking a high value from an earlier row"
+  }
 }

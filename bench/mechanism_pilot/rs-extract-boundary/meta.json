@@ -1,0 +1,22 @@
+{
+  "id": "rs-extract-boundary",
+  "language": "rust",
+  "ext": "rs",
+  "buggy": true,
+  "category": "off-by-one",
+  "must_mention": [
+    [
+      ">",
+      ">=",
+      "boundary",
+      "exactly 60",
+      "off-by-one",
+      "60"
+    ]
+  ],
+  "note": "The extracted passing() uses `> 60` where grade() used `>= 60`, so a score of exactly 60 flips from pass to fail. Verified: 'pass fail' -> 'fail fail'. Counter-aligned with rs-extract-boundary-refactor, which has the same diff shape and is clean.",
+  "check": {
+    "probe": "call `grade(60)` with a score of exactly 60, the boundary the comparison names",
+    "watch": "the extracted `passing()` tests `score > 60` where the inline test was `score >= 60`, so check whether exactly 60 still comes back as a pass"
+  }
+}

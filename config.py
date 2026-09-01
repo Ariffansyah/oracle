@@ -130,6 +130,24 @@ GATE_HEAD = _env("GATE_HEAD", "lightgbm")          # lightgbm | mlp
 # only costs one LLM call. The threshold is therefore not 0.5 - it is whatever
 # achieves the recall below on held-out data, and `train_gate.py` solves for it.
 GATE_TARGET_RECALL = _env("GATE_TARGET_RECALL", 0.95)
+# MEASURED 1 Sep, and it is a silent failure: "held-out data" above means
+# held-out ApacheJIT, the corpus the gate was trained on. Scored against the 40
+# real commits in `data/real_commits.jsonl` — axios, clap, fastapi, gin,
+# spring-boot, chosen to sit outside both the gate's training set and the SFT
+# corpus — every score lands in 0.001–0.116 and NOT ONE reaches 0.15.
+#
+#   commits reaching stage 2 off-distribution: 0 of 40
+#
+# So the pipeline is inert on those projects: stage 2 is never invoked, the
+# false-positive rate is zero because nothing is ever answered, and no bench in
+# this repo would show it — `real_commits.py` has no gate in its path and the
+# other bench sets skip stage 1 as well. Re-calibrating does not fix it either;
+# the sweep is in `docs/RESULTS.md`, and the best operating point (0.034) still
+# passes 14 of 35 false alarms to keep the one correct finding.
+#
+# Do NOT simply lower this to make commits flow. A threshold tuned on one
+# project distribution says nothing about another, and that is the defect being
+# recorded here, not the number.
 GATE_THRESHOLD = _env("GATE_THRESHOLD", 0.15)
 
 # --- Inference -------------------------------------------------------------
@@ -165,11 +183,42 @@ INCLUDE_SCHEMA = _env("INCLUDE_SCHEMA", "auto")   # auto | true | false
 # trigger, before, after, direction - so the model states observable behaviour
 # before it states a verdict, and the claim can be checked by running the code.
 #
+# "v3" is the suggestion contract. It keeps `effect` first and keeps `trigger`
+# and `direction`, and it REMOVES `before`/`after`, replacing them with `check`:
+# a test the reader can run. The reason is measured (RESULTS.md, 30 Aug): split
+# by claim type, the model gets WHERE right 87-98% of the time and WHICH WAY
+# 79-93%, but the concrete before/after value only 15-31%. v2 demands that value
+# anyway, so the model invents one and is wrong about four times in five. The
+# fabrication is not a training defect - the contract requires it.
+#
+# Deleting it is free: `basic_bench.py:413` is `verdict_ok and (identified or
+# not buggy)` and never reads before/after, so the headline is unmoved while
+# 69-85% of answers stop carrying a false claim. `confidence` is added so the
+# hedge can be calibrated instead of blanket.
+#
 # It is one switch on purpose. The prompt, the format hint and the expected keys
 # move together, because the 27 Aug measurement showed a checkpoint scored under
 # a contract it was not trained on loses six cases in forty-six to that alone.
-# Leave it at v1 until a checkpoint is trained on v2.
-OUTPUT_CONTRACT = _env("OUTPUT_CONTRACT", "v1")   # v1 | v2
+# Leave it at v1 until a checkpoint is trained on the contract you want.
+OUTPUT_CONTRACT = _env("OUTPUT_CONTRACT", "v1")   # v1 | v2 | v3
+# How the diff is RENDERED before it is sent. This is not cosmetic: the
+# mechanism and v2 corpora are built with `dataset_builder.worddiff` by default
+# (`word = not args.unified`), so a checkpoint trained on them has never seen a
+# unified diff at inference. Feeding it one is a train/inference mismatch, and
+# it is measured: the two renderings disagree on 24% of cases, and on 27 Aug
+# rendering ALONE moved locus 41 -> 35 on identical weights - larger than the
+# checkpoint gap it was invoked to explain.
+#
+# The TUI and `main.py analyze` sent unified diffs to a word-diff-trained
+# checkpoint until 28 Aug. On the TestJIT `pyalgo` history that cost the one
+# real defect in five commits: unified errored on it, word-diff caught it.
+#
+#   auto      word-diff when OUTPUT_CONTRACT is v2 or v3, unified otherwise
+#   word      always render with dataset_builder.worddiff (the MODULE, never
+#             git --word-diff: they disagree on 24% of cases and git's is the
+#             one the corpora were NOT built with)
+#   unified   always send the raw diff, the v1 rendering
+DIFF_RENDERING = _env("DIFF_RENDERING", "auto")  # auto | word | unified
 # Sent explicitly on every request. Ollama otherwise falls back to whatever the
 # Modelfile baked in, or its own 4096 default - and a prompt carrying file
 # context silently overflows that without any error.

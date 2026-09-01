@@ -48,6 +48,18 @@ _CATEGORY_ALIASES = {
 
 DIRECTIONS = ("post-breaks", "post-fixes", "unchanged")
 
+# v3 only. Two buckets, because calibration is read as "is `likely` right more
+# often than `possible`" and three buckets on 101 cases leaves too few in each.
+CONFIDENCE = ("likely", "possible")
+
+_CONFIDENCE_ALIASES = {
+    "high": "likely", "certain": "likely", "confident": "likely",
+    "sure": "likely", "strong": "likely", "probable": "likely",
+    "medium": "possible", "moderate": "possible", "low": "possible",
+    "uncertain": "possible", "unsure": "possible", "maybe": "possible",
+    "weak": "possible", "unclear": "possible",
+}
+
 _DIRECTION_ALIASES = {
     "breaks": "post-breaks", "break": "post-breaks", "post_breaks": "post-breaks",
     "introduces": "post-breaks", "introduces-defect": "post-breaks",
@@ -83,15 +95,51 @@ class Effect(BaseModel):
     trigger: str = Field(
         description="One input or condition that exposes the difference, e.g. 'xs = [1,2,3]'."
     )
-    before: str = Field(
-        description="Observable behaviour BEFORE this commit, at that trigger."
+    # v1/v2 only. Optional so one model can carry all three contracts:
+    # `to_json` uses exclude_none, so a v2 answer still serialises to exactly
+    # the same bytes it did before `check` and `confidence` existed, and a v3
+    # answer never emits an empty before/after. Deliberately NOT enforced per
+    # contract - this file coerces near-misses rather than rejecting answers
+    # (see `_coerce_category`), and a hard validator here would throw away a
+    # usable analysis over a missing key.
+    before: str | None = Field(
+        default=None,
+        description="v1/v2 only. Observable behaviour BEFORE this commit, at that trigger."
     )
-    after: str = Field(
-        description="Observable behaviour AFTER this commit, at that trigger."
+    after: str | None = Field(
+        default=None,
+        description="v1/v2 only. Observable behaviour AFTER this commit, at that trigger."
+    )
+    # v3 only. Declared after before/after so v2 key order is unchanged, and
+    # before `direction` so the v3 answer still puts its evidence first.
+    check: str | None = Field(
+        default=None,
+        description="v3 only. A test the reader can run to settle it, as an instruction."
     )
     direction: str = Field(
         description="One of: post-breaks | post-fixes | unchanged."
     )
+    confidence: str | None = Field(
+        default=None,
+        description="v3 only. One of: likely | possible."
+    )
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _coerce_confidence(cls, v):
+        """Two buckets only, so calibration has enough cases per bucket to read.
+
+        Anything unrecognised becomes "possible" rather than None: a hedge the
+        grader cannot classify should count as the WEAKER claim, never be
+        dropped, or an unparseable confidence would silently inflate the
+        `likely` bucket it is supposed to be measured against.
+        """
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            return "possible"
+        key = v.strip().lower()
+        return key if key in CONFIDENCE else _CONFIDENCE_ALIASES.get(key, "possible")
 
     @field_validator("direction", mode="before")
     @classmethod
@@ -286,11 +334,98 @@ Answer with one JSON object, keys in this order:
 {"effect": {"trigger": "...", "before": "...", "after": "...", "direction": "post-breaks|post-fixes|unchanged"}, "summary": "...", "findings": [{"category": "...", "explanation": "..."}]}
 """
 
+# ---------------------------------------------------------------------------
+# v3: the suggestion contract. Say where and which way; suggest the test.
+#
+# v2 asks for `before` and `after` - what the program actually printed. The
+# model cannot run the code, so it cannot know. Measured on 30 Aug across all
+# four v2/v3 checkpoints and all 101 cases, split by claim type:
+#
+#     where  (does it cite the code at fault)   87-98% right
+#     which way (post-breaks vs post-fixes)     79-93% right
+#     the concrete before/after value           15-31% right
+#
+# So the contract demands the one thing the model is bad at, and it fills the
+# slot by inventing. 69-85% of stored answers carry a value that running the
+# code contradicts - and in 90-99% of those the answer was still pointing at
+# the RIGHT code. The false value is bolted onto a correct hint.
+#
+# v3 removes the slot. `check` asks for the test that would settle it, which is
+# derivable from the diff, instead of the result of that test, which is not.
+# The headline metric never read before/after (basic_bench.py:413), so this
+# costs nothing measurable and deletes the whole class of false claim.
+#
+# `confidence` exists so the hedge is calibrated rather than blanket. A model
+# that says "maybe" about everything is never wrong and never useful; the
+# false-alarm rate on clean cases is what catches that, and the `likely` vs
+# `possible` split is what makes the hedge informative.
+
+_SYSTEM_PROMPT_V3 = """You are ORACLE, a Just-In-Time defect reviewer.
+
+You are given a single commit diff. Work out what the change does, then point \
+the reader at what to check. Answer with one JSON object and nothing else.
+
+You CANNOT run the code and have never seen this program's output. Report what \
+to look at and what test would settle it — never what the program printed, \
+returned or computed.
+
+Fill the keys IN ORDER. Do not decide the verdict first.
+
+1. `effect` — FIRST, before you have an opinion.
+   - `trigger`: one input or condition where the two versions may differ, \
+   derived from the diff, e.g. 'a score of exactly 60', 'an empty list'.
+   - `check`: the test that would settle it, as an instruction to the reader — \
+   "call it with an empty list and see whether it still returns 0". NOT a \
+   result. Never write a number, return value or trace as though you observed \
+   it. If you find yourself writing what the program does, rewrite it as what \
+   to run.
+   - `direction`: `post-breaks` if the new code looks wrong at that trigger, \
+   `post-fixes` if the old code was wrong and the new is right, `unchanged` if \
+   both look the same.
+   - `confidence`: `likely` when the diff alone is enough to be fairly sure, \
+   `possible` when it is a lead worth checking. A wrong `likely` costs more \
+   than an honest `possible`.
+
+2. `summary` — SECOND, agreeing with the `effect` you just wrote. One or two \
+   sentences, phrased as a suggestion ("looks like", "probably", "worth \
+   checking"), ending with what the reader should do.
+
+3. `findings` — LAST. One entry per defect the change may introduce, each \
+   naming the construct it lives in, written as what to verify rather than as \
+   proven fact. `post-breaks` requires at least one finding; `post-fixes` and \
+   `unchanged` require an empty list.
+
+Look at: comparison operators (`>` vs `>=`), None/empty paths, inverted \
+conditions, sign and unit changes, integer division, early returns that skip \
+cleanup, resource and lock lifetime, swallowed errors, changed defaults. Watch \
+for a construct that changed meaning because code was added *around* it — a \
+guard absorbed by a new function still shows as unchanged context. Missing \
+validation in new code is worth flagging: a new `divide(a, b)` with no `b == 0` \
+check has a trigger at `b = 0`.
+
+Rules:
+- Hedged wording is not a licence to flag everything. Naming a suspect on a \
+change that does nothing is still a false alarm, and it is this contract's \
+main risk. If nothing looks wrong, say `unchanged` and leave `findings` empty.
+- A large or messy diff is not a defect; a tidy one is not evidence of safety.
+- Style, formatting and naming are not defects.
+- Never quote a file path or line number you were not given.
+- Output ONE JSON object. No markdown, no code fences, no prose around it.
+"""
+
+_SHORT_HINT_V3 = """
+Answer with one JSON object, keys in this order:
+{"effect": {"trigger": "...", "check": "...", "direction": "post-breaks|post-fixes|unchanged", "confidence": "likely|possible"}, "summary": "...", "findings": [{"category": "...", "explanation": "..."}]}
+"""
+
 # One switch moves prompt, hint and expected keys together. A checkpoint scored
 # under a contract it was not trained on lost six cases in forty-six to that
 # alone (RESULTS.md, 27 Aug), so these must never be selected independently.
-SYSTEM_PROMPT = _SYSTEM_PROMPT_V2 if OUTPUT_CONTRACT == "v2" else _SYSTEM_PROMPT_V1
-SHORT_FORMAT_HINT = _SHORT_HINT_V2 if OUTPUT_CONTRACT == "v2" else _SHORT_HINT_V1
+_PROMPTS = {"v1": _SYSTEM_PROMPT_V1, "v2": _SYSTEM_PROMPT_V2, "v3": _SYSTEM_PROMPT_V3}
+_HINTS = {"v1": _SHORT_HINT_V1, "v2": _SHORT_HINT_V2, "v3": _SHORT_HINT_V3}
+
+SYSTEM_PROMPT = _PROMPTS.get(OUTPUT_CONTRACT, _SYSTEM_PROMPT_V1)
+SHORT_FORMAT_HINT = _HINTS.get(OUTPUT_CONTRACT, _SHORT_HINT_V1)
 
 
 def build_user_message(diff: str, subject: str = "", files: str = "",

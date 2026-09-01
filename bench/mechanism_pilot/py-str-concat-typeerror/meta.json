@@ -4,6 +4,18 @@
   "ext": "py",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["str(", "typeerror", "coerc", "concaten"]],
-  "note": "str(count) is dropped; Python does not implicitly coerce int to str for +, so this now raises TypeError instead of silently formatting. Verified: '3 items' -> TypeError, exit 1"
+  "must_mention": [
+    [
+      "str(",
+      "typeerror",
+      "coerc",
+      "concaten"
+    ]
+  ],
+  "note": "str(count) is dropped; Python does not implicitly coerce int to str for +, so this now raises TypeError instead of silently formatting. Verified: '3 items' -> TypeError, exit 1",
+  "check": {
+    "probe": "call `build_message(3, \"items\")` with an int and a str",
+    "watch": "the `str(count)` conversion is gone and Python does not coerce int to str for `+`, so check whether this raises TypeError rather than concatenating",
+    "restored": "the `str(count)` conversion is back, so check that the concatenation succeeds instead of raising TypeError"
+  }
 }

@@ -4,6 +4,19 @@
   "ext": "js",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["alias", "spread", "same array", "mutat", "caller"]],
-  "note": "out = items drops the [...items] spread copy, so push() mutates the caller's array. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,'tagged']"
+  "must_mention": [
+    [
+      "alias",
+      "spread",
+      "same array",
+      "mutat",
+      "caller"
+    ]
+  ],
+  "note": "out = items drops the [...items] spread copy, so push() mutates the caller's array. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,'tagged']",
+  "check": {
+    "probe": "pass an array in, then look at the caller's own variable after the call returns",
+    "watch": "`[...items]` is replaced by `out = items`, so `out` aliases the caller's array rather than copying it \u2014 check whether the `push()` is visible to the caller too",
+    "restored": "the `[...items]` spread copy is back, so check that the `push()` no longer reaches the caller's array"
+  }
 }

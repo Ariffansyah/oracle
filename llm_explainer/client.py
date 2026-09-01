@@ -24,13 +24,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pydantic import ValidationError
 
 from config import (BACKEND, BASE_MODEL, CHUNK_MAX_FILES, CHUNK_OVER_CHARS,
-                    INCLUDE_SCHEMA, INFERENCE_4BIT, INFERENCE_SAMPLES,
-                    INFERENCE_SAMPLE_TEMPERATURE,
-                    CHUNK_SKIP_OVER_CHARS, MAX_DIFF_CHARS, MAX_NEW_TOKENS,
+                    DIFF_RENDERING, INCLUDE_SCHEMA, INFERENCE_4BIT,
+                    INFERENCE_SAMPLES, OUTPUT_CONTRACT,
+                    INFERENCE_SAMPLE_TEMPERATURE, CHUNK_SKIP_OVER_CHARS, MAX_DIFF_CHARS, MAX_NEW_TOKENS,
                     MERGED_MODEL_DIR, OLLAMA_HOST, OLLAMA_MODEL,
                     CONTEXT_MAX_CHARS, OLLAMA_NUM_CTX, REQUEST_TIMEOUT_S,
                     TEMPERATURE)
 from dataset_builder.schema import SYSTEM_PROMPT, Analysis, build_user_message
+from dataset_builder.worddiff import to_word_diff
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 _FILE_HEADER = re.compile(r"^diff --git a/(.+?) b/(.+)$", re.MULTILINE)
@@ -138,6 +139,26 @@ def extract_json(text: str) -> dict:
                         break
         start = text.find("{", start + 1)
     raise InferenceError(f"no JSON object in response: {text[:200]!r}")
+
+
+
+def _already_word_diff(diff: str) -> bool:
+    """Has this diff already been through `to_word_diff`.
+
+    Two signals together, because either alone is wrong: word-diff output
+    carries `{+...+}` / `[-...-]` markers AND has no `+`/`-` line prefixes left
+    (the renderer strips them). Source code can legitimately contain `{+`, and a
+    unified diff always keeps its prefixes, so requiring both makes a false
+    positive need a diff that has markers and no changed-line prefixes at once.
+    """
+    if "{+" not in diff and "[-" not in diff:
+        return False
+    for line in diff.splitlines():
+        if line[:3] in ("+++", "---"):
+            continue
+        if line[:1] in ("+", "-"):
+            return False
+    return True
 
 
 class OracleClient:
@@ -482,13 +503,46 @@ class OracleClient:
                         f"{len(analyses)} samples and were dropped.)")
         return Analysis(summary=summary, findings=merged)
 
+    def _render(self, diff: str) -> str:
+        """Render the diff the way the served checkpoint was TRAINED to see it.
+
+        Every path into the model goes through here - TUI, `main.py analyze`,
+        `analyze_commit`, TestJIT's score.py - so the rendering cannot drift
+        between them. It drifted for two days: the TUI sent unified diffs to a
+        word-diff-trained checkpoint, which is the mismatch that cost the one
+        real defect in the TestJIT pyalgo history.
+
+        `dataset_builder.worddiff` is deliberately the only renderer used. git's
+        own `--word-diff` disagrees with it on 24% of cases and is NOT what the
+        corpora were built with, so reaching for git here would swap one
+        mismatch for a subtler one.
+        """
+        mode = str(DIFF_RENDERING).lower()
+        if mode == "auto":
+            mode = "word" if OUTPUT_CONTRACT in ("v2", "v3") else "unified"
+        if mode != "word":
+            return diff
+        if _already_word_diff(diff):
+            # `basic_bench.py --word-diff-module` renders before it calls us, so
+            # without this the benchmark would render TWICE. That is not a
+            # harmless no-op: to_word_diff is NOT idempotent - a second pass eats
+            # a space of indentation - so it would have silently changed every
+            # benchmark number rather than failing loudly.
+            return diff
+        try:
+            return to_word_diff(diff)
+        except Exception:
+            # A renderer that throws must not take the review with it; an
+            # un-rendered answer is worth more than no answer.
+            return diff
+
     def _analyze_single(self, diff: str, subject: str = "", files: str = "",
                         retries: int = 1, context: str = "",
                         temperature: float | None = None) -> Analysis:
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_user_message(
-                diff, subject, files, max_diff_chars=MAX_DIFF_CHARS,
+                self._render(diff), subject, files, max_diff_chars=MAX_DIFF_CHARS,
                 context=context, include_schema=self.include_schema)},
         ]
         last: Exception | None = None

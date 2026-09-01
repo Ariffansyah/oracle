@@ -1,0 +1,9 @@
+{
+  "id": "rs-extract-boundary-refactor",
+  "language": "rust",
+  "ext": "rs",
+  "label": "refactor",
+  "parent": "rs-extract-boundary",
+  "category": "off-by-one",
+  "note": "Extracts the boundary test into passing() unchanged; output stays 'pass fail'. Same diff shape as rs-extract-boundary (a function is added and the call site rewired) and the opposite label, so 'an added function is safe' cannot be learned from this pair."
+}

@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import random
 import sys
 from collections import Counter
@@ -174,15 +175,89 @@ def distinct_targets(rows: list[dict]) -> tuple[int, str, int]:
     return len(turns), top, n
 
 
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+_SRCFILE = re.compile(r"\b[\w./-]+\.(?:c|go|java|js|ts|py|rb|rs|php|json|txt)\b")
+
+
+def repeated_sentences(rows: list[dict]) -> tuple[str, int]:
+    """The most-repeated SENTENCE across assistant turns, and its count.
+
+    `distinct_targets` counts whole turns and misses the case that actually
+    cost this project a run. `data/sft_v3_extract.jsonl` had 98 distinct targets
+    in 399 rows and its worst whole-target repeat was 54 - 13.5%, under the 20%
+    bar below, so the check passed. But ONE SENTENCE appeared in 105 of the 399
+    (26%), and `bench/template_audit.py` later measured the checkpoints trained
+    on it reciting 30% of their answer prose verbatim against a 0.0% floor from
+    an untuned model. Targets that share most of their sentences are duplicates
+    the whole-string check cannot see.
+    """
+    counts = Counter()
+    for r in rows:
+        for m in r["messages"]:
+            if m["role"] != "assistant":
+                continue
+            try:
+                a = json.loads(m["content"])
+            except json.JSONDecodeError:
+                continue
+            prose = [a.get("summary", "")] + [f.get("explanation", "")
+                                              for f in a.get("findings") or []]
+            for text in prose:
+                for sent in _SENTENCE.split(text):
+                    sent = sent.strip()
+                    if len(sent.split()) >= 8:
+                        counts[sent] += 1
+    return counts.most_common(1)[0] if counts else ("", 0)
+
+
+def unseen_files(rows: list[dict]) -> list[tuple[str, str]]:
+    """Targets naming a source file that is absent from their own prompt.
+
+    A filename the model was never shown cannot be derived, only memorised, and
+    the model then emits it on unrelated cases. This repo has now been bitten
+    three times by that shape: the per-execution temp dir (`/tmp/tmpd6rhx_a0/`,
+    re-emitted as execution evidence on five cases), and every clean_direction
+    target naming `{parent}.{ext}` while its diff header said
+    `{id}.{ext}`. Both were invisible to every other check.
+    """
+    bad = []
+    for r in rows:
+        user = next((m["content"] for m in r["messages"] if m["role"] == "user"), "")
+        for m in r["messages"]:
+            if m["role"] != "assistant":
+                continue
+            for name in set(_SRCFILE.findall(m["content"])):
+                if name not in user:
+                    bad.append((name, m["content"][:80]))
+    return bad
+
+
 def write_jsonl(rows: list[dict], path: Path) -> Path:
     distinct, top, n = distinct_targets(rows)
     share = n / max(len(rows), 1)
     print(f"  {distinct} distinct assistant turns in {len(rows)} rows; "
           f"most repeated {share:.0%} ({n}x)")
-    if share >= 0.2:
+    # 0.10, not the old 0.20: the corpus that cost 14 GPU-hours peaked at 0.135
+    # and passed. A single target worth a tenth of the corpus is already too
+    # much to be anything but memorised.
+    if share >= 0.10:
         print(f"  !!! {share:.0%} of targets are one string — training on this "
               f"collapses the model. Vary the target before you spend the GPU:\n"
               f"      {top[:160]}")
+    sent, sn = repeated_sentences(rows)
+    sshare = sn / max(len(rows), 1)
+    print(f"  most repeated sentence: {sshare:.0%} ({sn}x of {len(rows)} rows)")
+    if sshare >= 0.10:
+        print(f"  !!! one sentence is in {sshare:.0%} of records. This is the "
+              f"check `distinct assistant turns` cannot see, and it is what the "
+              f"29 Aug pre-flight missed:\n      {sent[:160]}")
+    ghosts = unseen_files(rows)
+    if ghosts:
+        names = Counter(n for n, _ in ghosts)
+        print(f"  !!! {len(ghosts)} targets name a file absent from their own "
+              f"prompt — unlearnable, so it will be memorised and misapplied:")
+        for name, count in names.most_common(5):
+            print(f"        {name} ({count}x)")
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as fh:
         for row in rows:

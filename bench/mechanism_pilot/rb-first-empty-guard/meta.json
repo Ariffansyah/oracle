@@ -4,6 +4,18 @@
   "ext": "rb",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["nil", "empty", "guard", "first"]],
-  "note": "the xs.empty? guard is removed; Array#first on an empty array returns nil rather than raising, so the default value is silently lost instead of an exception. Verified: -1 -> nil"
+  "must_mention": [
+    [
+      "nil",
+      "empty",
+      "guard",
+      "first"
+    ]
+  ],
+  "note": "the xs.empty? guard is removed; Array#first on an empty array returns nil rather than raising, so the default value is silently lost instead of an exception. Verified: -1 -> nil",
+  "check": {
+    "probe": "call `first_or_default` with an empty array",
+    "watch": "the `xs.empty?` guard is gone, so check what `xs.first` returns on an empty array \u2014 nil is returned rather than raised, so the default is lost silently",
+    "restored": "the `xs.empty?` guard is back before `xs.first`, so check that an empty array returns the default instead of nil"
+  }
 }

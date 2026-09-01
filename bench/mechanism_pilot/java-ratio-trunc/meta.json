@@ -4,6 +4,19 @@
   "ext": "java",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["integer division", "truncat", "cast", "before the division", "after the division"]],
-  "note": "the (double) cast moved to wrap correct/total instead of correct alone, so the division itself is int/int and truncates before the cast ever applies. Verified: 33.33 -> 0.00"
+  "must_mention": [
+    [
+      "integer division",
+      "truncat",
+      "cast",
+      "before the division",
+      "after the division"
+    ]
+  ],
+  "note": "the (double) cast moved to wrap correct/total instead of correct alone, so the division itself is int/int and truncates before the cast ever applies. Verified: 33.33 -> 0.00",
+  "check": {
+    "probe": "call `scorePercentage(1, 3)`, two ints that do not divide evenly",
+    "watch": "the `(double)` cast now wraps `correct / total` instead of `correct` alone, so check whether the division itself is integer division and truncates before the cast applies",
+    "restored": "the `(double)` cast is back on `correct` alone, so check that the division happens in floating point instead of truncating before the cast"
+  }
 }

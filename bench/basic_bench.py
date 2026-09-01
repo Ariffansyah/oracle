@@ -242,7 +242,13 @@ def identified(case: dict, said: dict) -> bool:
     must = case.get("must_mention", [])
     if not must:
         return False
-    blob = _flat(" ".join([said.get("summary", "")]
+    # `effect.check` is v3-only and is where a suggestion-contract answer names
+    # the construct ("call passing() with exactly 60"). v1/v2 answers have no
+    # `check`, so this leaves their scores untouched - the 76/86 gate on the
+    # stored v2 rows is what proves that.
+    eff = said.get("effect")
+    check = eff.get("check", "") if isinstance(eff, dict) else ""
+    blob = _flat(" ".join([said.get("summary", ""), check]
                           + [f.get("explanation", "")
                              for f in said.get("findings") or []]))
     return all(
@@ -318,6 +324,29 @@ def _obs_match(claim: str, actual: str) -> bool:
     return any(w in c and w in a for w in _FAILURE_WORDS)
 
 
+def _check_useful(case: dict, check: str) -> bool | None:
+    """Does the suggested test actually exercise the defect this case has.
+
+    Same `must_mention` ground truth `identified()` uses, applied to the `check`
+    field alone: the question is whether a reader who ran ONLY what the model
+    suggested would meet the defect. `identified()` pools `check` with the prose
+    and so cannot answer that.
+
+    None on a clean case - there is no defect for a test to reach, and scoring
+    it either way would reward hedging.
+    """
+    if not case["buggy"]:
+        return None
+    must = case.get("must_mention", [])
+    if not must:
+        return None
+    blob = _flat(check)
+    return all(
+        any(_flat(alt) in blob
+            for alt in ([req] if isinstance(req, str) else req))
+        for req in must)
+
+
 def grade_effect(case: dict, said: dict) -> dict:
     """Grade the v2 behavioural claim. All keys are None when none was made.
 
@@ -338,24 +367,49 @@ def grade_effect(case: dict, said: dict) -> dict:
     eff = said.get("effect")
     if not isinstance(eff, dict):
         return {"effect_claimed": False, "effect_direction_ok": None,
-                "effect_observable_ok": None, "effect_fabricated": None}
+                "effect_observable_ok": None, "effect_fabricated": None,
+                "effect_check_useful": None, "effect_confidence": None}
 
     truth = {"buggy": "post-breaks", "fix": "post-fixes"}.get(case["label"], "unchanged")
     claimed = str(eff.get("direction", "")).strip().lower()
-
     pre_out, post_out = outputs(case)
-    before, after = str(eff.get("before", "")), str(eff.get("after", ""))
-    observable_ok = _obs_match(before, pre_out) and _obs_match(after, post_out)
-
-    blob = " ".join([eff.get("trigger", ""), before, after])
     identical = pre_out == post_out
+
+    # Which contract this ANSWER used, read off the answer itself rather than
+    # off config. `--score` must grade a stored file the same way whatever the
+    # environment says, and the three contracts have to be comparable in one
+    # table, so the shape of the row decides.
+    v3 = "check" in eff and not (eff.get("before") or eff.get("after"))
+
+    if v3:
+        check = str(eff.get("check", ""))
+        # No observable tier: v3 does not ask for a value, so there is nothing
+        # to check against execution. Scoring it 0 would report "did not answer
+        # this question" as "answered it wrongly" - the same mistake the
+        # `claimed` guard in `summarise` exists to avoid.
+        observable_ok = None
+        check_useful = _check_useful(case, check)
+        blob = " ".join([eff.get("trigger", ""), check])
+    else:
+        before, after = str(eff.get("before", "")), str(eff.get("after", ""))
+        observable_ok = _obs_match(before, pre_out) and _obs_match(after, post_out)
+        check_useful = None
+        blob = " ".join([eff.get("trigger", ""), before, after])
+
+    # An absolute path the model was never given is proof of invention under any
+    # contract. So is claiming a behaviour change on two sides that run
+    # identically - hedged wording does not make that claim true, which is why
+    # v3 is held to it too.
     fabricated = bool(_ABS_PATH.search(blob)) or (
         identical and claimed in ("post-breaks", "post-fixes"))
 
     return {"effect_claimed": True,
             "effect_direction_ok": claimed == truth,
             "effect_observable_ok": observable_ok,
-            "effect_fabricated": fabricated}
+            "effect_fabricated": fabricated,
+            "effect_check_useful": check_useful,
+            "effect_confidence": (str(eff.get("confidence")).strip().lower()
+                                  if eff.get("confidence") else None)}
 
 
 def grade(case: dict, said: dict) -> dict:
@@ -432,18 +486,42 @@ def summarise(rows: list[dict], label: str = "") -> None:
         # it is a finding, and the hardcoded "v1 contract" label hid exactly that
         # distinction when the row writer was dropping the effect_* keys.
         from config import OUTPUT_CONTRACT
-        why = ("v1 contract: no checkable behavioural claim" if OUTPUT_CONTRACT != "v2"
-               else "v2 contract: NO answer carried an effect - check the row writer "
-                    "and the served prompt before reading this as a model result")
+        why = ("v1 contract: no checkable behavioural claim" if OUTPUT_CONTRACT == "v1"
+               else f"{OUTPUT_CONTRACT} contract: NO answer carried an effect - check "
+                    "the row writer and the served prompt before reading this as a "
+                    "model result")
         print(f"  effect claimed      0/{n}   <- {why}")
         return
     c = len(claimed)
     d = sum(bool(r.get("effect_direction_ok")) for r in claimed)
-    o = sum(bool(r.get("effect_observable_ok")) for r in claimed)
     f = sum(bool(r.get("effect_fabricated")) for r in claimed)
     print(f"  effect claimed      {c}/{n}   ({100*c/n:.0f}%)")
     print(f"  ├ direction right   {d}/{c}   ({100*d/c:.0f}%)   <- which way the code moved; catches inversions")
-    print(f"  ├ observable right  {o}/{c}   ({100*o/c:.0f}%)   <- claimed before/after matches what ran")
+
+    # The observable tier is v1/v2 only. Under v3 no value is asked for, so
+    # `effect_observable_ok` is None everywhere and the tier is simply absent -
+    # printing 0/c would read as a total failure of a question never posed.
+    obs = [r for r in claimed if r.get("effect_observable_ok") is not None]
+    if obs:
+        o = sum(bool(r.get("effect_observable_ok")) for r in obs)
+        print(f"  ├ observable right  {o}/{len(obs)}   ({100*o/len(obs):.0f}%)   <- claimed before/after matches what ran")
+
+    # --- the v3 suggestion tier --------------------------------------------
+    chk = [r for r in claimed if r.get("effect_check_useful") is not None]
+    if chk:
+        u = sum(bool(r.get("effect_check_useful")) for r in chk)
+        print(f"  ├ check useful      {u}/{len(chk)}   ({100*u/len(chk):.0f}%)   <- the suggested test reaches the real defect (buggy cases only)")
+    conf = [r for r in claimed if r.get("effect_confidence")]
+    if conf:
+        # Calibration: `likely` must be right more often than `possible`, or the
+        # field is noise and the hedge carries no information.
+        for band in ("likely", "possible"):
+            rows_b = [r for r in conf if r["effect_confidence"] == band]
+            if not rows_b:
+                continue
+            ok = sum(bool(r["verdict_ok"] and (r["identified"] or not r["buggy"]))
+                     for r in rows_b)
+            print(f"  ├ conf={band:<9} {ok}/{len(rows_b)}   ({100*ok/len(rows_b):.0f}%)   <- fully correct when it said {band}")
     print(f"  └ FABRICATED        {f}/{c}   ({100*f/c:.0f}%)   <- invented path, or a change on identical output; must be 0")
 
 

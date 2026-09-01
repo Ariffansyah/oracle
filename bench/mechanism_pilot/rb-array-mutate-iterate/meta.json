@@ -4,6 +4,20 @@
   "ext": "rb",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["dup", "copy", "skip", "index", "shift", "delete"]],
-  "note": "items.dup is dropped; deleting from an array while each iterates it directly shifts subsequent elements, silently skipping some evens rather than raising. Verified: [1,3] -> [4,8,1,3]"
+  "must_mention": [
+    [
+      "dup",
+      "copy",
+      "skip",
+      "index",
+      "shift",
+      "delete"
+    ]
+  ],
+  "note": "items.dup is dropped; deleting from an array while each iterates it directly shifts subsequent elements, silently skipping some evens rather than raising. Verified: [1,3] -> [4,8,1,3]",
+  "check": {
+    "probe": "call `remove_evens` with two or more consecutive even numbers",
+    "watch": "`items.dup` is gone and `each` now walks `items` itself while `delete` mutates it \u2014 check whether deleting shifts the later elements and the block skips one",
+    "restored": "the `items.dup` copy is back as the thing `each` walks, so check that deletions no longer shift elements past the index"
+  }
 }

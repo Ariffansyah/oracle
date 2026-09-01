@@ -37,3 +37,15 @@ data/deepjit/
 !data/basic_bench_*.jsonl
 !data/heldout_mech_v2*.jsonl
 !data/heldout_clean_v2*.jsonl
+# The `v2` patterns above predate v3/v4/v6 and were never widened, so every
+# held-out run since was silently ignored while the basic_bench runs beside it
+# were kept. Same rationale, same sizes (28-132K), and RESULTS.md quotes numbers
+# from all of them.
+!data/heldout_mech_*.jsonl
+!data/heldout_clean_*.jsonl
+!data/real_commits_v6*.jsonl
+# The SFT corpora (1.6M each). A checkpoint is only auditable against the corpus
+# it actually saw - that is why sft_v4_suggest.jsonl is kept after v6 replaced
+# it - so these have to survive a fresh clone alongside the runs that used them.
+!data/sft_v4_suggest.jsonl
+!data/sft_v6_suggest.jsonl

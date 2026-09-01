@@ -3,7 +3,967 @@
 Every measurement taken, with the command that reproduces it. Numbers only —
 interpretation lives in `ROADMAP.md`, corpus provenance in `DATASETS.md`.
 
-Status as of 2026-08-28.
+Status as of 2026-09-01.
+
+---
+
+## The first measurement on real code: 88-91% of findings are wrong, and most of them describe code that is not in the diff (2026-09-01, latest)
+
+The 40 real commits have been sitting sampled-but-never-graded since 26 Aug.
+They are now generated (both v6 seeds) and hand-graded. This is the first
+evidence in the project from code nobody wrote for it, and it does not agree
+with the bench.
+
+### The apparatus
+
+    ./score_v6.sh          # generates data/real_commits_v6{,_seed7}.jsonl + .md
+
+`bench/real_commits.py` samples 40 commits from five projects that are in
+**neither** the SFT corpus nor the gate's training set (`real_commits.py:41`) —
+axios, clap-rs, fastapi, gin-gonic, spring-boot. There is **no stage-1 gate in
+this path**: all 40 go straight to stage 2, which is not how the pipeline is
+meant to run. Sampling is uniform over project history, so the base rate of
+defect-introducing commits is low — these are overwhelmingly fixes, features,
+refactors, docs and annotation passes.
+
+### The grade
+
+Graded by reading all 40 diffs, per the rule the sheet already carried: a
+mechanism claim that was not executed is not graded.
+
+| | seed 42 | seed 7 |
+|---|---|---|
+| commits carrying >=1 finding | **29 / 40** | **22 / 40** |
+| findings | 35 | 24 |
+| `locus` — right place, right mechanism | **1** | **1** |
+| `mechanism` — right place, inverted claim | 1 | 1 |
+| `wrong` | **32 (91%)** | **21 (88%)** |
+| not graded (needs execution) | 1 | 1 |
+
+The one correct finding, on both seeds, is `axios e8cf487`: the commit removes
+the es6-promise polyfill, and both name `lib/axios.js` and the consequence for
+environments without a native `Promise`.
+
+### `wrong` here mostly means fabricated, not mistaken
+
+The explanations describe code that is absent from the diff:
+
+| commit | the diff | the claim |
+|---|---|---|
+| `fastapi 9b35d355` | adds `if size: results.update(...)` to three tutorial files | a `float()`/`int()` cast and a "moved numeric check" — neither exists |
+| `axios 22ce6db` | adds trailing args to `createError`/`enhanceError` | `TypeError: Failed to construct 'Error': 2 arguments required` — not a JS error message |
+| `axios 4c4e648` | `Object.hasOwnProperty` -> `Object.prototype.hasOwnProperty` | that the guard now admits inherited keys. The two are the same function; verified `node -e` |
+| `spring 2d4baa33`, `118bf101`, `fab69e44` | JSpecify `@Nullable` / `@NullMarked` | runtime `NullPointerException`s from compile-time annotations |
+| `gin ce2201c`, `a48f83c`, `dbd8a25` | pure feature additions | a defect in the feature each commit adds |
+
+Two are worth escalating out of the pile.
+
+**An inverted security fix.** `fastapi d11f820a` is a docs commit teaching the
+dummy-hash idiom to *prevent* a timing attack. Seed 42 reports that it "means
+`authenticate_user` will always return True, allowing unauthenticated access."
+That is the opposite of what the idiom does, asserted as a vulnerability.
+
+**The one real defect in the set was missed by both seeds.** `gin 34b1d026`
+drops the `flusher, ok := w.ResponseWriter.(http.Flusher)` guard, leaving an
+unchecked type assertion that can panic. Seed 42 invented an unrelated
+status-code bug on the same file; seed 7 returned clean.
+
+Two mechanical defects: `fastapi 3611c3fc` (seed 42) emitted two byte-identical
+findings and `d11f820a` two near-identical ones, so 35 overstates the number of
+distinct claims.
+
+### Why no bench number predicted this
+
+`clean_heldout` reports `false_alarm` 0/34 on every v6 checkpoint. Both numbers
+are correct and they measure different things. Its clean cases are renames and
+fix-reversions of 5-8 line synthetic functions. A real clean commit is a feature
+addition, a CI matrix edit, an annotation pass or a docs change — shapes with no
+representation in a 366-record corpus at all. **The bench false-alarm result
+does not transfer to real commits, and nothing in this repo previously showed
+that.**
+
+Direction is also worth recording: 29/40 (seed 42) and 23/40 (seed 7) answers
+came back `post-breaks` on a sample that is mostly fixes and features.
+
+### Both cheap remedies were measured on this data, and neither works
+
+The two interventions the repo already contains — filter the output on
+`evaluate.py`'s grounding rule, or filter the input on the stage-1 gate — were
+run against the graded sheets. Neither is usable, and the reasons are different.
+
+**Output filter: `grounded()` removes every true positive.**
+
+    from evaluate import grounded          # evaluate.py:82, already unit-tested
+
+| hand grade | grounded | ungrounded (would be filtered) |
+|---|---|---|
+| `locus` — the only correct finding | 0 | **1** |
+| `mechanism` | 1 | 0 |
+| `wrong` | 24 | **8** |
+| not graded | 0 | 1 |
+| **seed 42 total** | 25 | **10 / 35 (29%)** |
+| **seed 7 total** | 21 | **3 / 24 (12%)** |
+
+It discards **100% of the true positives to remove 25% of the false ones**
+(10% on seed 7). The eight it does catch are genuine fabrications, so it has
+value as a diagnostic — but not as a gate on output.
+
+The failure is structural, not a threshold. The one correct finding
+(`axios e8cf487`) says the code "attempts to use `window.Promise`"; the diff's
+changed lines hold `P.polyfill` and `require('es6-promise')`. The model
+paraphrased rather than cited. `grounded()` measures vocabulary overlap, and
+correct-but-paraphrased is indistinguishable from invented under that measure.
+
+**Input filter: the gate rejects all 40 commits.**
+
+    Gatekeeper.load().score(diff)          # ml_model/gate.py:131
+
+| | |
+|---|---|
+| score range over the 40 real commits | **0.001 – 0.116** |
+| `GATE_THRESHOLD` as configured | **0.15** |
+| commits reaching stage 2 | **0 / 40** |
+
+At its configured threshold the pipeline never invokes stage 2 on any of these
+commits. The false-positive rate is zero because the system declines to answer.
+The two-stage pipeline as configured is **inert on real commits**, and no test
+in the repo would have shown that, because `real_commits.py` has no gate in its
+path and every other bench set skips stage 1 too.
+
+Re-calibrating does not rescue it:
+
+| threshold | commits passed | seed 42 findings kept | correct finding kept |
+|---|---|---|---|
+| 0.010 | 29/40 | 26/35 | yes |
+| 0.020 | 16/40 | 19/35 | yes |
+| **0.034** | **12/40** | **14/35** | **yes** |
+| 0.050 | 4/40 | 5/35 | **no** |
+| 0.150 (configured) | 0/40 | 0/35 | no |
+
+The best operating point still passes 14 false alarms to keep the one correct
+finding, which sits at 0.034 — mid-pack, with false alarms scoring both above
+and below it. There is no threshold that separates them.
+
+One genuine positive: the gate's *ranking* carries signal even though its
+calibration does not. The four lowest-scoring commits (0.001–0.005) are all the
+spring-boot nullability-annotation commits, which is exactly right — it knows an
+annotation pass is not worth reviewing. It simply scores everything else nearly
+as low.
+
+**What the pair of results means.** The gate was trained on ApacheJIT and these
+five projects were chosen to sit outside both it and the SFT corpus. So *both
+stages are out of distribution on the same data and fail independently* — the
+gate by rejecting everything, the explainer by fabricating. Neither end can
+filter the other's errors, which is why the two obvious remedies both fail.
+
+### What is NOT claimed here
+
+The grading is one reader, on unlabelled data, from diffs, without executing.
+The core fabrications are unambiguous — a cast that is not in the file, an error
+message that does not exist in the language — but the softer `wrong` calls
+(a finding that describes an addition accurately and then files it as a defect)
+are a judgement, and another grader could reasonably split them differently.
+`clap a126149` is left ungraded on both seeds for exactly this reason: settling
+it needs `cargo test -p clap_complete`, which was not run.
+
+No claim is made about precision. A uniform sample of mature-project history
+contains almost no defect-introducing commits, so there are essentially no
+positives to be precise about; what is measured here is the false-alarm rate,
+and it is high.
+
+This does not touch the v6 copying result below, which is a bench measurement
+and stands. What it changes is what that result means: v6 fixed recitation, and
+recitation was not what stood between this model and real code.
+
+---
+
+## Apparatus: the TUI sent every fine-tuned checkpoint the one prompt shape it never trained on (2026-09-01, later)
+
+Found by driving `sft-v6-suggest` through the TUI against `TestJIT/pyalgo`
+rather than through `basic_bench.py`. **No number in the section below is
+affected** — every bench run sets the flag correctly. What is affected is every
+impression ever formed of a fine-tuned model *in the TUI*.
+
+### The observation
+
+`pyalgo 9227c63` "restore the inclusive bound" — `range(1, n)` becomes
+`range(1, n + 1)` in `sum_to`. Ground truth: `buggy: false`, `kind: fix`.
+
+    semantic review
+    No change in stats.py.
+
+    no defects found in the diff
+
+The verdict is right and `no defects found in the diff` is a UI string
+(`ui/tui_app.py:487`). The model-authored half, `summary`, is false: the diff
+changes `stats.py`, which is the only thing it does. No `where:`/`change:`/
+`check:` lines were rendered, meaning `effect` came back `None` —
+a **v1-shaped answer out of a v3 checkpoint**.
+
+Three things ruled it out as recitation or as a model defect:
+
+| ruled out | evidence |
+|---|---|
+| recited from the corpus | "no change in" appears in **0 of 366** v6 targets, and nowhere in the tree |
+| a UI-generated string | `grep` finds no such format string; only the header and the empty-findings line are UI |
+| the expanded context | `with_context=True` and `False` both return the identical bad answer |
+
+On the bench the same shape is answered correctly — all 21 `-fix` cases in
+`clean_heldout`, both seeds, return `direction: post-fixes` with a populated
+effect and a summary naming the changed token ("This undoes the defect in
+`py-loop-bound-loosen-fix.py`. The `len(xs)` bound is now `<`…"). `effect
+claimed` is 34/34 on that set.
+
+### The mechanism
+
+`llm_explainer/client.py:191`, under `INCLUDE_SCHEMA="auto"`:
+
+    include_schema = not (backend == "transformers" and trained)
+
+For `backend == "ollama"` that is unconditionally `True`, and the selftest pins
+it (`client.py:628`: `assert OracleClient(backend="ollama").include_schema`).
+The comment beside it says why — over HTTP the client cannot see whether it is
+talking to a fine-tuned model, so it sends the full JSON Schema.
+
+Every corpus is built schema-free and every bench run sets
+`ORACLE_INCLUDE_SCHEMA=false` (`score_v6.sh`). The TUI set nothing. It was the
+only caller handing a fine-tuned checkpoint a prompt shape absent from its
+training data.
+
+### The measurement
+
+Same commit, same live `sft-v6-suggest` server, the flag as the only variable:
+
+| | `include_schema=True` (TUI default) | `include_schema=False` (as scored) |
+|---|---|---|
+| `effect` | **`null`** | `trigger` + `check` + `direction` + `confidence` |
+| `summary` | "No change in stats.py." | "…restores the inclusive bound in `sum_to`, which is the repair direction." |
+| `findings` | 0 | 0 |
+
+### The fix, and what it does not fix
+
+`ui/tui_app.py` now carries `os.environ.setdefault("ORACLE_INCLUDE_SCHEMA",
+"false")` beside the existing `ORACLE_OUTPUT_CONTRACT` guard — the same defect
+one prompt field over, and the contract got a guard in August while the schema
+flag never did. `setdefault`, so an explicit `true` still wins for a base-model
+baseline, which does need the schema. `client._selftest()` still passes: the
+`auto` rule is untouched, only the TUI's default.
+
+**The answer is still wrong on this commit after the fix.** It returns
+`direction: post-breaks` for a commit that is a fix, while its own summary calls
+it "the repair direction" — the field contradicts the prose beside it. The
+verdict (0 findings) and the `check` are right. `clean_heldout` does not catch
+this: v6 scored `post-fixes` on all 21 of its fix cases, and this real commit is
+the same shape and fails. It is the first direction error observed on real code
+and it is not in any bench number.
+
+---
+
+## The v6 result: the template is gone, the scores did not move, and `confidence` is seed-bimodal (2026-09-01)
+
+The 31 Aug section below rebuilt the corpus and closed with "whether a model
+trained on the rebuilt corpus copies less, or scores the same, is not measured
+until the two-seed v6 run is scored". It is scored. It copies about half as
+much, it scores the same, and one contract field is worse than v4 in a way v4
+could not have shown.
+
+### The run
+
+    ~/oracle/run_v6.sh          # setsid nohup, log ~/oracle/run_v6.log
+    ./score_v6.sh               # both seeds, three sets, then compare + audit
+
+| | seed 42 | seed 7 |
+|---|---|---|
+| adapter | `artifacts/sft-v6-suggest` | `artifacts/sft-v6-suggest-seed7` |
+| tag | `v6` | `v6_seed7` |
+| started → exit 0 | 20:42:30 → 00:26:48 | 00:26:48 → 04:10:54 |
+| wall clock | 3 h 44 m | 3 h 44 m |
+
+ONE epoch each (46 steps), `--max-seq-length 1152`, corpus
+`data/sft_v6_suggest.jsonl`, md5 `053b5c02c8a4e4bcec7378accbdff248` verified on
+both boxes, 366 records, 0 dropped. The second epoch was dropped because the
+31 Aug `v4_ep1` comparison returned "no" on every metric across all three sets.
+
+### Measured noise floor, three corpora
+
+Two seeds, identical corpus, seed the only variable. An effect smaller than this
+on a set is not readable there.
+
+| pair | basic | mech_heldout | clean_heldout |
+|---|---|---|---|
+| v2_pilot2 / v2_seed7 | 14 of 46 | 10 of 21 | **0 of 34** |
+| v4 / v4_seed7 | 5 of 46 | 2 of 21 | **0 of 34** |
+| **v6 / v6_seed7** | **4 of 46** | **3 of 21** | **1 of 34** |
+
+### 1. False alarms — the gate holds
+
+    python bench/compare_seeds.py --base v4 v4_seed7 --new v6 v6_seed7
+
+| set | v2 pair | v4 pair | **v6 pair** | readable? |
+|---|---|---|---|---|
+| basic | 5 / 5 | 4 / 5 | **7 / 3** | no — seeds disagree |
+| mech_heldout | 0 / 0 | 0 / 0 | **0 / 0** | no — unchanged |
+| clean_heldout | 0 / 0 | 0 / 0 | **0 / 1** | no — seeds disagree |
+
+Seed 42 alone reads 7/46 (15%), above v4's 9–11%; seed 7 reads 3/46 (7%), below
+it. The band is 3–7 against v4's 4–5. **No readable rise.** A single-seed read of
+this metric would have reported a regression that the pair does not support.
+
+The one new fact: `clean_heldout` produced the first non-zero false alarm in the
+project's history (1/34, seed 7). The v2 pair and all four v4 checkpoints scored
+0/34. It sits exactly at v6's own noise floor for that set — but that floor was
+**0** for both earlier corpora, so v6 is marginally less seed-stable there.
+
+### 2. Location — held
+
+Locus confirmed, buggy cases only. On `basic` v6 is **33/33 on both seeds**,
+against v4's 31/33 and 33/33 — the two v4 misses are its two errored rows. On
+`mech_heldout` v6 is **20/21 on both seeds** where v4 was 21/21 on both.
+`compare_seeds` reads that as inside the ±2 band, and it is; it is recorded
+because it is consistent across two independently trained seeds rather than a
+single flip.
+
+### 3. Copying — halved on every set, both seeds
+
+    python bench/template_audit.py --corpus data/sft_v6_suggest.jsonl --tags v6 v6_seed7
+    python bench/template_audit.py --corpus data/sft_v4_suggest.jsonl --tags v4 v4_seed7
+
+Each family read against the corpus it actually trained on. A checkpoint read
+against a corpus it never saw is a floor, not a copying rate, and the two must
+not share a column.
+
+| run | set | mean | median | p90 | ≥50% | longest |
+|---|---|---|---|---|---|---|
+| v4 | basic | 28.7% | 19.9% | 66.7% | 12/44 | 30 |
+| v4_seed7 | basic | 24.3% | 14.0% | 60.0% | 10/46 | 25 |
+| **v6** | basic | **11.8%** | 9.7% | 30.6% | **0/46** | 13 |
+| **v6_seed7** | basic | **14.8%** | 9.8% | 30.8% | **1/46** | 15 |
+| v4 | mech_heldout | 16.2% | 17.8% | 23.6% | 0/21 | 17 |
+| v4_seed7 | mech_heldout | 16.0% | 10.4% | 26.7% | 2/21 | 12 |
+| **v6** | mech_heldout | **9.0%** | 9.3% | 17.9% | **0/21** | 11 |
+| **v6_seed7** | mech_heldout | **13.2%** | 10.0% | 29.8% | **0/21** | 14 |
+| v4 | clean_heldout | 71.1% | 74.1% | 77.4% | **34/34** | 26 |
+| v4_seed7 | clean_heldout | 74.6% | 75.0% | 79.4% | **33/34** | 28 |
+| **v6** | clean_heldout | **35.2%** | 39.4% | 61.8% | **5/34** | 23 |
+| **v6_seed7** | clean_heldout | **34.2%** | 35.4% | 45.5% | **4/34** | 20 |
+
+The worst number in the v4 run — essentially every `clean_heldout` answer at
+least half verbatim corpus text — goes from 34/34 and 33/34 to 5/34 and 4/34.
+
+### The `check` field is composed, not recited
+
+    python bench/check_field_audit.py --tags v4 v4_seed7 v6 v6_seed7 \
+        --pairs v4:v4_seed7 v6:v6_seed7
+
+`distinct*` blanks the filename and the trailing token dump, leaving the
+sentence.
+
+| tag | set | n | distinct\* | useful | no tail | top 4-gram |
+|---|---|---|---|---|---|---|
+| v4 | mech_heldout | 21 | **1** | 20/21 | 11/21 | **21/21** |
+| v4_seed7 | mech_heldout | 21 | **1** | 20/21 | 11/21 | **21/21** |
+| **v6** | mech_heldout | 21 | **21** | 19/21 | 19/21 | 15/21 |
+| **v6_seed7** | mech_heldout | 21 | **21** | 20/21 | 20/21 | 11/21 |
+| v4 | basic | 44 | 9 | 29/31 | 19/31 | 36/44 |
+| v4_seed7 | basic | 46 | 9 | 29/33 | 21/33 | 36/46 |
+| **v6** | basic | 46 | **45** | 30/33 | 30/33 | 21/46 |
+| **v6_seed7** | basic | 46 | **44** | 30/33 | 30/33 | 20/46 |
+| v4 / v4_seed7 | clean_heldout | 34 | 13 / 14 | — | — | 22/34, 21/34 |
+| **v6 / v6_seed7** | clean_heldout | 34 | **32 / 33** | — | — | 13/34, 13/34 |
+
+Cross-seed byte identity — two independently trained seeds, same case. `summary`
+is the control: models that reason can agree on content and still differ in
+wording.
+
+| pair | set | identical `check` | identical `summary` |
+|---|---|---|---|
+| v4 / v4_seed7 | basic | 16/46 | 0/46 |
+| v4 / v4_seed7 | mech_heldout | **13/21** | 0/21 |
+| v4 / v4_seed7 | clean_heldout | 21/34 | 1/34 |
+| **v6 / v6_seed7** | basic | **1/46** | 0/46 |
+| **v6 / v6_seed7** | mech_heldout | **0/21** | 0/21 |
+| **v6 / v6_seed7** | clean_heldout | **4/34** | 0/34 |
+
+The v4 seeds agreed byte for byte on 62% of held-out mechanism checks and never
+on a summary. The v6 seeds now agree on `check` at the same rate they agree on
+`summary` — which is to say, not at all. Saturation is reduced but not gone:
+v4's top 4-gram covered 21/21 mech answers, v6's covers 15/21 and 11/21.
+
+Counting `check` as prose *lowers* v6's copying rate on `clean_heldout`
+(35.2% → 30.6%, seed 42), because the field is now less recited than the
+surrounding summary. In v4 it was the most templated field in the answer.
+
+### 4. `check_useful` rose, and `compare_seeds` understates it
+
+`useful` **equals** `no tail` on both v6 seeds and all sets: the strip is a no-op
+because there is no token dump left to remove. v6's number is therefore earned by
+the sentence, which v4's never was.
+
+| set | v4 raw (dump included) | v4 sentence only | **v6** |
+|---|---|---|---|
+| basic | 29/31, 29/33 | 19/31 (61%), 21/33 (64%) | **30/33 (91%), 30/33 (91%)** |
+| mech_heldout | 20/21, 20/21 | 11/21 (52%), 11/21 (52%) | **19/21 (90%), 20/21 (95%)** |
+
+**`compare_seeds` reads the raw `check_useful` off the rows** — 29,29 → 30,30 on
+basic — and reports "inside seed band". That comparison is against v4's inflated
+figure and understates the change by roughly 30 points. Against the sentence-only
+column the move is **+30pp on basic and +38pp on mech**. The pre-registered
+expectation was a *drop* toward 52–64%.
+
+### 5. `confidence` — the one thing that did not transfer
+
+The corpus was rebalanced 75% → 58% `likely` (213/153) and the `possible` rule
+widened to cover overflow and truncation. The output distribution:
+
+| set | v6 seed 42 | v6 seed 7 |
+|---|---|---|
+| basic | 46 likely, **0 possible** | 10 likely, **36 possible** |
+| mech_heldout | 21 likely, **0 possible** | 5 likely, **16 possible** |
+| clean_heldout | 34 likely, **0 possible** | 33 likely, 1 possible |
+
+Same corpus, same recipe, one epoch each. Seed 42 emitted `likely` on all 101
+answers. Seed 7 applied the corpus rule — `likely` on unchanged code where the
+diff settles it, `possible` where the outcome depends on caller values — on 78%
+of `basic`. The field is not constant, as v4 suggested; it is **bimodal on
+seed**, which is worse, because a single-seed run reports either "dead" or
+"working".
+
+Precision inverts on `mech_heldout` (seed 7): `likely` 2/5 (40%), `possible`
+15/16 (94%). The model is more accurate when it hedges.
+
+A content change to the corpus (what `check` says) transferred completely. A
+distribution change (how often `confidence` says `possible`) did not transfer at
+all.
+
+### The extract prediction is falsified a second time
+
+| case | v4 | v4_seed7 | v6 | v6_seed7 |
+|---|---|---|---|---|
+| php-extract-helper ← stable target | quiet | ALARM | **ALARM** | **quiet** |
+| py-extract-helper ← stable target | quiet | quiet | **ALARM** | **quiet** |
+| go-extract-helper | quiet | quiet | ALARM | quiet |
+| java-extract-method | ALARM | ALARM | ALARM | quiet |
+| js-extract-helper | quiet | ALARM | quiet | quiet |
+| c-const — CONTROL | ALARM | ALARM | ALARM | ALARM |
+| py-comprehension — CONTROL | ALARM | ALARM | ALARM | ALARM |
+
+Predicted to go quiet; they are seed-split, exactly as under v4. Both non-extract
+controls still alarm in all four checkpoints, so the model did not go globally
+timid — the predicted effect is simply absent.
+
+### Headline accuracy — flat
+
+`fully correct`, v6 vs v4, both as seed pairs:
+
+| set | v4 pair | **v6 pair** | readable? |
+|---|---|---|---|
+| basic | 40 / 41 | **39 / 43** | no — seeds disagree |
+| mech_heldout | 21 / 19 | **20 / 17** | no — inside seed band |
+| clean_heldout | 34 / 34 | **34 / 33** | no — seeds disagree |
+
+No metric moved past noise in either direction. v6 also parsed all 46 `basic`
+cases where v4 seed 42 errored on 2.
+
+### What is NOT claimed here
+
+The copying reduction is a property of two seeds on three synthetic sets, and
+`clean_heldout` — where the drop is largest — is the set whose answers are
+shortest. Nothing here shows the model is *reasoning*; it shows the stored
+answers are no longer reproducible from the corpus, which is the objection the
+31 Aug reading raised and not more than that.
+
+The 40 real commits (`data/real_commits_v6.jsonl`,
+`data/real_commits_v6_seed7.jsonl`) are generated but **unlabelled and
+un-hand-graded**; they contribute no number above.
+
+`check_useful` grades by substring against each case's `must_mention`. It
+rewards naming the right identifier; it does not verify the suggested test would
+run, and no check in any v6 answer has been executed.
+
+---
+
+## The `check` field was a template, and the metric that graded it was scoring a token dump (2026-08-31)
+
+The v4 result cleared both gating thresholds while verbatim copying tripled, and
+the epoch-1 checkpoints proved convergence was not the cause — the corpus was.
+This is the corpus defect, measured, and the rebuild that answers it.
+
+### What the field actually was
+
+`suggested_effect()` built `check` from a ten-key dictionary keyed on the case's
+`category`. The corpus has **two** categories — 82 `logic-error`, 18
+`off-by-one` — so eight of the ten entries were dead and the field was two
+sentences with a filename slot, plus a token list scraped off the word-diff.
+
+| `data/sft_v4_suggest.jsonl` (= v5, same field) | |
+|---|---|
+| distinct `check` strings in 366 targets | **100** |
+| targets containing "the edit touches" | **357 (97%)** |
+| a case's six upsampled copies, byte-identical `check` | **all of them** |
+
+### What the model did with it
+
+    python bench/check_field_audit.py --tags v4 v4_seed7 --pairs v4:v4_seed7
+
+`distinct*` blanks the filename and the trailing token dump, leaving the
+sentence — the part that is supposed to vary with the case.
+
+| tag | set | n | distinct | distinct\* | most repeated 4-gram |
+|---|---|---|---|---|---|
+| v4 | basic | 44 | 44 | **9** | 36/44 "once and compare against" |
+| v4 | mech_heldout | 21 | 21 | **1** | 21/21 "the changed branch more" |
+| v4 | clean_heldout | 34 | 34 | 13 | 22/34 "the changed branch more" |
+| v4_seed7 | mech_heldout | 21 | 21 | **1** | 21/21 "the changed branch more" |
+
+**One sentence, on all 21 held-out mechanism cases, on both seeds.** The raw
+`distinct` column reads 21/21 and means nothing: every check names its own file.
+
+The cross-seed control settles that this is recitation and not convergence on a
+good answer. Two independently trained seeds, same case:
+
+| pair | set | identical `check` | identical `summary` |
+|---|---|---|---|
+| v4 / v4_seed7 | basic | 16/46 | **0/46** |
+| v4 / v4_seed7 | mech_heldout | 13/21 | **0/21** |
+| v4 / v4_seed7 | clean_heldout | 21/34 | 1/34 |
+| v2_pilot2 / v2_seed7 | basic | 0/46 (no field) | 5/46 |
+
+Two models that reason from a diff can agree on content and still differ in
+wording. These agree byte for byte on `check` and never on `summary`.
+
+### The metric was reading the token dump, not the sentence
+
+`_check_useful` grades `check` by substring against the case's `must_mention`,
+and the v4 corpus appended `— the edit touches \`a\`, \`b\`, \`c\`` to every one.
+Strip that tail from the stored answers and re-grade:
+
+| tag | set | `check_useful` | with the tail removed |
+|---|---|---|---|
+| v4 | basic | 29/31 (94%) | **19/31 (61%)** |
+| v4 | mech_heldout | 20/21 (95%) | **11/21 (52%)** |
+| v4_ep1 | basic | 32/33 (97%) | **21/33 (64%)** |
+| v4_seed7 | mech_heldout | 20/21 (95%) | **11/21 (52%)** |
+
+Roughly half the headline score was a list of changed tokens pasted after the
+sentence. A reader who ran only what the sentence told them would reach the
+defect about half the time, not 95% of the time.
+
+### Why no existing check caught it
+
+`bench/template_audit.py` scores copying over `summary` + `findings[].explanation`
+and **has never read `effect.check`**. The field that was 97% template was
+invisible to the tool whose whole purpose is measuring templating, so it did not
+appear in any number the pre-registered plan was checked against. `--with-check`
+now exists, off by default so published figures stay comparable.
+
+### A second defect found in the same pass
+
+`_V3_CLEAN_CLOSERS` was drawn for both `refactor` and `fix` cases. A `fix` case
+carries `direction: post-fixes` — the behaviour *does* change, that is what a
+repair is — and roughly 40 v4 fix targets signed off with "I do not see a
+behaviour change to chase" directly beneath it. A target that contradicts itself
+teaches the model to do both. Fixes now have their own closers.
+
+### The rebuild — `data/sft_v6_suggest.jsonl`
+
+The category dictionary is gone. Each of the 37 mechanism cases carries its own
+`check` in `meta.json`, authored beside the case in `bench/annotate_checks.py`:
+
+* `probe` — the input or call that reaches the defect
+* `watch` — what moved in the diff and what to look for, phrased as a question
+* `restored` — what the fix puts back (the 28 cases with a `-fix` child)
+
+The 63 clean cases derive theirs: a `fix` reuses its parent's probe with the
+parent's `restored`; a rename greps for the old name; an extraction takes the
+same probe as the buggy sibling with the same diff shape and the opposite watch,
+so the counter-aligned pair becomes the two halves of one comparison. Six
+connective forms, rotated so a case's six copies take six different ones.
+Nothing is executed; every field is derivable from the diff.
+
+    ORACLE_OUTPUT_CONTRACT=v3 .venv/bin/python \
+        dataset_builder/build_mechanism_corpus.py --no-bulk \
+        --tokenizer Qwen/Qwen2.5-Coder-3B-Instruct --max-seq-length 1152 \
+        --out data/sft_v6_suggest.jsonl
+
+| corpus | v4 / v5 | **v6** |
+|---|---|---|
+| records | 366 | 366 |
+| distinct `check` strings | 100 (27%) | **341 (93%)** |
+| "the edit touches" | 357 (97%) | **0** |
+| distinct assistant turns | 359 | **366 (all)** |
+| worst repeated sentence | 9% | **5%** |
+| unbalanced backticked identifiers | 0 (v5) | 0 |
+| `check_useful` on its own targets | — | 177/177 |
+| confidence split | 75% likely | **58% likely** |
+
+### Corpus self-similarity, leave-one-CASE-out
+
+    python bench/template_audit.py --corpus data/sft_v6_suggest.jsonl --self
+
+How much of a target is reachable verbatim from **other cases** — the whole
+upsampled family is left out, or the metric measures upsampling and reports
+~91% for every corpus ever built.
+
+| corpus | mean | median | ≥50% | longest run |
+|---|---|---|---|---|
+| `sft_v4_suggest` | 46.3% | 54.6% | 193/366 | 117 words |
+| **`sft_v6_suggest`** | **40.8%** | **37.4%** | **153/366** | **62 words** |
+| `sft_v4_suggest` +check | 56.3% | 63.7% | 203/366 | 118 words |
+| **`sft_v6_suggest`** +check | **49.0%** | **46.8%** | **171/366** | **96 words** |
+
+The median target went from more than half recitable out of its neighbours to
+about a third, and the longest shared span halved. This is a corpus property,
+knowable before a GPU is booked — which is the point, because the v4 run was
+launched on a corpus whose defect was already in the file.
+
+### What is NOT claimed here
+
+Every number above is a corpus or a re-score of stored v4 answers. Whether a
+model trained on the rebuilt corpus copies less, or scores the same, is not
+measured until the two-seed v6 run is scored. The thresholds in
+`docs/PLAN_SUGGEST_CONTRACT.md` are unchanged and false alarms remain the metric
+that can kill it.
+
+---
+
+## Three corpus bugs behind "the model recites templates" (2026-08-30, later still)
+
+Found while building the v3 suggestion contract. All three are in the
+extract-boundary family — the exact family the v3 experiment was built to
+teach — and together they explain the hand-read symptom that the template audit
+had just shown was NOT caused by repetition.
+
+### Bug 1 — 27 targets said "renames `a local` to `a new name`"
+
+`clean_direction()` read `m["renamed"]` with a placeholder default. The nine
+`*-extract-boundary-refactor` cases EXTRACT a helper; they rename nothing and
+carry no `renamed` key, so all nine fell through to the rename branch and took
+the default. At x3 that is 27 records whose target, for a diff that adds a
+function, reads:
+
+    This commit renames `a local` to `a new name` in c-extract-boundary.c.
+    Every use is updated in place ... and the program's behaviour is unchanged.
+
+`sft-v3-extract` then emitted that sentence on all five held-out extract cases,
+none of which is a rename. **It was read on 30 Aug as the model reciting a
+template. It was the model correctly reproducing a target that was false.**
+Extractions now have their own branch, and a missing `renamed` is a hard error
+instead of a default.
+
+### Bug 2 — every clean target named a file that was not in its own diff
+
+Summaries were composed with `{parent}.{ext}` while `case_diff` writes the diff
+header as `{id}.{ext}`: the target said `c-extract-boundary.c` for a diff that
+says `c-extract-boundary-refactor.c`. All 54 clean targets did this. A filename
+absent from the prompt cannot be derived, only memorised — the same shape as the
+per-execution temp dir stripped on 29 Aug.
+
+Related, and separately fixed: five hand-authored `analysis.json` files had
+copied the `b`-prefixed form out of the word-diff header
+(`bpy-min-empty-guard.py` for `py-min-empty-guard.py`), because
+`dataset_builder.worddiff` renders `a/foo.c b/foo.c` as `afoo.c bfoo.c`.
+
+### Bug 3 — nine cases, one summary, upsampled to 54
+
+The nine `*-extract-boundary` mechanism cases are the same program in nine
+languages — same `passing()`/`grade()`, same `> 60` — and share one
+hand-authored summary. Correct prose, nine times, x6 upsampling = **54
+byte-identical targets, 14% of the corpus.** That is the text
+`sft-v3-extract-seed7` recited on a held-out case with no such comparison.
+
+Upsampling exists to weight a case; k cases sharing a target are already
+weighted k times. `mechanism()` now uses `times // k`, so those nine contribute
+9 records instead of 54.
+
+### Why every 29 Aug check passed
+
+`write_jsonl` already had a duplication check with a 20% bar. The v3 corpus's
+worst WHOLE-TARGET repeat was 54/399 = 13.5%, so it passed. The 105-of-399
+figure was a *sentence* inside otherwise-differing summaries, which that check
+cannot see. Pre-flight now also measures:
+
+- **the most repeated sentence** (>= 8 words) across all targets, bar 10%
+- **targets naming a source file absent from their own prompt**
+- whole-target duplication, bar lowered 20% -> 10%
+
+Run against the corpora that already exist, the new checks fire on both:
+
+| corpus | distinct targets | worst sentence | ghost filenames |
+|---|---|---|---|
+| `sft_v2_pilot2` (318) | 80 | 78 = **25%** | **255** |
+| `sft_v3_extract` (399) | 98 | 105 = **26%** | **282** |
+| new v3-contract corpus (366) | 355 | 34 = 9% | **0** |
+
+The ghost filenames are `main.py` (27x), `main.c`, `main.go`, `Math.java` — they
+come from the executed runtime traces v2 puts in `effect.before/after`, which
+name the runner's own file rather than the case's. That is why
+`basic_bench_v3.jsonl`'s first row answers a **C** case with a **Go** panic
+trace citing `main.go:6`. Under v3 there is no executed output in the target and
+the count is zero.
+
+---
+
+## The template audit: parroting is real, and it is NOT a v3 defect (2026-08-30, later)
+
+**Both pre-registered gates failed. The 30 Aug diagnosis below ("the v3 corpus
+taught two templates") is WRONG as stated — not because the parroting is not
+real, but because v2 does it just as hard. Do not rebuild the v3 corpus on the
+strength of it.**
+
+Reproduce:
+
+    python bench/template_audit.py --corpus data/sft_v3_extract.jsonl \
+        --tags gptoss120b base44 oracle46 mechanism_v1 mechanism_v2 \
+               v2_pilot2 v2_seed7 v3 v3_seed7
+
+### Gate 1 — do the v3 runs copy more than the v2 runs? NO
+
+Verbatim 8-word coverage: the share of an answer's prose words (`summary` +
+`findings[].explanation`, JSON schema excluded) sitting inside an 8-word window
+that appears word-for-word in the corpus. `bench/basic`, mean over 46 cases:
+
+| checkpoint | saw this corpus | coverage |
+|---|---|---|
+| `base44` (untuned) | no | **0.0%** |
+| `oracle46` | no | 0.3% |
+| `gptoss120b` | no | 0.8% |
+| `mechanism_v1` | no | 3.4% |
+| `mechanism_v2` | no | 13.0% |
+| `v2_pilot2` (seed 42) | 78 of its 80 records | **30.5%** |
+| `v2_seed7` (seed 7) | 78 of its 80 records | 18.6% |
+| `v3` (seed 42) | yes | **30.2%** |
+| `v3_seed7` (seed 7) | yes | 17.9% |
+
+**The metric is sound and the parroting is enormous** — a third of seed 42's
+answer text is lifted verbatim, against a 0.0% floor from an untuned model on
+the same 46 cases. Longest single verbatim run: 86 words.
+
+**And v3 is indistinguishable from v2**: 30.2 vs 30.5, 17.9 vs 18.6. The
+pre-registered condition was "the v3 pair shows markedly higher overlap than
+the v2 pair". It does not. It shows the same.
+
+What actually separates the four runs is the **seed**, not the corpus: seed 42
+lands at ~30% on either corpus, seed 7 at ~18% on either corpus.
+
+### Why the earlier cross-corpus control was worthless
+
+`sft_v3_extract` is `sft_v2_pilot2` plus 20 records: 78 of 80 v2 records are
+byte-identical rows in v3, 98 distinct records against 80. Scoring a v2
+checkpoint against "the v3 corpus" was scoring it against its own training
+data. The only usable floor is a checkpoint from outside the family, which is
+why the table above starts with four of them.
+
+### Gate 2 — is v3 more repetitive than v2? NO
+
+| | records | distinct summaries | most-repeated sentence |
+|---|---|---|---|
+| `sft_v2_pilot2` | 318 | 80 | 78x = **25%** of records |
+| `sft_v3_extract` | 399 | 98 | 105x = **26%** of records |
+
+Same sentence in both ("Every use is updated in place — ... behaviour is
+unchanged"), same share. **The "105 of 399" figure that triggered the rebuild
+plan is not a v3 anomaly; v2 was 78 of 318.**
+
+One real v3-only difference: v3 repeats a single *whole summary* 54 times (14%
+of records — the 9 clean `extract-boundary-refactor` pairs all share one canned
+answer), where v2's most-repeated whole summary appears 6 times (2%). That
+concentration is genuine. It also **did not move the copying metric at all**,
+which is the point.
+
+### The hand-read "8 rename claims" is a seed effect, not a corpus effect
+
+Summaries applying a template to a case it does not fit, all three sets pooled:
+
+| run | "renames X to Y" on a non-rename case | "repairs the ..." on a non-fix case | total |
+|---|---|---|---|
+| `v2_pilot2` | 1 | 10 | **11** |
+| `v2_seed7` | 1 | 0 | 1 |
+| `v3` | 8 | 2 | **10** |
+| `v3_seed7` | 1 | 0 | 1 |
+
+Seed 42 misapplies a template ~10 times on either corpus; seed 7 once. The five
+cases hand-read on 30 Aug were the v3 seed-42 rename misfires — real, but the
+v2 seed-42 checkpoint misfires the *repair* template exactly as often. By this
+project's own readability rule (both seeds must move the same way, further than
+the seed pair's own spread) template misapplication is **not readable** as a v3
+effect.
+
+### What this costs, and the one thing it makes newly suspect
+
+Every v2-vs-v3 comparison published so far is a comparison of two checkpoints
+that recite at the same rate. The corpus change did not alter the failure mode
+it was blamed for.
+
+`clean_heldout` is the set most affected. All four runs sit at **82% verbatim
+coverage** there, with 34/34 verdicts and zero seed flips. No case id leaks
+(checked: 0 of 34 appear in the corpus) — but the *answer sentences* do. That
+set rewards emitting a memorised sentence on a recognised diff shape. Its prized
+"zero noise floor" is zero because it is a template-recall test, so a perfect
+score there is much weaker evidence than it has been read as.
+
+### Consequences for the plan
+
+- **Test 3 (rebuild the v3 corpus, retrain) is cancelled by its own gate.** It
+  would have been measured against a v2 baseline that parrots identically.
+- **The proposed pre-flight repetition check would not have caught this.** v2
+  and v3 score the same on it; it would have passed or failed both. The check
+  worth adding is `bench/template_audit.py` against an out-of-family floor
+  checkpoint, which measures the symptom instead of a proxy for it.
+- The extract-shape question ("does coverage fix the false alarms?") remains
+  untested, and is now known to be untestable on this corpus family without
+  fixing the parroting first.
+
+---
+
+## SUPERSEDED IN PART — v3 extract-boundary: the prediction is falsified, and the corpus taught two templates (2026-08-30)
+
+Two checkpoints on the v3 extract-boundary corpus, `--seed 42` and `--seed 7`,
+identical in every other respect (verified from `training_args.bin`, not from
+the live cmdline: `seed=42`/`seed=7`, `lr=2e-4 bs=1 ga=8 epochs=2.0`).
+
+| | launched | finished | runtime | steps |
+|---|---|---|---|---|
+| `sft-v3-extract` | not recorded | 29 Aug 06:07 | not recorded | 100 / epoch 2.0 |
+| `sft-v3-extract-seed7` | 29 Aug 06:08:13 | 29 Aug 13:21 | 7h12m (25,950 s) | 100 / epoch 2.0 |
+
+`train_loss` 0.2177 on seed 7 is the average over training; the final step is
+0.0108, token accuracy 0.9975. No divergence.
+
+Scored with the contract pinned on BOTH sides, GPU-served through the same
+remote-serve + tunnel harness as the v2 baselines (no CPU fallback, which would
+not have been comparable):
+
+    ORACLE_OUTPUT_CONTRACT=v2 ORACLE_INCLUDE_SCHEMA=false ORACLE_INFERENCE_SAMPLES=1 \
+      .venv/bin/python bench/basic_bench.py --backend ollama \
+      --model-name sft-v3-extract --host http://localhost:8111 --word-diff-module \
+      --out data/basic_bench_v3.jsonl
+    # --root bench/mechanism_heldout --out data/heldout_mech_v3.jsonl
+    # --root bench/clean_heldout     --out data/heldout_clean_v3.jsonl
+    # and the same three with sft-v3-extract-seed7 -> *_v3_seed7.jsonl
+
+    python bench/compare_seeds.py
+
+Metric gate checked before reading anything: `compare_seeds.py` reproduces the
+documented v2 headlines exactly — seed 42 `31+11+34 = 76`, seed 7 `35+17+34 =
+86`. The metric has not drifted.
+
+### The pre-registered prediction, and what happened
+
+Stated before the run: **`php-extract-helper` and `py-extract-helper` go quiet
+on BOTH v3 seeds.** Those are the only two of the five held-out extract cases
+where the v2 pair agrees, so they are the only two where movement can be
+attributed to the corpus rather than the seed.
+
+| case | v2/42 | v2/7 | v3/42 | v3/7 | |
+|---|---|---|---|---|---|
+| `php-extract-helper` | ALARM | ALARM | quiet | **ALARM** | stable target — **not met** |
+| `py-extract-helper` | ALARM | ALARM | quiet | quiet | stable target — met |
+| `go-extract-helper` | ALARM | quiet | quiet | ALARM | seed-unstable |
+| `java-extract-method` | quiet | ALARM | quiet | ALARM | seed-unstable |
+| `js-extract-helper` | quiet | quiet | quiet | **ALARM** | no headroom — **new false alarm** |
+
+One of two targets moved. **The prediction as stated is falsified.**
+
+`false_alarm` on `bench/basic` went **5,5 -> 2,7**. The seeds disagree in
+opposite directions on the metric the corpus was built to move. Seed 42 read
+alone is a triumph; seed 7 read alone is a regression. This is exactly the
+failure mode the two-seed protocol exists to catch.
+
+### Nothing improved readably; one thing regressed readably
+
+`_readable()` requires both seeds to move the same way by more than the spread
+the v2 pair shows on its own (floored at 2).
+
+| set | metric | v2/42 | v2/7 | v3/42 | v3/7 | readable? |
+|---|---|---|---|---|---|---|
+| basic | fully | 31 | 35 | 40 | 38 | no — inside band (±4) |
+| basic | false_alarm | 5 | 5 | 2 | 7 | no — seeds disagree |
+| mech_heldout | fully | 11 | 17 | 17 | 19 | no — inside band (±6) |
+| clean_heldout | **observable** | 12 | 11 | **6** | **6** | **YES (−6/−5)** |
+| clean_heldout | fully | 34 | 34 | 34 | 34 | unchanged |
+
+`basic` `fully` rises on both seeds (+9/+3) but the smaller move is +3 against a
+±4 band. Suggestive, not reportable. `mech_heldout` cannot resolve anything —
+10 of its 21 cases flip on seed alone.
+
+**The only readable effect of the entire v3 run is a regression**, and it is on
+`clean_heldout`, the one set with a zero noise floor. Four cases lose
+`observable_ok` on both v3 seeds: `java-unit-scale-rename`,
+`py-boundary-flip-rename`, `py-loop-bound-loosen-fix`, `py-precedence-avg-rename`.
+
+It is not a claiming failure — `effect_claimed` is unchanged at 33/34 — and
+`direction` actually improved (31,33 -> 33,34). The model still says which way
+the change goes; it states the concrete observable value correctly half as
+often:
+
+| case | v2 before/after | v3 before/after |
+|---|---|---|
+| `java-unit-scale-rename` | 5000 / 5000 | **3000 / 3000** |
+| `py-precedence-avg-rename` | 30.0 / 30.0 | **33.33 / 33.33** |
+| `py-boundary-flip-rename` | `[False, True, True]` | **`[False, True]`** |
+
+Self-consistent, correctly labelled `unchanged`, and numerically wrong. The
+model stopped computing the value and started producing a plausible one.
+
+### THE FINDING: the corpus taught two templates, and the seed picks one
+
+The headline numbers understate the problem. Reading the stored `predicted`
+answers on the five held-out extract cases shows neither seed is reasoning about
+extraction at all — both are reciting verbatim strings from the v3 corpus.
+
+**Seed 42 recites the clean-direction rename template.** On `py-`, `go-`,
+`java-`, `js-` and `php-extract-helper` alike it answers:
+
+> "This commit renames `xs` to `ys` in *<file>*. Every use is updated in place —
+> the declaration and its readers are edited, not deleted — and the program's
+> behaviour is unchanged."
+
+None of those cases is a rename. That sentence occurs **105 times in
+`data/sft_v3_extract.jsonl`** (399 records). Counting summaries that claim a
+rename on a case whose id is not a rename, pooled over all three sets:
+
+| run | rename-claims | on a non-rename case |
+|---|---|---|
+| `v2_pilot2` | 18 | 1 |
+| `v2_seed7` | 19 | 1 |
+| **`v3`** | 26 | **8** |
+| `v3_seed7` | 18 | 1 |
+
+**Seed 42's false alarms did not drop because it learned that extraction is
+safe. They dropped because it stopped reading the diff and recited the clean
+template.** Its `5 -> 2` is template collapse, not transfer.
+
+**Seed 7 recites the buggy half of the same pair.** On `java-extract-method` it
+answers that the helper "compares with `> 60` where the inline test used
+`>= 60`" — a verbatim string from `data/sft_v3_extract.jsonl`, describing the
+`*-extract-boundary` training case. The held-out case contains no such
+comparison. That is fabrication sourced directly from the corpus.
+
+So the counter-aligned pair did what it was designed to prevent at the level of
+a surface rule, and then failed one level down: instead of learning "added
+function = safe" or "added function = suspicious", the model memorised **both
+answer texts** and emits whichever one the seed favours. The apparent
+improvement and the apparent regression are the same defect.
+
+This also explains the `observable` regression above: a model reciting a
+template is not computing a value, so its literals drift.
+
+### What survives
+
+**The control held.** `c-const` and `py-comprehension` false-alarm on all four
+runs, v2 and v3, both seeds. The model did not become globally timid, so the
+weaker "it just flags less" explanation is ruled out — which is what makes the
+template diagnosis the remaining one.
+
+### What this run answers
+
+- Extract-shape coverage was **not** the cause of the extract false alarms.
+  The corpus bought no readable improvement and cost observable-correctness.
+- A 399-record corpus in which one summary sentence appears 105 times teaches
+  that sentence, not the reasoning behind it. **Template frequency is now a
+  corpus-validation property that nothing in `build_mechanism_corpus` checks.**
+- Two seeds remain mandatory. Every single-seed reading of this run — in either
+  direction — would have been wrong.
 
 ---
 

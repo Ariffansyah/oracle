@@ -4,6 +4,18 @@
   "ext": "java",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["keyset", "concurrentmodificationexception", "copy", "arraylist"]],
-  "note": "the new ArrayList<>(m.keySet()) snapshot copy is dropped; iterating m.keySet() directly while removing from m throws ConcurrentModificationException. Verified: {a=1, c=3} -> ConcurrentModificationException, exit 1"
+  "must_mention": [
+    [
+      "keyset",
+      "concurrentmodificationexception",
+      "copy",
+      "arraylist"
+    ]
+  ],
+  "note": "the new ArrayList<>(m.keySet()) snapshot copy is dropped; iterating m.keySet() directly while removing from m throws ConcurrentModificationException. Verified: {a=1, c=3} -> ConcurrentModificationException, exit 1",
+  "check": {
+    "probe": "call `removeEvens` with a map that has at least one even value",
+    "watch": "the `new ArrayList<>(m.keySet())` snapshot is gone and the loop iterates `m.keySet()` directly while `m.remove` runs \u2014 check whether that raises ConcurrentModificationException",
+    "restored": "the `new ArrayList<>(m.keySet())` snapshot copy is back as the thing the loop iterates, so check that removing during the walk no longer raises ConcurrentModificationException"
+  }
 }

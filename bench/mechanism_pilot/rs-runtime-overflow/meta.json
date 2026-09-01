@@ -4,6 +4,18 @@
   "ext": "rs",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["checked_add", "overflow", "panic", "saturat"]],
-  "note": "checked_add's saturating fallback is replaced with plain +. Because the values come from a runtime Vec (not compile-time literals), this panics at RUNTIME with 'attempt to add with overflow', not a compile error. Verified: 255 -> panic, exit 101"
+  "must_mention": [
+    [
+      "checked_add",
+      "overflow",
+      "panic",
+      "saturat"
+    ]
+  ],
+  "note": "checked_add's saturating fallback is replaced with plain +. Because the values come from a runtime Vec (not compile-time literals), this panics at RUNTIME with 'attempt to add with overflow', not a compile error. Verified: 255 -> panic, exit 101",
+  "check": {
+    "probe": "call `add_scores` with u8 values that sum past 255",
+    "watch": "`checked_add(...).unwrap_or(u8::MAX)`, which saturated, is replaced by plain `+`, and the values come from a runtime slice rather than literals \u2014 so check whether this panics at run time instead of saturating",
+    "restored": "`checked_add` with its saturating fallback is back in place of plain `+`, so check that a sum past 255 saturates instead of panicking at run time"
+  }
 }

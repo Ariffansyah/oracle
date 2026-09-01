@@ -4,6 +4,20 @@
   "ext": "go",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["integer division", "truncat", "cast", "float64", "before the division", "after the division"]],
-  "note": "float64() moved to wrap the whole division instead of each operand, so correct/total runs as integer division (1/3=0) before being cast. Verified: 33.33 -> 0.00"
+  "must_mention": [
+    [
+      "integer division",
+      "truncat",
+      "cast",
+      "float64",
+      "before the division",
+      "after the division"
+    ]
+  ],
+  "note": "float64() moved to wrap the whole division instead of each operand, so correct/total runs as integer division (1/3=0) before being cast. Verified: 33.33 -> 0.00",
+  "check": {
+    "probe": "call `scorePercentage(1, 3)`, two ints that do not divide evenly",
+    "watch": "`float64()` now wraps the whole division instead of each operand, so check whether `correct/total` runs as integer division and truncates before the cast reaches it",
+    "restored": "`float64()` is back on each operand, before the division, so check that the ratio is computed in floating point rather than truncated by integer division"
+  }
 }

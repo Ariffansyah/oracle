@@ -4,6 +4,19 @@
   "ext": "php",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["+=", ".=" , "typeerror", "operand", "concaten"]],
-  "note": ".= (string concat-assign) is replaced with += (numeric add-assign); PHP 8.5 throws a fatal TypeError for + on two non-numeric strings, it does not coerce them to numbers. Verified: 'user-bob' -> fatal TypeError, exit 255"
+  "must_mention": [
+    [
+      "+=",
+      ".=",
+      "typeerror",
+      "operand",
+      "concaten"
+    ]
+  ],
+  "note": ".= (string concat-assign) is replaced with += (numeric add-assign); PHP 8.5 throws a fatal TypeError for + on two non-numeric strings, it does not coerce them to numbers. Verified: 'user-bob' -> fatal TypeError, exit 255",
+  "check": {
+    "probe": "call `build_label(\"user-\", \"bob\")` with two non-numeric strings",
+    "watch": "`.=` (string concat-assign) is replaced by `+=` (numeric add-assign), and PHP 8 does not coerce two non-numeric strings for `+` \u2014 check which operand types `+` will accept here",
+    "restored": "`.=` is back in place of `+=`, so check that the two strings concatenate instead of hitting `+`'s operand types"
+  }
 }

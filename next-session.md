@@ -7,139 +7,843 @@
 
 Continue ORACLE at ~/Documents/oracle.
 
-Read `next-session.md` first — its head is current as of 28 Aug 08:45 WIB and
-states what is running and what is open, in order. Then `docs/RESULTS.md`; its
-top section is 28 Aug and is the one that matters. The four 27 Aug sections
-below it are still true but are superseded on two points, which the 28 Aug
-section names.
+Read this head section ("Where things stand", 31 Aug 21:00). It is current.
+EVERYTHING BELOW IT IS SUPERSEDED — the 31 Aug 14:10 section holds the v4
+numbers, which still stand, but its action list is done. Then read
+`docs/PLAN_SUGGEST_CONTRACT.md` for the thresholds.
 
-State: a retrain `sft-v2-pilot2` was on the GPU when the last session ended —
-80 steps, 2 epochs, started 08:32:34 WIB, 257.94 s/it, ETA ~14:15 WIB. It is
-the same 318 executable records as `sft-v2-pilot` with one thing changed: the
-per-execution temp dir is stripped out of the targets. Check whether it finished
-before anything else. The working tree is clean at 4805cbf and no server is
-running.
+## Where things stand (31 Aug 21:00) — v6 IS TRAINING, corpus rebuilt
 
-Start here, in this order:
+The 31 Aug 14:10 section below is SUPERSEDED except for its v4 numbers, which
+still stand. The action item it named — "Fix the `check` template" — is DONE and
+the two-seed v6 run is on the GPU box.
 
-1. Check the training run. If it finished, score it on all three eval sets.
-   Set ORACLE_OUTPUT_CONTRACT=v2 AND ORACLE_INCLUDE_SCHEMA=false on BOTH the
-   serving and the scoring side — the exact commands are in next-session.md.
-   Use --word-diff-module, never --word-diff. Getting this wrong reintroduces
-   the confound that cost six cases in forty-six.
+  seed 42  artifacts/sft-v6-suggest        started 20:42, ~3.75 h  -> tag v6
+  seed 7   artifacts/sft-v6-suggest-seed7  chained after it        -> tag v6_seed7
 
-2. Read the result under one question only: does `fabricated` fall from 10/101
-   toward zero. That is what this run was built to answer. Locus,
-   `direction_ok` and `observable_ok` are secondary — the corpus is the same 318
-   records, so a large move in those needs explaining, not celebrating. This run
-   does NOT answer whether 318 records is enough; that was held fixed on
-   purpose.
+  driver: ~/oracle/run_v6.sh (setsid nohup, log ~/oracle/run_v6.log)
+  ONE epoch each, --max-seq-length 1152, corpus data/sft_v6_suggest.jsonl
+  md5 053b5c02c8a4e4bcec7378accbdff248 on both boxes, 366 records, 0 dropped
 
-3. Then the two open items: whether to give `effect.trigger` something real to
-   say (it is 100% filename echo today), and the Groq fork, whose terms changed
-   on 28 Aug — see "Still to do, in order".
+**First command of the session** — the run outlives its session:
 
-Traps that have already cost this project a result are at the bottom of
-next-session.md. The ones that bite hardest: fix prompt shape and diff rendering
-across every arm of a comparison; check step arithmetic AND the clock before
-quoting any run; never mix benchmark denominators; never search `effect.trigger`
-in a scorer; no prompt-rule fixes and no DPO.
+    ssh oracle-gpu 'bash -lc "cat ~/oracle/run_v6.log"'
+
+Then score:
+
+    ./score_v6.sh            # both seeds, all three sets, then compare + audit
+    ./score_v6.sh --report   # re-read rows already scored, no GPU
+
+## What changed, and why
+
+`check` was a per-CATEGORY sentence with a filename slot, and the corpus has two
+categories, so 366 targets carried 100 distinct checks and 357 said "the edit
+touches". Three things were measured before the rebuild (all in
+`docs/RESULTS.md`, all reproducible with no GPU):
+
+  1. `bench/check_field_audit.py` — v4's `distinct*` (filename and token dump
+     blanked) is **1** on all 21 mech_heldout cases, both seeds. One sentence.
+  2. Cross-seed byte identity: v4's two seeds emit the identical `check` on
+     16/46, 13/21, 21/34 — and the identical `summary` on 0/46, 0/21, 1/34.
+     The summary column is the control. That contrast is the memorisation proof.
+  3. `check_useful` was reading the appended token list, not the sentence:
+     strip the tail and mech_heldout goes 20/21 -> 11/21, basic 29/31 -> 19/31.
+
+`bench/template_audit.py` never read `effect.check`, which is how a 97%-template
+field reached a training run. It now has `--with-check` (off by default) and
+`--self` (leave-one-CASE-out corpus similarity, the pre-flight the v4 run
+lacked).
+
+The rebuild: 37 per-case `check` annotations in `meta.json`, written by
+`bench/annotate_checks.py` (probe / watch / restored). Clean cases derive
+theirs from the parent. Corpus goes 100 -> 341 distinct checks, "the edit
+touches" 357 -> 0, all 366 assistant turns distinct, self-similarity median
+54.6% -> 37.4%, longest verbatim run 117 -> 62 words.
+
+Two other corpus defects fixed in the same pass:
+  - `fix` targets drew "behaviour-preserving" closers under a
+    `direction: post-fixes` effect. ~40 v4 targets contradicted themselves.
+  - the opener said "an input validation" / "off by one"; category enums now
+    map to noun phrases, and the opener takes the FINDING's category, which is
+    finer than the case file's (v4 called an array overrun a "logic error"
+    while its own finding said input-validation).
+
+Confidence was near-constant `likely` (3 `possible` in 168 v4 responses). The
+`possible` rule — "does the diff alone settle it" — now also covers overflow and
+truncation, which depend on the caller's VALUES exactly as aliasing depends on
+the caller's object. Corpus split 75% -> 58% likely.
+
+## HOW TO READ THE RESULT, in this order
+
+  1. **False alarms on clean cases FIRST.** v2 pair 4-15%, v4 9-11%. MUST NOT
+     RISE. A model that hedges on everything is never wrong and never useful.
+  2. Location when it speaks: v4 was `locus unconfirmed` = 0 everywhere.
+  3. Copying: `template_audit.py`, both with and without `--with-check`, plus
+     `check_field_audit.py`. v4 basic 28.7/24.3%, clean_heldout 71.1/74.6%.
+  4. `check_useful`, and read the "no tail" column beside it.
+  5. Calibration: is `possible` non-trivially present, and does `likely` beat it.
+
+Expected direction, stated in advance: copying DOWN, `check_useful` roughly flat
+or down a little (the token dump that was inflating it is gone — a drop toward
+the 52-64% "no tail" figures is the honest number arriving, not a regression),
+false alarms flat, location flat.
+
+## Ground rules (unchanged)
+
+  - **No commits.** Nothing since ba5a65f is committed, by request. Ask first.
+  - ~1 month of thesis time. Land this, then write up. No new experiments.
+  - `data/sft_v4_suggest.jsonl` must NOT be deleted — the v4 checkpoints are
+    only auditable against the corpus they actually saw. `sft_v5_suggest.jsonl`
+    was built but never trained (superseded by the check rewrite); keeping it
+    costs nothing and deleting it would confuse the audit trail.
+  - The box's login shell is fish: send remote commands through `bash -lc`.
+  - Do NOT change `dataset_builder/schema.py`'s v3 prompt: it is baked into
+    `sft_v6_suggest.jsonl` and a checkpoint scored under a prompt it was not
+    trained on lost six cases in forty-six to that alone.
+
+---
+
+## Where things stand (31 Aug 14:10) — v4 IS FULLY SCORED, RESULT IS IN
+
+All four v4 checkpoints scored on all three bench sets. 12/12 suites on disk.
+The GPU box is idle and can be powered off; nothing is queued or waiting.
+
+  seed42 final -> v4        seed42 epoch1 -> v4_ep1
+  seed7  final -> v4_seed7  seed7  epoch1 -> v4_ep1_seed7
+
+## The result in one paragraph
+
+v4 CLEARED both gating thresholds and produced one readable improvement, while
+verbatim copying roughly TRIPLED and two contract fields collapsed to near
+constants. It scores better while reciting more. Read it as mixed, leaning
+negative on the novelty claim: a model reproducing corpus sentences is not
+explaining. Do not write it up as a win.
+
+### What held (the thresholds)
+
+  - False alarms did NOT rise. basic 9% (seed42) / 11% (seed7), inside the v2
+    4-15% band. clean_heldout 0/34 on ALL FOUR checkpoints.
+  - Location: `locus unconfirmed` = 0 everywhere, both seeds, all sets. It named
+    the defect every time it returned a verdict. v2 was 87-98%.
+  - One readable effect, v4 vs v2, on clean_heldout: `observable` claims
+    12/11 -> 0/0. That set's measured noise floor is ZERO seed flips, so it is
+    real. v4 stopped asserting behaviour change on unchanged code.
+  - v4 is markedly more seed-stable than v2: 5/46 cases flip on seed alone
+    (v2: 14/46) on basic, 2/21 (v2: 10/21) on mech. Do not oversell this — a
+    more templated model is trivially more consistent.
+
+### What broke (the real finding)
+
+Verbatim 8-word coverage of corpus answers (`bench/template_audit.py`):
+
+  set            v2_pilot2  v2_seed7      v4  v4_seed7  v4_ep1  v4_ep1_seed7
+  basic              11.6%      6.2%   28.7%     24.3%   27.7%         29.1%
+  mech_heldout        5.3%      0.0%   16.2%     16.0%   18.3%         18.6%
+  clean_heldout      40.4%     39.9%   71.1%     74.6%   73.5%         74.1%
+
+On clean_heldout the `>=50%` column is 34/34, 33/34, 34/34, 34/34 — essentially
+EVERY answer is at least half verbatim corpus text.
+
+Two contract fields are dead:
+  - `check`: 100% of outputs contain "the edit touches" (corpus was 97% — the
+    model pushed it to saturation). Two INDEPENDENTLY TRAINED checkpoints emit
+    the byte-identical `check` string 30-59% of the time, while their `summary`
+    matches 0/46. That contrast is the proof it is memorised, not reasoned.
+  - `effect_confidence`: 3 `possible` in 168 responses. Effectively constant
+    `likely`. Not carrying information.
+
+## THE CAUSAL RESULT — this is what the session bought
+
+The 30 Aug notes attributed copying to TWO causes: the 97% `check` template AND
+seed 42's convergence collapse. **The epoch-1 checkpoints separate them.** They
+are measurably less converged and they copy IDENTICALLY (27.7/29.1 vs 28.7/24.3
+basic; 73.5/74.1 vs 71.1/74.6 clean).
+
+  => Convergence is NOT the cause. The corpus template is.
+  => Training less will not fix copying. Fixing `_V3_CHECK` is the only lever.
+
+## Epoch 1 vs epoch 2: epoch 2 bought NOTHING
+
+`compare_seeds.py --base v4 v4_seed7 --new v4_ep1 v4_ep1_seed7` returns "no" on
+EVERY metric across all three sets — inside seed band, seeds disagree, or
+unchanged. Not one metric moved beyond noise.
+
+  => Train ONE epoch. ~3.75 h/seed instead of 7.5 h. This is free time.
+
+## The extract prediction FAILED
+
+`php-extract-helper` and `py-extract-helper` were the stable targets that were
+predicted to go quiet. They are now seed-unstable, not reliably quiet. The
+controls (`c-const`, `py-comprehension`) stayed ALARM in all four checkpoints,
+so the model did not just go globally timid — but the predicted effect is absent.
+Report this as a failed prediction; do not soften it.
+
+## WHAT TO DO NEXT SESSION, in order
+
+  1. Fix the `check` template — `_V3_CHECK` / `suggested_effect` in
+     `dataset_builder/build_mechanism_corpus.py`. This is a CONTENT change, not
+     a parsing one. The goal is a `check` that names the actual identifier and
+     condition for THIS case, not a per-category sentence with a filename slot.
+     Target: "the edit touches" appears in a small minority of targets, and two
+     records in the same category do not share a `check` string.
+  2. Rebuild the corpus and AUDIT IT BEFORE TRAINING:
+       .venv/bin/python bench/template_audit.py --corpus data/sft_v5_suggest.jsonl
+     Also re-check the identifier bug is still fixed (0/366 unbalanced tokens).
+  3. Train v5, TWO seeds, ONE epoch each (~3.75 h/seed, ~7.5 h total).
+  4. Score with `./score_v4.sh` (add v5 tags to ADAPTER/TAG maps first).
+  5. Read in this order: false alarms -> location -> copying -> calibration.
+
+`data/sft_v5_suggest.jsonl` already exists (identifier bug fixed, 366 records)
+but was built BEFORE the check-template fix. Rebuild it; do not train it as is.
+
+## Ground rules (unchanged)
+
+  - **No commits.** Nothing since ba5a65f is committed, by request. Ask first.
+  - ~1 month of thesis time. Land v5, then write up. No new experiments.
+  - `data/sft_v4_suggest.jsonl` must NOT be deleted — `score_v4.sh:116` audits
+    copying against it and the v4 checkpoints are only auditable against the
+    corpus they actually saw.
+  - The box's login shell is fish: send remote commands through `bash -lc`.
+
+## Infrastructure fixed this session (do not re-break)
+
+  - `score_v4.sh` `start_server`: was `remote "cd ~/oracle && nohup ... &"`.
+    The `&` backgrounds the whole `&&`-list in a subshell but the redirection
+    binds only to `nohup`, so the subshell held ssh's stdout/stderr and ssh
+    NEVER RETURNED. Cost 5 hours on 31 Aug. Now parenthesised:
+    `remote "(cd ~/oracle && nohup ...) > log 2>&1 < /dev/null &"`.
+  - `~/.ssh/config`: oracle-gpu moved 192.168.1.170 -> **192.168.1.158** (DHCP;
+    host keys verified identical, box never rebooted). If it goes unreachable
+    again, CHECK THE LEASE FIRST — `nmap -sn 192.168.1.0/24`.
+  - `dashboard_train.sh`: new "scoring (local)" section — 12-suite progress from
+    the ROWS FILES (not the log; `| tail -18` buffers a whole suite), per-suite
+    false-alarm/unlocated/err, and a STALLED flag (GPU idle + stale log).
+    Also fixed `bar()` mangling UTF-8 and a pgrep matching wrapper shells.
+
+## Bench guards that worked — trust them
+
+  - `basic_bench.py` REFUSES to write a rows file when 100% of calls error,
+    because "no finding" on clean cases would score as a perfect pass.
+  - `compare_seeds.py` prints "awaiting second seed" rather than inventing a
+    number from one arm.
+  - Scoring is deterministic: re-scoring seed7ep1's basic set after the outage
+    reproduced all five counts exactly (ORACLE_INFERENCE_SAMPLES=1, greedy).
 
 END NEXT-SESSION PROMPT -->
 
-Continue ORACLE at ~/Documents/oracle. Read `docs/RESULTS.md` first — the top
-section is 28 Aug and the four below it are 27 Aug, newest first. Then
-`docs/ROADMAP.md`.
+---
 
-# Status at handoff (28 Aug, 08:45 WIB)
+# SUPERSEDED BELOW — kept for history (30 Aug and earlier)
 
-**A retrain is on the GPU.** `sft-v2-pilot2`, the same 318 executable records
-with the temp-dir defect fixed, 80 steps, 2 epochs. **Started 08:32:34 WIB**
-(verified against the process start and the log's creation time, not guessed),
-measured at **257.94 s/it** on step 1, so **ETA ~14:15 WIB**. Check it before
-anything else:
+<!-- ============================================================
+     PROMPT FOR THE NEXT SESSION — paste everything between the
+     markers as the opening message.
+     ============================================================ -->
 
-    ssh oracle-gpu bash -s <<'EOF'
-    pgrep -af fine_tuning.train_sft
-    tail -c 600 ~/oracle/sft_v2_pilot2.log | tr "\r" "\n" | tail -3
-    ls ~/oracle/artifacts/sft-v2-pilot2
-    EOF
+<!-- BEGIN NEXT-SESSION PROMPT
 
-Confirmed at launch: `318 SFT examples from data/sft_v2_pilot2.jsonl`, all 318
-survived the fully-masked drop, 80 steps (318 x 2 / 8 = 79.5 -> 80).
+Continue ORACLE at ~/Documents/oracle.
 
-`sft-v2-pilot`, the first v2 checkpoint, is trained and fully scored. Adapter at
-`~/oracle/artifacts/sft-v2-pilot` on the box. Runs are committed:
-`data/basic_bench_v2_pilot.jsonl`, `data/heldout_mech_v2_pilot.jsonl`,
-`data/heldout_clean_v2_pilot.jsonl`.
+Read `next-session.md` first — its head ("Where things stand", 30 Aug 21:00) is
+current. The 30 Aug 12:30 section below it is SUPERSEDED: it was written before
+the corpus defect was found. Then `docs/PLAN_SUGGEST_CONTRACT.md` (the active
+plan; its thresholds still stand), then the top two sections of
+`docs/RESULTS.md`.
 
-**When it lands, score it exactly as the pilot was**, contract pinned on BOTH
-sides, and compare against the pilot's numbers in `docs/RESULTS.md` 28 Aug:
+## What happened overnight, in one line
 
-    ssh oracle-gpu bash -s <<'EOF'
-    cd ~/oracle
-    export ORACLE_OUTPUT_CONTRACT=v2 ORACLE_INCLUDE_SCHEMA=false
-    setsid nohup .venv/bin/python -m llm_explainer.serve \
-        --model artifacts/sft-v2-pilot2 --port 8111 \
-        > ~/oracle/serve.log 2>&1 < /dev/null &
-    EOF
-    setsid ssh -f -N -L 8111:localhost:8111 -o ExitOnForwardFailure=yes \
-        -o ServerAliveInterval=30 -o ServerAliveCountMax=1000 oracle-gpu
+The v4 corpus was found to be defective AFTER training started: 207 of its 366
+targets (56%) name an identifier that does not exist. It is fixed and rebuilt as
+`data/sft_v5_suggest.jsonl`; the v4 checkpoints trained on the broken one.
 
-    ORACLE_OUTPUT_CONTRACT=v2 ORACLE_INCLUDE_SCHEMA=false ORACLE_INFERENCE_SAMPLES=1 \
-      .venv/bin/python bench/basic_bench.py --backend ollama \
-      --model-name sft-v2-pilot2 --host http://localhost:8111 --word-diff-module \
-      --out data/basic_bench_v2_pilot2.jsonl
-    # --root bench/mechanism_heldout --out data/heldout_mech_v2_pilot2.jsonl
-    # --root bench/clean_heldout     --out data/heldout_clean_v2_pilot2.jsonl
+## What should be finished by now
 
-**The one question this retrain answers:** does `fabricated` fall from 10/101
-toward zero once the corpus stops carrying unlearnable tokens. Everything else
-(locus, `direction_ok`, `observable_ok`) is a secondary read — the corpus is the
-same 318 records, so a large move in those would need explaining, not
-celebrating.
+  - `sft-v4-suggest-seed7` — ETA ~03:06, chained by `run_v4.sh` after seed 42
+    (which exited 0 at 19:38:56).
+  - `./score_v4.sh all` — a DETACHED job (`setsid nohup`) fires when seed 7
+    exits and scores FOUR checkpoints, ~38 min each, so ~05:40.
 
-**What it does NOT answer:** whether 318 records is enough. That was the other
-half of the ambiguity and this run holds it fixed on purpose.
+**First command of the session** — the scoring job outlived its session, so read
+its log, do not re-run it blind:
+
+    cat /tmp/claude-1000/-home-arp-Documents-oracle/*/scratchpad/score_v4_run.log
+
+If that file is missing (`/tmp` is cleared on reboot) or ends in `TIMEOUT`, check
+`ssh oracle-gpu 'bash ~/oracle/watch_v4.sh'` and run `./score_v4.sh all`
+yourself. `./score_v4.sh --report` re-reads rows already scored, no GPU.
+
+## The corpus defect — read before interpreting ANY v4 number
+
+`build_mechanism_corpus.py` built the v3 `check` field's token list with
+`tok.strip("(){}[];,:")`. `str.strip` works on both ends, so `len(xs)` lost its
+closing bracket and became `len(xs`, and `.split()` on whitespace cut
+`Math.addExact(a, b)` into an already-unbalanced `Math.addExact(a,`.
+
+  - v4 corpus: 207/366 targets (56%) carry such a token.
+  - Both v4 checkpoints reproduce it. Served on CPU, seed 42 answered with
+    `` `len(xs` ``, `` `total(xs` ``, `` `print(s` ``.
+  - FIXED (`_trim`, `dataset_builder/build_mechanism_corpus.py`) and rebuilt:
+    `data/sft_v5_suggest.jsonl`, 0/366, same 366 records, 0 dropped, same
+    direction mix (177 post-breaks / 105 unchanged / 84 post-fixes).
+
+**`data/sft_v4_suggest.jsonl` is kept ON PURPOSE and must not be deleted.**
+`score_v4.sh:116` audits copying against it, and the v4 checkpoints are only
+auditable against the corpus they actually saw.
+
+## The OTHER corpus problem, NOT fixed
+
+`"the edit touches"` appears in 357 of 366 assistant targets (**97%**) in BOTH
+v4 and v5 — the `check` field is a per-category template with a filename slot.
+The `check` field is the entire point of the suggestion contract. Fixing this is
+a content change (`_V3_CHECK` / `suggested_effect`), not a parsing one, and it
+was deliberately left alone pending the copying number.
+
+**Expect `template_audit.py` to look bad, and attribute it correctly.** Two
+independent causes: this 97% template, and seed 42's own convergence — final
+train loss 0.036 with entropy collapsed 1.513 → 0.045 on 366 examples.
+
+## How to read the result
+
+Unchanged from the plan, and still the right order:
+
+  1. **False alarms on clean cases FIRST.** v2 pair was 4-15% — MUST NOT RISE.
+     A model that hedges on everything is never wrong and never useful.
+  2. Location rate when it speaks: v2 pair was 87-98%, must not drop.
+  3. `FABRICATED` will NOT read 0 and that is not a violation — under v3 the
+     scorer keeps the absolute-path half of the rule. A non-zero count is an
+     invented PATH, not an invented value.
+  4. Verbatim copying: was 18-30%. See the attribution note above.
+  5. `check_useful` and `likely` vs `possible` calibration: new, no threshold.
+
+If the false-alarm rate rose, the honest result is negative. Say so; do not go
+looking for a metric that moved.
+
+## Epoch 1 vs epoch 2 is now a scored question
+
+`save_strategy="epoch"` wrote `checkpoint-46` for both seeds, so the epoch-1
+checkpoints cost no GPU time to obtain. `score_v4.sh` scores all four:
+
+    seed42 -> v4        seed42ep1 -> v4_ep1
+    seed7  -> v4_seed7  seed7ep1  -> v4_ep1_seed7
+
+Selectors: `final`, `ep1`, `all` (default), or one target by name. `report()`
+runs three `compare_seeds.py` passes: v4 vs v2, v4_ep1 vs v2, and **v4_ep1 vs
+v4** — the last is the direct epoch question. Both seeds are scored because
+`compare_seeds.py` takes `nargs=2`; a single-seed epoch-1 number is the point
+estimate that script exists to refuse.
+
+Epoch 2 bought very little: loss 0.070 → 0.036 across the whole second epoch,
+essentially flat from step 65 (0.049 → 0.036 over ~2 GPU-hours).
+
+## What to do, in order
+
+  1. Read `score_v4_run.log`. If it did not run, run it.
+  2. Read the false-alarm rate first, then copying, then the epoch comparison.
+  3. Decide on v5. It is built and unused. Training it is one run (~7.5 h/seed).
+     **Do not launch it without deciding whether to fix the 97% `check`
+     template first** — one run that fixes both beats two runs that fix one
+     each, and only 1 month of thesis time remains.
+
+## Ground rules
+
+  - **No commits.** The working tree is dirty and nothing since ba5a65f is
+    committed, by request. Ask before committing anything.
+  - Only 1 month of thesis time remains. The agreed scope is: land this two-seed
+    result, then write up. Do not start a new experiment.
+  - Run `bench/template_audit.py` before believing any comparison between two
+    checkpoints. A corpus-vs-corpus control does NOT work — `sft_v3_extract`
+    shares 78 of `sft_v2_pilot2`'s 80 records.
+  - The GPU box's login shell is fish: send remote commands through `bash -lc`,
+    or a bash construct fails in a way that looks like the host being down.
+  - A defect visible in the corpus before training started has now cost GPU-hours
+    three sessions running. Audit the corpus file itself — not the builder — as
+    the last step before any launch.
+
+END NEXT-SESSION PROMPT -->
+
+Continue ORACLE at ~/Documents/oracle. Read this head first, then
+`docs/PLAN_SUGGEST_CONTRACT.md` (the active plan), then the top two sections of
+`docs/RESULTS.md` — both 30 Aug, newest first. Sections below those are 29, 28
+and 27 Aug and are historical.
+
+# Where things stand — 30 Aug, 21:00
+
+**seed 42 is done and its corpus was defective. seed 7 is still training on that
+same defective corpus. The fix is built but nothing has trained on it.**
+
+## Running right now
+
+  - `sft-v4-suggest-seed7`, step ~12/92 at 20:45, ~292 s/it, **ETA ~03:06**.
+    Its loss now streams live (see "the buffering fix" below).
+  - A detached `./score_v4.sh all` waiting on it — four checkpoints, **ETA
+    ~05:40**. Log: `.../scratchpad/score_v4_run.log`.
+
+## Done today, after the 12:30 section below was written
+
+**1. seed 42 finished clean** — exit 0 at 19:38:56, 7 h 24 m, adapter written
+with `checkpoint-46` and `checkpoint-92` both on disk. Loss 1.982 → 0.036 over
+2 epochs, smooth, no instability, `grad_norm` bounded 0.27-1.56. But entropy
+collapsed 1.513 → 0.045 and token accuracy hit 98.4% on 366 examples: that is
+memorisation territory, and it is one of two reasons to expect a bad copying
+number.
+
+**2. The buffering fix.** `logging_steps=5` was always correct — 18 log points
+existed. `ProgressCallback.on_log` writes them with `tqdm.write`, i.e. to
+stdout, while the bar goes to stderr; under `run_v4.sh` stdout is a file, so it
+block-buffers and the loss only appears when the process exits. A 7-hour run
+showed a moving bar and no loss. Fixed with `sys.stdout.reconfigure(
+line_buffering=True)` at the top of `main()` in `fine_tuning/train_sft.py`,
+synced to the box, and **confirmed live on seed 7**. seed 42's trace is complete
+in its log, just flushed all at once at exit.
+
+**3. The corpus defect** — the big one. See the prompt block above for the full
+account. `tok.strip("(){}[];,:")` unbalanced 56% of v4's targets; fixed and
+rebuilt as `data/sft_v5_suggest.jsonl` (0/366). v4 is retained deliberately so
+`template_audit.py` stays valid.
+
+**4. Two try-cases, on CPU, n=2 — an anecdote, not a rate.** seed 42 served on
+CPU (GPU untouched). `go-offbyone`: right direction, wrong mechanism — it said
+`i` reaches `len(xs)-1`, which is the correct behaviour, not the bug.
+`py-extract-helper` (CLEAN, and one of the two `STABLE_TARGET` cases):
+**false-alarmed** as `logic-error`/`post-breaks`/`likely`. Both answers used
+near-identical templated phrasing. Do not quote these as results; the scored
+false-alarm rate is the number.
+
+**5. `score_v4.sh` scores four checkpoints now**, not two — see the prompt.
+
+**6. The TUI ran the v3 model under the v1 contract.** `config.py:185` defaults
+`OUTPUT_CONTRACT` to `"v1"` and neither `main.py` nor `ui/tui_app.py` set it, so
+the TUI sent v1 prompts — and, because `DIFF_RENDERING="auto"` resolves to
+word-diff only under v2/v3, unified diffs to a word-diff-trained model. Fixed
+with `os.environ.setdefault("ORACLE_OUTPUT_CONTRACT", "v3")` before the `config`
+import in both. An explicit `ORACLE_OUTPUT_CONTRACT=v2` still wins.
+**Note: this makes every `main.py` subcommand default to v3, not just `tui` and
+`analyze`** — accepted deliberately, flagged here in case it should be narrowed.
+
+**7. The TUI now renders the suggestion contract.** It previously showed only
+`summary` + `findings` and dropped `effect` entirely, so `trigger`, `direction`,
+`check` and `confidence` — everything v4 was trained to produce — were invisible.
+Added above the summary (schema order, evidence before verdict) and to the
+clipboard export. Tested against v3, v2 and no-`effect` answers.
+
+**8. Docs point at v5.** `README.md` and `PLAN_SUGGEST_CONTRACT.md` build and
+train from `sft_v5_suggest`, both noting why v4 is kept. Historical references
+(`PLAN:138`, `PLAN:187`, the corpus table) still say v4 on purpose — they record
+what actually ran.
+
+## Small open items
+
+  - `llm_explainer/client.py:633` calls `_selftest()` before `main()`, and the
+    selftest asserts `include_schema` (line 625). With `ORACLE_INCLUDE_SCHEMA=
+    false` — what `score_v4.sh` exports — the CLI crashes on startup and never
+    reaches `main()`. Scoring is unaffected (`basic_bench.py` imports the
+    module). Fix: guard the selftest behind a flag.
+  - `ml_model/encoder.py:75` loads GraphCodeBERT and transformers reports
+    `pooler.dense.*` as MISSING (randomly initialised). Harmless here — line 104
+    reads `.last_hidden_state` and mean-pools by hand; `pooler` appears nowhere
+    else in the project. `add_pooling_layer=False` would silence it honestly.
+  - The user wants a real hands-on TUI test once the GPU is free (after ~05:40).
+    Drop `ORACLE_OUTPUT_CONTRACT=v2` when pointing at a v4 checkpoint.
+
+## Uncommitted at handoff
+
+Everything below is in the working tree and NOT committed:
+`fine_tuning/train_sft.py` (buffering), `dataset_builder/build_mechanism_corpus.py`
+(`_trim`), `data/sft_v5_suggest.jsonl` (new), `score_v4.sh` (four targets),
+`main.py` + `ui/tui_app.py` (contract default + effect rendering), `README.md`,
+`docs/PLAN_SUGGEST_CONTRACT.md`, `next-session.md`.
+
+---
+
+# Where things stand — 30 Aug, 12:30 — SUPERSEDED, see above
+
+**Training is running. The v3 experiment's diagnosis was wrong and has been
+replaced. The suggestion contract is built end to end and its first two
+checkpoints are on the GPU now.**
+
+## Running right now
+
+| | |
+|---|---|
+| `sft-v4-suggest` (seed 42) | started 12:14, 92 steps, 293 s/it, ETA ~19:40 |
+| `sft-v4-suggest-seed7` (seed 7) | chained with `&&`, starts on a clean exit, ETA ~03:05 |
+
+Launcher `~/oracle/run_v4.sh`; status `ssh oracle-gpu 'bash ~/oracle/watch_v4.sh'`;
+logs `sft_v4_seed42.log` / `sft_v4_seed7.log`, wrapper log `run_v4.log`.
+4528 MiB of 6144 in use — the move from 1024 to 1152 tokens fits with headroom.
+Corpus `data/sft_v4_suggest.jsonl`, 366 records, contract v3, `--max-seq-length
+1152` on both the build and the train.
+
+## What was established today, in order
+
+### 1. The 30 Aug "the corpus taught two templates" reading is WRONG
+
+`bench/template_audit.py` (new) measures verbatim 8-word overlap between an
+answer and the corpus. Both pre-registered gates FAILED:
+
+- **Copying is real and large** — 30.5% of seed 42's answer prose on
+  `bench/basic`, against a **0.0%** floor from an untuned model on the same 46
+  cases, 86-word longest run.
+- **It is NOT a v3 defect.** v3 30.2 / 17.9 vs v2 30.5 / 18.6. The corpus
+  version does not move it; the SEED does (42 → ~30%, 7 → ~18%, either corpus).
+- **v3 is not more repetitive than v2**: worst sentence 105/399 (26%) vs
+  78/318 (25%).
+- The old cross-corpus control was void: `sft_v3_extract` shares 78 of
+  `sft_v2_pilot2`'s 80 records. Only an out-of-family checkpoint is a floor.
+
+### 2. Three real corpus bugs, all in the extract-boundary family
+
+Full detail in RESULTS.md, "Three corpus bugs". Short form:
+
+1. **27 targets literally said "renames `a local` to `a new name`"** for a diff
+   that ADDS a function — the nine `*-extract-boundary-refactor` cases have no
+   `renamed` key and fell through to a placeholder default. That is the sentence
+   `sft-v3-extract` emitted on all five held-out extract cases. The model was
+   reproducing a false target, not inventing one.
+2. **All 54 clean targets named `{parent}.{ext}`** while their diff header says
+   `{id}.{ext}` — a filename absent from the prompt, so unlearnable. Five
+   hand-authored `analysis.json` had also copied the `b`-prefixed word-diff
+   header form (`bpy-min-empty-guard.py`).
+3. **Nine cases share one summary**, upsampled ×6 = 54 byte-identical targets.
+
+Every 29 Aug pre-flight check passed on this because the duplication bar was
+20% and the worst WHOLE-TARGET repeat was 13.5%. The 105/399 was a *sentence*
+inside otherwise-differing summaries, which that check could not see.
+
+### 3. The split that motivates the new contract
+
+Across four checkpoints and 101 executable cases, by kind of claim:
+
+| asked for | right |
+|---|---|
+| **where** — cite the code at fault | **87–98%** |
+| **which way** — breaks or fixes | **79–93%** |
+| **the concrete before/after value** | **15–31%** |
+
+69–85% of answers carry a value that running the code contradicts, and in
+**90–99% of those the location was still right**. The headline metric never
+read before/after, so deleting the value costs **zero**. That is the whole
+argument for the suggestion contract.
+
+## What was built today
+
+| file | change |
+|---|---|
+| `bench/template_audit.py` | NEW — verbatim copying vs an out-of-family floor |
+| `config.py`, `llm_explainer/client.py` | `OUTPUT_CONTRACT` accepts `v3`; word-diff for v3 |
+| `dataset_builder/schema.py` | `Effect` gains `check` + `confidence`; v3 prompt (662 tokens, parity with v2); selectors. **v2 serialises byte-identically** |
+| `dataset_builder/build_mechanism_corpus.py` | v3 target generator, varied per copy; the three bugs above |
+| `dataset_builder/build_sft_data.py` | pre-flight: repeated-SENTENCE check, ghost-filename check, duplication bar 20% → 10% |
+| `bench/basic_bench.py` | `check_useful`, confidence calibration, observable tier retired under v3 |
+| `score_v4.sh` | NEW — serve, tunnel, three sets, both seeds, then report |
+| `README.md` | retitled; "Predict, Then Point"; ORACLE = On-commit Risk And Code-Location Estimator |
+| `docs/PLAN_SUGGEST_CONTRACT.md` | NEW — the active plan, with thresholds fixed in advance |
+
+**The scorer gate passes**: re-grading the stored v2 rows gives exactly **76**
+and **86**, per-set 31+11+34 and 35+17+34.
+
+**Corpus quality, old vs new:**
+
+| | `sft_v3_extract` | `sft_v4_suggest` |
+|---|---|---|
+| records | 399 | 366 |
+| distinct targets | 98 | **356** |
+| worst whole-target repeat | 54 (14%) | **2 (1%)** |
+| worst repeated sentence | 105 (26%) | **32 (9%)** |
+| targets naming a file not in their prompt | 282 | **0** |
+| dropped by the sequence budget | — | **0** |
+| confidence split | n/a | 75% likely / 25% possible |
+
+# What to do next, in order
+
+## 1. Score the pair — `./score_v4.sh`
+
+Refuses to start while training holds the VRAM. No merge step: `serve.py:62`
+loads a LoRA adapter directly. The contract is set on the CLIENT side by the
+script (`ORACLE_OUTPUT_CONTRACT=v3 ORACLE_INCLUDE_SCHEMA=false
+ORACLE_INFERENCE_SAMPLES=1`); scoring a v3 checkpoint with it unset sends v1
+prompts and measures the mismatch, worth six cases in forty-six.
+
+## 2. Read the false-alarm rate FIRST
+
+Thresholds were fixed before training (`docs/PLAN_SUGGEST_CONTRACT.md`):
+
+| metric | v2 pair | target |
+|---|---|---|
+| false alarms on clean cases | 4–15% | **must not rise** |
+| location rate when it speaks | 87–98% | must not drop |
+| fabricated concrete values | 69–85% of answers | 0 by construction — but see below |
+| verbatim copying | 18–30% | lower, and measured either way |
+| `check_useful` | n/a | reported, no threshold on the first run |
+| calibration | n/a | `likely` should beat `possible` |
+
+**The false-alarm rate is the one that can kill the idea.** A model that hedges
+on everything is never wrong and never useful. If it rises, the hedging bought
+nothing and the honest result is negative — say so.
+
+Read the audit against the floor checkpoints in the SAME table, not against the
+old 30% figure: the new corpus has 6502 distinct 8-grams to the old one's 2337,
+so it is harder to copy and the metric is more sensitive. `v2_pilot2` scores
+11.6% against it versus 30.5% against its own corpus.
+
+**Read it on `bench/basic` ONLY.** `base44` and `gptoss120b` have no
+`heldout_clean` or `heldout_mech` rows, so there is no out-of-family floor on
+those two sets. All four in-family checkpoints sit at 38-40% on `clean_heldout`
+against a corpus they never saw — a v4 number in that band is uninterpretable,
+not a finding.
+
+**The `FABRICATED` counter will not read 0, and should not.** Under v3 the
+scorer retires the identical-output half of the fabrication rule and keeps the
+absolute-path half, so what it still counts is an invented PATH. Rescoring real
+v2 answers converted to v3 shape leaves it at 5/46 on `bench/basic` (30 Aug).
+The "0 by construction" line refers to the concrete-value tier, which no longer
+exists.
+
+## 3. Both seeds must agree
+
+Seed alone moves 24 of 101 cases and the headline by 10. A single-seed delta is
+not a result. `bench/compare_seeds.py` enforces this; `mechanism_heldout`
+(10 of 21 flip on seed alone) cannot resolve anything and should not be quoted.
+
+## Small open items
+
+- `bench/compare_seeds.py:185` labels every case outside `STABLE_TARGET` as
+  `(seed-unstable)`, including `js-extract-helper`, which is really "no
+  headroom". Cosmetic, touches no metric, but it is in the table the verdict
+  gets read off.
+- Error rows store `case_id: None`, so a failed case is only identifiable from
+  the run log. One errored case per side on the v3 run — same rate as the v2
+  baselines, not a new fault.
+- `README.md` picked up a one-line edit from outside this session (the acronym
+  line); it is folded into the rewrite.
+
+## Uncommitted at handoff
+
+Modified: `README.md`, `config.py`, `bench/basic_bench.py`,
+`dataset_builder/{schema,build_mechanism_corpus,build_sft_data}.py`,
+`llm_explainer/client.py`, `docs/RESULTS.md`, `next-session.md`, and five
+`bench/mechanism_pilot/*/analysis.json` (the `b`-prefix filename fix).
+Untracked: `bench/template_audit.py`, `bench/compare_seeds.py`, `score_v4.sh`,
+`dashboard_train.sh`, `docs/PLAN_SUGGEST_CONTRACT.md`, the 18 v3 bench case
+dirs, `data/sft_v4_suggest.jsonl`, `data/*_v3*.jsonl`, `data/*_v2_seed7.jsonl`.
+Nothing since ba5a65f is committed, by request.
+
+# What v3 was testing, and how it failed — ANSWERED 30 Aug, see the head
+
+**Kept for the design rationale and the pre-registered prediction. The
+prediction was falsified on 30 Aug; the counter-aligned pairing did prevent a
+surface rule, but the model memorised both answer texts instead. Do not read
+the prediction below as open.**
+
+**The gap:** 0 of 54 clean-direction training cases added a function, yet 5 of
+`bench/basic`'s cases do, all clean, and the model false-alarms on them — 3 of
+pilot2's 5 false alarms and 3 of seed7's 5 are that one shape.
+
+**The fix:** 9 matched pairs, one per language, sharing a byte-identical `pre`
+and the same diff shape (a function is added, the call site rewired), differing
+by one character in the new helper:
+
+| | helper | output | label | goes to |
+|---|---|---|---|---|
+| `*-extract-boundary-refactor` | `score >= 60` | unchanged | refactor | `bench/clean_direction` |
+| `*-extract-boundary` | `score > 60` | `pass fail` -> `fail fail` | buggy | `bench/mechanism_pilot` |
+
+Counter-aligned on purpose. Adding only the clean half would install a new
+surface rule — "an added function is safe" — which is the one-directional
+mistake the 27 Aug boundary work had to spend a day undoing. A model that learns
+"added function = safe" fails all 9 buggy members; one that learns "added
+function = suspicious" fails all 9 refactor members. The surface cannot carry
+the answer because the surface is identical.
+
+**Held out, untouched:** the 5 `bench/basic` extract cases and TestJIT commit 4.
+Different algorithm, different extraction — they test transfer, not memorisation.
+
+**Prediction, stated before the run:** false alarms on those 5 drop toward zero.
+If they do not move, coverage was not the cause and it is cleanly falsified.
+
+## How to read that prediction — the 5 are NOT equivalent evidence (29 Aug)
+
+Both v2 seeds score "3 of the 5 held-out extract cases false-alarm", which reads
+like a stable effect. **It is not the same 3.** Pulling the two baselines apart
+case by case:
+
+| case | v2 seed42 | v2 seed7 | what it can show |
+|---|---|---|---|
+| `php-extract-helper` | ALARM | ALARM | **stable target** |
+| `py-extract-helper` | ALARM | ALARM | **stable target** |
+| `go-extract-helper` | ALARM | quiet | seed-unstable — movement here is noise |
+| `java-extract-method` | quiet | ALARM | seed-unstable — movement here is noise |
+| `js-extract-helper` | quiet | quiet | no headroom — cannot improve |
+
+So the honest form of the prediction is **not** "5 -> 0". It is:
+
+> **`php-extract-helper` and `py-extract-helper` go quiet on BOTH v3 seeds.**
+
+Those are the only two cases where the v2 pair agrees, so they are the only two
+where a change can be attributed to the corpus rather than to the seed. **A v3
+run that fixes `go` and `java` but leaves `php` and `py` alarming has shown
+nothing** — the seed already moves exactly those two cases on its own.
+
+**There is a free control sitting in the same file.** `c-const` and
+`py-comprehension` false-alarm on both v2 seeds and are NOT extract-shaped, so
+the v3 corpus should not touch them:
+
+- php/py go quiet, `c-const` and `py-comprehension` keep alarming
+  -> **extract-shape coverage was the cause.** The claim v3 was built to make.
+- php/py go quiet AND the control goes quiet too
+  -> the model merely got globally less willing to flag anything. A much weaker
+     claim, and one that predicts a matching cost in recall on the buggy sets.
+     Check `false_alarm` against the headline before calling that a win.
+
+## The noise floor is PER SET, and the aggregate hides it
+
+The "±10 on locus, 24 of 101 cases" figure below is an aggregate over all three
+sets. Measured per set from the same v2 seed pair — identical corpus, identical
+steps, seed the only variable:
+
+| set | cases flipping on seed alone | headline moves |
+|---|---|---|
+| `bench/basic` | 14 of 46 (30%) | 31 -> 35 |
+| `bench/mechanism_heldout` | **10 of 21 (48%)** | 11 -> 17 |
+| `bench/clean_heldout` | **0 of 34 (0%)** | 34 -> 34 |
+
+**`mechanism_heldout` cannot resolve anything.** Half its cases flip on the seed
+alone and its total swings by 6 in 21. Do not report a v3-vs-v2 difference on
+that set; nothing this project can train will clear that bar on 21 cases.
+
+`clean_heldout` is the opposite — zero flips across the pair. A change there IS
+readable, which matters because that is where a "globally more timid" model
+would sit unchanged at 34/34 while the buggy sets quietly lost ground.
+
+**The headline metric is `basic_bench.py:413`** —
+`verdict_ok and (identified or not buggy)`, i.e. clean cases pass by not being
+flagged. It reproduces the documented 76/101 and 86/101 for the two v2 seeds
+exactly; a script that does not reproduce those two numbers is measuring
+something else and its deltas mean nothing. Summing raw `identified` does NOT
+reproduce them (it gives 44 and 47) — that is a buggy-only count.
+
+**The corpus:** `data/sft_v3_extract.jsonl`, 399 records, 0 temp dirs, 98
+distinct assistant turns, 47% clean, 100 steps at 2 epochs (399 x 2 / 8 = 99.8).
+
+**The first build silently shipped only half of it.** `build_mechanism_corpus`
+printed `!! rs-extract-boundary has no analysis.json — skipped` for all 9 buggy
+cases and built anyway: mechanism stayed at 168 while clean-direction rose to
+189. That is exactly the one-directional corpus the pairing exists to prevent,
+and it was a WARNING, not an error. The 9 target answers were written and
+schema-validated, and the rebuild shows `mechanism x6: 222`. **A corpus can lose
+a whole family to a warning — read the build output, do not just check the row
+count.**
+
+# THE RESULT THAT OUTRANKS EVERYTHING ELSE (28 Aug, evening)
+
+**The benchmark cannot tell small differences apart, and nobody had checked.**
+
+Three checkpoints were trained. Two of them — `sft-v2-pilot2` and
+`sft-v2-pilot2-seed7` — used the **identical corpus, identical steps, identical
+everything**. The only difference is `--seed 42` against `--seed 7`.
+
+| | pilot (old corpus) | pilot2 (fixed) | seed7 (fixed) | corpus fix | **SEED ALONE** |
+|---|---|---|---|---|---|
+| locus | 84 | 76 | 86 | -8 | **+10** |
+| direction right | 84 | 78 | 91 | -6 | **+13** |
+| observable right | 35 | 31 | 21 | -4 | **-10** |
+| false alarms | 1 | 5 | 5 | +4 | 0 |
+| fabricated (abs path) | 9 | 0 | 0 | -9 | **0** |
+
+**31 of 101 cases have an unstable locus grade** across the three runs. 66 are
+always correct, 4 always wrong. Seed alone flipped 24 cases — 17 to correct,
+7 to wrong. Locus totals span 76 to 86.
+
+Decoding is greedy (`serve.py` ignores temperature), so this is not sampling
+noise. It is the weights.
+
+### What this invalidates
+
+**Any checkpoint comparison in this project with a gap under ~10 cases in 101
+(~5 in 46) is unsupported.** That includes claims currently written down as
+findings:
+
+- "Measured identically, v2 is the better checkpoint" — 37/46 against 35/46,
+  two cases. **Not supportable.**
+- "`oracle-merged` is the best model this project has" — 41/46 against 40/44.
+  Same problem, and it mixes denominators as well.
+- The whole four-checkpoint ranking.
+- The pilot -> pilot2 "regression" of -8 locus that this session reported
+  earlier in the day. Inside the band. **Do not report it as an effect.**
+
+The "stuck at 67%" story survives, but its honest form is **"every checkpoint is
+indistinguishable inside noise"**, not "each intervention trades one failure for
+another". That is a cleaner claim and a more defensible one.
+
+### What survives the noise
+
+- **The path-fabrication fix.** 9 -> 0 -> 0, identical on both seeds. The seed
+  moves it by zero. This is the one clean causal result of the day.
+- **The false alarms are probably real.** 1 -> 5 -> 5: both fixed-corpus runs
+  agree exactly while locus swings +-10 around them. Two seeds is weak, but it
+  is consistent and in the direction the corpus changed. Earlier in the day this
+  was called unattributable; the control makes it the more likely reading.
+- **`clean_heldout` is completely stable** — 34/34 on all three runs, zero
+  flips. All the instability lives in the buggy sets.
+
+### What must change in how this project reports
+
+Every number in `docs/RESULTS.md` is a single-seed point estimate. **They need
+to be ranges over seeds.** A 46-case benchmark on a 3B QLoRA cannot resolve
+differences under roughly 10%, which is the size of difference this field
+routinely publishes. That is a measurement contribution in its own right and it
+is bigger than any checkpoint result here.
+
+`train_sft.py` now takes `--seed`. It did not before, which is why every
+checkpoint ever trained here shares seed 42 and why this was invisible.
 
 # Progress, 28 Aug, in one screen
 
-| | before | after |
+**Twelve training runs exist. Ten SFT, two DPO (both null, closed).** Four
+happened today: `sft-v2-pilot` finished 01:49, `pilot2` 14:17, `pilot2-seed7`
+21:08, `v3-extract` started 22:55.
+
+| | before today | after today |
 |---|---|---|
-| checkpoints trained | `sft-v2-pilot` (was training) | trained, **fully scored**; `sft-v2-pilot2` training |
 | checkable behavioural claims, ever | **0** | **101/101** well-formed |
-| `direction_ok` | no prior | **84/101** |
-| `observable_ok` | no prior | 35/101, now **reproducible** (was 35/36 flapping) |
-| `fabricated` | not gradeable — no claims to grade | **10/101**, cause found and fixed at the source |
-| corpus records carrying an unlearnable token | 66/318 (21%) | **0/318** |
-| apparatus bugs fixed | — | 3 (2 in the reporter, 1 in the scorer) |
+| `direction_ok` | could not be asked | 84/101, 78/101, 91/101 across three runs |
+| fabricated absolute paths | 9/101 | **0/101**, on both seeds |
+| corpus records with an unlearnable token | 66/318 (21%) | **0** |
+| clean training cases that add a function | **0 of 54** | **9 of 63**, counter-aligned |
+| retrain-to-retrain noise | **never measured** | **±10 locus, 24 of 101 cases** |
+| apparatus bugs fixed | — | 5 |
 
-**On the one number that invites a bad comparison:** 27 Aug counted 6 fabricated
-absolute paths in `mechanism-v2`'s 101 answers, and this session counts 9 (plus
-one identical-output claim) in the pilot's 101. Same three sets, same rendering,
-same schema setting, so the denominators are honestly comparable — but the
-checkpoints and the contracts are not the same, so **do not report this as "the
-v2 contract increased fabrication."** What changed alongside it is that the
-corpus began carrying real unlearnable paths, which is the effect that was
-actually isolated and fixed. `sft-v2-pilot2` is the run that separates them.
+**Against the goal — basic algorithms at 8/10 with no hallucination — neither
+half is met.** Locus is 76-86 of 101 across three runs, straddling 80% *inside*
+the noise band. False alarms are 1, 5, 5 and fabrication 10, 5, 5; both must be
+zero. And locus is a floor: the one hand-grade that checked locus AND mechanism
+came out 31/46 (67%) and has not moved across four checkpoints.
 
-Commits: `8be80df` the pilot result, `4805cbf` the corpus + scorer fix.
-Run files committed: `data/basic_bench_v2_pilot.jsonl`,
-`data/heldout_mech_v2_pilot.jsonl`, `data/heldout_clean_v2_pilot.jsonl`.
+**What actually moved, and survives scrutiny:**
 
-**The one-line version:** the v2 contract works as a *format* — every answer now
-states a behavioural claim, and 84/101 get the direction right, a question that
-could not previously be asked. The claims' *content* is mostly wrong (35/101
-observable), and the single biggest driver of the fabricated ones was a token
-the corpus could never have taught: a random temp directory, baked into 21% of
-targets by the builder that existed to stop exactly this. That is fixed and
-retraining now.
+1. **Path fabrication 9 -> 0.** Caused by the corpus, fixed at source, stable
+   across both seeds. The one clean causal result.
+2. **The v2 contract is learned.** 101/101 well-formed effects against a
+   baseline where no checkpoint had ever made a checkable claim.
+3. **A measured noise floor**, which is the most valuable and least comfortable
+   finding. See the section above.
 
-**What did NOT move, and should not be claimed:** locus. 36/46 against 37/46 on
-`bench/basic`, 34/34 on `clean_heldout`, 14/21 against 19/21 on
-`mechanism_heldout`. False alarms did improve, 5 -> 1. The 67% locus+mechanism
-ceiling this project keeps hitting is untouched — consistent with the standing
-read that **the checkpoint chase is not where the contribution is.**
+**What did not move: the headline.** Ten SFT runs, and locus+mechanism sits
+where it did. That is consistent with the standing read — the contribution is
+the measurement work, not the checkpoint chase — and it is now backed by a noise
+floor that explains WHY the checkpoint chase looked like it was working.
+
+**Apparatus fixed today (five):** the row writer that dropped every `effect_*`
+key; the hardcoded "v1 contract" label; the temp dir in `obs()`; the temp dir in
+`outputs()`; and `DIFF_RENDERING`, which had the TUI feeding unified diffs to a
+word-diff-trained checkpoint. That last one cost the single real defect in the
+TestJIT `pyalgo` history — unified errored on it, word-diff caught it.
+
+**TestJIT was rebuilt** (`~/Documents/TestJIT`) as 9 basic-algorithm repos, 45
+commits, every label proved by execution. The old set was data structures and
+out of distribution. It is 80% clean against `bench/basic`'s 28%, which makes it
+the harsher and more honest test of the "no hallucination" half — and the model
+scores 3/5 on `pyalgo`.
 
 # What 28 Aug established
 
@@ -234,26 +938,54 @@ random paths. That is one more reason the strip belongs in the builder.
 
 # Still to do, in order
 
-**1. Score `sft-v2-pilot2` when it lands** — commands in the status section
-above. The question is `fabricated`, 10/101 -> ?
+**1. Score both v3 seeds and answer the one question.** Do false alarms on the
+five held-out extract cases in `bench/basic` drop toward zero? Report a RANGE
+across the two seeds, never a point estimate. Commands in the status section.
 
-**2. Give `trigger` something to say, or drop it.** It is 100% filename echo
-today: the builder fills it with `running {id}.{ext} as written` while the
-schema asks for "One input or condition that exposes the difference, e.g.
-`xs = [1,2,3]`". The executable cases have real entry points with literal
-arguments, so the builder could fill it honestly. Until then the field is dead
-weight and **no scorer may search it**.
+**2. Retract the invalidated claims in `docs/RESULTS.md`.** The noise floor
+makes several written findings unsupportable — "measured identically, v2 is the
+better checkpoint" (2 cases), "`oracle-merged` is the best model this project
+has" (1-5 cases, and it mixes denominators), and the four-checkpoint ranking.
+They are still written as findings. Mark them, do not quietly delete them: the
+retraction is itself a result, and it is the strongest argument for the
+measurement contribution.
 
-**3. The Groq fork stays open, and its terms have changed.** The user chose on
-28 Aug to fix the corpus and retrain the executable set FIRST, rather than run
-the `gpt-oss-120b` pass over the 1673 teacher-labelled commits. Those records
-have no pre/post to execute, so their `before`/`after` would be teacher-guessed
-— the exact mechanism behind the 10 fabrications, at 83% of a 2000-record
-corpus. If the fork is reopened, the middle option is the defensible one: fill
-only `trigger` and `direction` for the bulk records, which are derivable without
-execution, and leave `before`/`after` to executable cases. **That needs a schema
-change** — all four `Effect` fields are required `str` today, so a partial
-effect cannot be expressed. `to_json()` already uses `exclude_none`.
+**3. Re-report every surviving number as a seed range.** Every figure in
+`RESULTS.md` is a single-seed point estimate. A 46-case benchmark on a 3B QLoRA
+cannot resolve differences under roughly 10%, which is the size of difference
+this field publishes routinely. That sentence is the paper.
+
+**4. Rent a GPU.** This stopped being an optimisation today. Seed ranges mean
+2-3 runs per checkpoint; that is 13-20 hours on the 1660 SUPER against about an
+hour rented. The card is a TU116 with **no tensor cores**, is not power or
+thermally limited (74W of 125W, 1905 of 2100 MHz, 100% util), and already uses
+SDPA and 4-bit — there is no software fix left. Local levers, if it stays:
+`batch_size 2` + `grad_accum 4` (~1.2-1.4x, may fit in the 1.3GB headroom), one
+epoch instead of two (exactly 2x), `LORA_R` 64 -> 32 (~1.1x). **Do not change
+any of them mid-comparison.**
+
+**5. Give `effect.trigger` something to say, or drop it.** 101/101 filename
+echo. The builder fills it with `running {id}.{ext} as written` while the schema
+asks for "One input or condition that exposes the difference". The executable
+cases have real entry points with literal arguments. **No scorer may search it**
+— it contains the case name.
+
+**6. Show `effect` in the TUI.** It renders `summary` and `findings` only
+(`tui_app.py:303-309`), so the behavioural claim the model is trained to emit
+FIRST is generated and then thrown away. You are running a v2 model through a v1
+window.
+
+**7. Fix the remaining TestJIT failures.** After the rendering fix, `pyalgo` is
+3/5: the real off-by-one is caught and the fix commit is no longer flagged, but
+`add positive count` and `extract an add helper` are still false alarms. The
+second is the v3 probe. The first is not covered by v3 and is unexplained.
+
+**8. Fabrication of code that does not exist, three instances.** `siftDown(1)`
+in the old heap case, a `float` conversion in `pyalgo` (the string `float`
+appears 0 times in that repo's history), and a `ValueError("empty sequence")`
+traceback for a function that never raises. Distinct from the path fabrication
+that was fixed — the model invents a PRIOR STATE of the code to justify a
+verdict. Not yet measured or counted anywhere.
 
 # Still open, unchanged by 27 Aug
 
@@ -285,6 +1017,29 @@ is not deterministic the way the off-by-one cases are.
 
 # Traps that have already cost this project a result
 
+- **A full disk fails SILENTLY through `cat > file <<'EOF'`.** On 29 Aug root hit
+  100% (64K free) and a heredoc write produced a **0-byte file with exit 0** —
+  `cat: write error: No space left on device` went to stderr and was nearly
+  missed. `next-session.md` was checked for truncation immediately and survived.
+  The offenders were caches, not data: `~/.cache/go-build` at **157G** and
+  `~/.cache/yay` at 58G, both cleared. Note `data/cvefixes/CVEfixes.db` is 48G
+  and is real data — do not reach for it first. Check `df -h /` before a scoring
+  run: six result files plus temp space is not much, but zero is zero.
+- **The GPU box's login shell is FISH, not bash.** `ssh oracle-gpu 'for x in ...;
+  do ...; done'` dies with "Missing end to balance this for loop" and exit 127.
+  Every remote command in this file uses `ssh oracle-gpu bash -s <<'EOF'` for
+  that reason — keep it that way rather than "simplifying" to a quoted one-liner.
+- **Check free VRAM before planning to serve and train at once.** The card is
+  6 GB; training holds 4.4 GB. The 28 Aug handoff instructed the next session to
+  "score the seed-42 run while you wait" and that was never possible. `nvidia-smi
+  --query-gpu=memory.free --format=csv` costs one second and settles it.
+- **Never score one arm of a comparison on CPU because the GPU is busy.** CPU and
+  GPU float arithmetic differ; against a measured noise floor this small, that is
+  an uncontrolled variable in the one place the project cannot afford another.
+- **`trainer_state.json` lives in `checkpoint-N/`, not the adapter root**, and
+  `training_args.bin` is only written when the run SAVES — so a mid-flight run
+  cannot be verified from its artifacts. Read `/proc/<pid>/cmdline` instead: that
+  is how `--seed 7` was confirmed at step 13 rather than at step 100.
 - **Fix prompt shape and diff rendering across every arm of a comparison**, and
   record both in the run file. This cost six cases in forty-six.
 - **Score word-diff-trained checkpoints with `--word-diff-module`**, never
@@ -316,6 +1071,23 @@ is not deterministic the way the off-by-one cases are.
   scored 14, 15, 14 on three identical rescores of one file, because a claimed
   `"3"` matched the `3` inside `tmpoc3wg92t`. Normalise `/tmp/tmp\w+/` out
   before matching, and before writing a training target.
+- **A corpus can lose a whole family to a WARNING.**
+  `build_mechanism_corpus` prints `!! <id> has no analysis.json — skipped` and
+  builds anyway. All 9 buggy extract cases were dropped that way while their 9
+  clean counterparts went in, which would have shipped exactly the
+  one-directional corpus the pairing exists to prevent. **Read the build output
+  (`mechanism x6:` / `clean-direction x3:`), not just the row count.**
+- **Never poll for a sibling process by NAME; wait on a PID.** The pgrep
+  self-match trap fired three times in one day — a deadlocked waiter, and two
+  shells that killed themselves with exit 144, one of them a `pkill` whose own
+  `sed ... score.py` argument matched its pattern. `kill -0 $PID` cannot
+  self-match. `queue_seed7.sh` is the shape that works.
+- **`to_word_diff` is NOT idempotent** — a second pass eats a space of
+  indentation. `basic_bench --word-diff-module` renders before calling the
+  client, so the client must detect already-rendered input or the benchmark
+  silently changes every number instead of failing. `_already_word_diff`
+  requires markers AND no surviving `+`/`-` prefixes, because either alone gives
+  false positives.
 - **Check the clock, not your memory, before quoting when a run started.**
   This session wrote "started ~07:05 WIB, ETA ~12:50" into the handoff from a
   guess; the process had actually started at 08:32:34 and the real ETA was

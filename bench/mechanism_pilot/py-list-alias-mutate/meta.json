@@ -4,6 +4,19 @@
   "ext": "py",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["alias", "list(items)", "copy", "same list", "mutat"]],
-  "note": "out = items aliases the caller's list instead of copying it (list(items)), so append() leaks into the caller. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,None]"
+  "must_mention": [
+    [
+      "alias",
+      "list(items)",
+      "copy",
+      "same list",
+      "mutat"
+    ]
+  ],
+  "note": "out = items aliases the caller's list instead of copying it (list(items)), so append() leaks into the caller. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,None]",
+  "check": {
+    "probe": "pass a list in, then look at the caller's own variable after the call returns",
+    "watch": "`list(items)` is replaced by `out = items`, so `out` is the same list the caller holds \u2014 check whether the `append()` mutates the caller's list too",
+    "restored": "the `list(items)` copy is back, so check that the `append()` no longer mutates the caller's list"
+  }
 }

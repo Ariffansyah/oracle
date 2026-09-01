@@ -4,6 +4,19 @@
   "ext": "rb",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["dup", "alias", "same object", "mutat", "caller"]],
-  "note": "out = items drops the .dup, so << mutates the caller's array in place. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,:done]"
+  "must_mention": [
+    [
+      "dup",
+      "alias",
+      "same object",
+      "mutat",
+      "caller"
+    ]
+  ],
+  "note": "out = items drops the .dup, so << mutates the caller's array in place. Verified: data unchanged [1,2,3] -> data mutated [1,2,3,:done]",
+  "check": {
+    "probe": "pass an array in, then look at the caller's own variable after the call returns",
+    "watch": "`items.dup` is replaced by `out = items`, so `out` is the same object the caller holds \u2014 check whether the `<<` mutates the caller's array too",
+    "restored": "the `items.dup` copy is back, so check that the `<<` no longer mutates the caller's array"
+  }
 }

@@ -4,6 +4,19 @@
   "ext": "java",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["addexact", "overflow", "wrap", "silently", "arithmeticexception"]],
-  "note": "Math.addExact (which throws ArithmeticException on overflow) is replaced with plain +, which wraps silently in Java instead of throwing. This is the opposite direction from a typical guard-removal bug: removing the check makes it silent, not crash. Verified: ArithmeticException -> silent -2147483648, exit 0"
+  "must_mention": [
+    [
+      "addexact",
+      "overflow",
+      "wrap",
+      "silently",
+      "arithmeticexception"
+    ]
+  ],
+  "note": "Math.addExact (which throws ArithmeticException on overflow) is replaced with plain +, which wraps silently in Java instead of throwing. This is the opposite direction from a typical guard-removal bug: removing the check makes it silent, not crash. Verified: ArithmeticException -> silent -2147483648, exit 0",
+  "check": {
+    "probe": "call `safeAdd(Integer.MAX_VALUE, 1)`",
+    "watch": "`Math.addExact`, which throws ArithmeticException on overflow, is replaced by plain `+`, which wraps silently in Java \u2014 so check whether the overflow still surfaces at all",
+    "restored": "`Math.addExact` is back in place of plain `+`, so check that an overflowing sum throws ArithmeticException instead of wrapping silently"
+  }
 }

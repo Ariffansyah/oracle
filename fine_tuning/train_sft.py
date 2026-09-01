@@ -49,6 +49,14 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 
 def main(argv=None) -> None:
+    # `logging_steps` below emits the loss on schedule, but transformers'
+    # ProgressCallback writes it with `tqdm.write`, i.e. to stdout, while the
+    # progress bar goes to stderr. Under `run_v4.sh` stdout is a file, so it is
+    # block-buffered and the loss sits in an 8 KB buffer until the process
+    # exits: a 7-hour run shows a moving bar and no loss at all (30 Aug).
+    # stderr is line-buffered either way, which is why the bar looked fine.
+    sys.stdout.reconfigure(line_buffering=True)
+
     args = parse_args(argv)
     if not args.dataset.exists():
         raise SystemExit(

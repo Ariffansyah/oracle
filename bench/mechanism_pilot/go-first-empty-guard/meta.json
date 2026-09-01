@@ -4,6 +4,18 @@
   "ext": "go",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["index out of range", "panic", "guard", "empty"]],
-  "note": "the len(xs)==0 guard is removed; indexing xs[0] on an empty slice panics at runtime with index out of range. Verified: -1 -> panic, exit 2"
+  "must_mention": [
+    [
+      "index out of range",
+      "panic",
+      "guard",
+      "empty"
+    ]
+  ],
+  "note": "the len(xs)==0 guard is removed; indexing xs[0] on an empty slice panics at runtime with index out of range. Verified: -1 -> panic, exit 2",
+  "check": {
+    "probe": "call `firstOrDefault` with an empty slice",
+    "watch": "the `len(xs) == 0` guard that returned the default is gone, so check whether `xs[0]` now panics with index out of range instead",
+    "restored": "the `len(xs) == 0` guard is back before `xs[0]`, so check that an empty slice returns the default instead of a panic"
+  }
 }

@@ -4,7 +4,7 @@
     {
       "category": "logic-error",
       "explanation": "`best` is no longer reset for each row, so the maximum from a previous row influences later rows, leading to wrong per‑row maximum values (e.g., rows after a high‑value row will report that high value even if their own values are lower).",
-      "file": "bpy-row-max-reset.py"
+      "file": "py-row-max-reset.py"
     }
   ]
 }

@@ -1,0 +1,10 @@
+{
+  "summary": "The change extracts grade's boundary test into a new passing() helper, but the helper compares with `> 60` where the inline test used `>= 60`. The extraction is not behaviour-preserving: the boundary value moves by one, so a score of exactly 60 is now rejected. This introduces an off-by-one defect.",
+  "findings": [
+    {
+      "category": "off-by-one",
+      "explanation": "passing() returns `score > 60`, while the code it replaced returned `score >= 60`. Every score above 60 is unaffected, which is why the change looks like a pure extraction, but a score of exactly 60 now takes the failing branch. The added function is the whole defect: the call site and the rest of grade() are unchanged.",
+      "file": "rb-extract-boundary.rb"
+    }
+  ]
+}

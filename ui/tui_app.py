@@ -10,6 +10,7 @@ list when the code needs the room, `a` analyzes, `c`/`e`/`y` copy.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -24,11 +25,68 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import (Footer, Header, Input, Label, ListItem,
                              ListView, Static)
 
+# The interactive clients are v3 clients: they render `check`, `direction` and
+# `confidence`, and the checkpoints they load are trained on the v3 contract.
+# config defaults OUTPUT_CONTRACT to "v1" and nothing here used to set it, so
+# the TUI sent v1 prompts to a v3 model - and, because DIFF_RENDERING="auto"
+# resolves to word-diff only under v2/v3, unified diffs to a word-diff-trained
+# model as well. That pairing already cost the one real defect in five commits
+# (config.py:193) and six cases in forty-six on 27 Aug. setdefault, so an
+# explicit ORACLE_OUTPUT_CONTRACT=v2 still wins for scoring an old checkpoint.
+os.environ.setdefault("ORACLE_OUTPUT_CONTRACT", "v3")
+
+# Same failure, one prompt field over. INCLUDE_SCHEMA="auto" resolves to
+# `not (backend == "transformers" and trained)` (client.py:191), which over
+# ollama is unconditionally True - the client cannot see across HTTP whether it
+# is talking to a fine-tuned model, so it sends the full JSON Schema. Every
+# corpus is built schema-free and every bench run sets
+# ORACLE_INCLUDE_SCHEMA=false (score_v6.sh), so the TUI was the one caller
+# handing a fine-tuned checkpoint a prompt shape it never trained on.
+#
+# Measured 1 Sep on TestJIT/pyalgo 9227c63 ("restore the inclusive bound")
+# against sft-v6-suggest, the only variable being this flag:
+#   schema  -> effect: null, summary "No change in stats.py." - a v1-shaped
+#              answer, and a sentence the diff contradicts
+#   no schema -> effect populated, summary names `sum_to` and the restored bound
+# setdefault, so ORACLE_INCLUDE_SCHEMA=true still wins for a base-model baseline,
+# which does need the schema because it never saw the short form in training.
+os.environ.setdefault("ORACLE_INCLUDE_SCHEMA", "false")
+
 from config import (BACKEND, BASE_MODEL, MERGED_MODEL_DIR, OLLAMA_HOST,
                     OLLAMA_MODEL, OLLAMA_NUM_CTX)
 from dataset_builder.schema import Analysis
 from ui.commands import CommandError, build_registry, run_command
 from variance import VARIANTS
+
+
+def _append_effect(body: Text, analysis: Analysis) -> None:
+    """The v3 suggestion contract: where, which way, and the test that settles it.
+
+    Drawn before the summary because `Analysis` declares `effect` first, and for
+    the reason it does - evidence before verdict. Every field is optional and one
+    model can carry all three contracts, so this renders whichever the answer
+    actually filled: a v1/v2 checkpoint fills before/after and leaves `check` and
+    `confidence` None, a v3 one does the opposite.
+    """
+    eff = analysis.effect
+    if eff is None:
+        return
+    if eff.trigger:
+        body.append("where   ", style="dim")
+        body.append(f"{eff.trigger}\n")
+    if eff.direction:
+        body.append("change  ", style="dim")
+        body.append(eff.direction,
+                    style=_DIRECTION_STYLE.get(eff.direction, "yellow"))
+        if eff.confidence:
+            body.append(f"  ({eff.confidence})", style="dim")
+        body.append("\n")
+    if eff.check:
+        body.append("check   ", style="dim")
+        body.append(f"{eff.check}\n", style="bold")
+    if eff.before or eff.after:
+        body.append(f"before  {eff.before}\nafter   {eff.after}\n", style="dim")
+    body.append("\n")
 
 
 def model_label(backend: str, model_path: Path, ollama_model: str,
@@ -61,6 +119,11 @@ _CATEGORY_STYLE = {
     "input-validation": "yellow", "error-handling": "yellow",
     "api-misuse": "cyan", "other": "dim",
 }
+
+# v3 `direction`: what the commit does to observable behaviour. Colour carries
+# the verdict at a glance - red is "this commit breaks something".
+_DIRECTION_STYLE = {"post-breaks": "bold red", "post-fixes": "green",
+                    "unchanged": "dim"}
 
 
 @dataclass
@@ -300,6 +363,7 @@ class OracleTUI(App):
 
         body = Text()
         body.append("stage 2 · semantic validator\n", style="bold")
+        _append_effect(body, analysis)
         body.append(analysis.summary + "\n\n")
         if not analysis.findings:
             body.append("✓ no defects found in the diff\n", style="green")
@@ -423,7 +487,19 @@ class OracleTUI(App):
         a = commit.analysis
         if a is None:
             return "semantic review: not run"
-        out = [f"semantic review\n{a.summary}"]
+        out = ["semantic review"]
+        eff = a.effect
+        if eff is not None:
+            if eff.trigger:
+                out.append(f"where:  {eff.trigger}")
+            if eff.direction:
+                conf = f" ({eff.confidence})" if eff.confidence else ""
+                out.append(f"change: {eff.direction}{conf}")
+            if eff.check:
+                out.append(f"check:  {eff.check}")
+            if eff.before or eff.after:
+                out.append(f"before: {eff.before}\nafter:  {eff.after}")
+        out.append(a.summary)
         if not a.findings:
             out.append("\nno defects found in the diff")
         for i, f in enumerate(a.findings, 1):

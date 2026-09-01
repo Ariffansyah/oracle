@@ -4,6 +4,18 @@
   "ext": "py",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["zero", "guard", "zerodivisionerror", "division"]],
-  "note": "the b == 0 guard is removed, so dividing by zero now raises ZeroDivisionError instead of returning None. Verified: None -> ZeroDivisionError traceback, exit 1"
+  "must_mention": [
+    [
+      "zero",
+      "guard",
+      "zerodivisionerror",
+      "division"
+    ]
+  ],
+  "note": "the b == 0 guard is removed, so dividing by zero now raises ZeroDivisionError instead of returning None. Verified: None -> ZeroDivisionError traceback, exit 1",
+  "check": {
+    "probe": "call `safe_divide(10, 0)` with a zero divisor",
+    "watch": "the `b == 0` guard is gone, so check whether the division now raises ZeroDivisionError instead of returning the sentinel",
+    "restored": "the `b == 0` guard is back before the division, so check that a zero divisor returns the sentinel instead of raising ZeroDivisionError"
+  }
 }

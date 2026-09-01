@@ -4,6 +4,20 @@
   "ext": "py",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["list(items)", "copy", "skip", "index", "shift", "mutat"]],
-  "note": "list(items) copy is dropped; removing from a list while iterating it directly shifts subsequent elements into the current index, silently SKIPPING some evens rather than raising. Verified: [1,3] -> [4,8,1,3] (4 and 8 survive)"
+  "must_mention": [
+    [
+      "list(items)",
+      "copy",
+      "skip",
+      "index",
+      "shift",
+      "mutat"
+    ]
+  ],
+  "note": "list(items) copy is dropped; removing from a list while iterating it directly shifts subsequent elements into the current index, silently SKIPPING some evens rather than raising. Verified: [1,3] -> [4,8,1,3] (4 and 8 survive)",
+  "check": {
+    "probe": "call `remove_evens` with two or more consecutive even numbers",
+    "watch": "the `list(items)` copy the loop iterated is gone and the loop now walks `items` itself while `remove()` mutates it \u2014 check whether removing shifts the later elements and the loop skips one",
+    "restored": "the `list(items)` copy is back as the thing the loop iterates, so check that removals no longer shift elements past the index"
+  }
 }

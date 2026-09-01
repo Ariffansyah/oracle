@@ -4,6 +4,20 @@
   "ext": "php",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["reference", "&$items", "=&", "alias", "mutat", "caller"]],
-  "note": "the parameter becomes &$items and $out =& $items adds an explicit reference, so PHP's normal by-value array copy is bypassed and the caller's array is mutated too. Verified: data unchanged -> data gains 'done'"
+  "must_mention": [
+    [
+      "reference",
+      "&$items",
+      "=&",
+      "alias",
+      "mutat",
+      "caller"
+    ]
+  ],
+  "note": "the parameter becomes &$items and $out =& $items adds an explicit reference, so PHP's normal by-value array copy is bypassed and the caller's array is mutated too. Verified: data unchanged -> data gains 'done'",
+  "check": {
+    "probe": "pass an array in, then look at the caller's own variable after the call returns",
+    "watch": "the parameter becomes `&$items` and `$out =& $items` adds an explicit reference, which bypasses PHP's by-value array copy \u2014 check whether the append is visible to the caller too",
+    "restored": "the `&` reference is dropped from both the parameter and `$out`, restoring PHP's by-value array copy, so check that the append no longer reaches the caller's array"
+  }
 }

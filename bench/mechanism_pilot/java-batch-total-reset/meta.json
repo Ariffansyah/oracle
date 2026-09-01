@@ -4,6 +4,19 @@
   "ext": "java",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["total", "hoisted", "outside the loop", "reset", "accumulator"]],
-  "note": "int total = 0 moved above the outer for-loop, so each batch's total no longer resets and accumulates across batches. Verified: [3,7,5] -> [3,10,15]"
+  "must_mention": [
+    [
+      "total",
+      "hoisted",
+      "outside the loop",
+      "reset",
+      "accumulator"
+    ]
+  ],
+  "note": "int total = 0 moved above the outer for-loop, so each batch's total no longer resets and accumulates across batches. Verified: [3,7,5] -> [3,10,15]",
+  "check": {
+    "probe": "call `batchTotals` with two or more batches",
+    "watch": "`int total = 0` is hoisted outside the loop, so check whether the accumulator still resets per batch or carries the previous batch's total forward",
+    "restored": "`int total = 0` is back inside the loop, so check that the accumulator resets per batch instead of carrying the previous batch's total forward"
+  }
 }

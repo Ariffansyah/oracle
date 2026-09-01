@@ -4,6 +4,20 @@
   "ext": "js",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["spread", "copy", "skip", "index", "shift", "splice"]],
-  "note": "the [...items] copy is dropped; splicing the array while a for-of iterates it directly shifts subsequent elements, silently skipping some evens rather than throwing. Verified: [1,3] -> [4,8,1,3]"
+  "must_mention": [
+    [
+      "spread",
+      "copy",
+      "skip",
+      "index",
+      "shift",
+      "splice"
+    ]
+  ],
+  "note": "the [...items] copy is dropped; splicing the array while a for-of iterates it directly shifts subsequent elements, silently skipping some evens rather than throwing. Verified: [1,3] -> [4,8,1,3]",
+  "check": {
+    "probe": "call `removeEvens` with two or more consecutive even numbers",
+    "watch": "the `[...items]` copy the loop iterated is gone and the loop now walks `items` itself while `splice()` removes from it \u2014 check whether removing shifts the later elements and the loop skips an index",
+    "restored": "the `[...items]` copy is back as the thing the loop iterates, so check that removals no longer shift elements out from under the index"
+  }
 }

@@ -1,0 +1,9 @@
+{
+  "id": "ts-extract-boundary-refactor",
+  "language": "typescript",
+  "ext": "ts",
+  "label": "refactor",
+  "parent": "ts-extract-boundary",
+  "category": "off-by-one",
+  "note": "Extracts the boundary test into passing() unchanged; output stays 'pass fail'. Same diff shape as ts-extract-boundary (a function is added and the call site rewired) and the opposite label, so 'an added function is safe' cannot be learned from this pair."
+}

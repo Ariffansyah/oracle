@@ -4,6 +4,18 @@
   "ext": "c",
   "buggy": true,
   "category": "logic-error",
-  "must_mention": [["overflow", "int_max", "guard", "undefined behavior"]],
-  "note": "the INT_MAX/INT_MIN guard is removed, so a + b is signed integer overflow, undefined behavior caught by -fsanitize=undefined at runtime. Verified: 2147483647 -> UBSan runtime error, wraps to -2147483648"
+  "must_mention": [
+    [
+      "overflow",
+      "int_max",
+      "guard",
+      "undefined behavior"
+    ]
+  ],
+  "note": "the INT_MAX/INT_MIN guard is removed, so a + b is signed integer overflow, undefined behavior caught by -fsanitize=undefined at runtime. Verified: 2147483647 -> UBSan runtime error, wraps to -2147483648",
+  "check": {
+    "probe": "call `safe_add(INT_MAX, 1)`",
+    "watch": "the `INT_MAX`/`INT_MIN` guard that clamped the result is gone, so check whether `a + b` is now signed integer overflow \u2014 undefined behavior rather than a clamped value",
+    "restored": "the `INT_MAX`/`INT_MIN` guard is back in front of `a + b`, so check that the sum clamps instead of overflowing into undefined behavior"
+  }
 }

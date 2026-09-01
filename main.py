@@ -13,8 +13,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
+
+# The interactive clients are v3 clients: they render `check`, `direction` and
+# `confidence`, and the checkpoints they load are trained on the v3 contract.
+# config defaults OUTPUT_CONTRACT to "v1" and nothing here used to set it, so
+# the TUI sent v1 prompts to a v3 model - and, because DIFF_RENDERING="auto"
+# resolves to word-diff only under v2/v3, unified diffs to a word-diff-trained
+# model as well. That pairing already cost the one real defect in five commits
+# (config.py:193) and six cases in forty-six on 27 Aug. setdefault, so an
+# explicit ORACLE_OUTPUT_CONTRACT=v2 still wins for scoring an old checkpoint.
+os.environ.setdefault("ORACLE_OUTPUT_CONTRACT", "v3")
 
 import config
 

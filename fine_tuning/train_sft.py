@@ -91,7 +91,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     # A forward pass costs ~15s on this card, so a 100-example holdout is
     # ~25min per eval -- hours bolted onto the run at a small --eval-steps.
     # Capping trades precision on the recall figure for a gate that is cheap
-    # enough to fire often. Safe only because the holdout is shuffled.
+    # enough to fire often. This used to say "safe only because the holdout is
+    # shuffled" -- it is not; the generators group by family. The slice is
+    # shuffled at load time now, which is what makes the claim true.
     ap.add_argument("--eval-max", type=int, default=0, metavar="N",
                     help="evaluate at most N held-out examples (0 = all)")
     ap.add_argument("--verdict-check", type=int, default=0, metavar="N",
@@ -393,7 +395,14 @@ def main(argv=None) -> None:
         eval_ds = load_dataset("json", data_files=str(args.eval_dataset),
                                split="train")
         if args.eval_max and args.eval_max < len(eval_ds):
-            eval_ds = eval_ds.select(range(args.eval_max))
+            # Take a SHUFFLED slice, not the head. The generators write holdout
+            # rows grouped by family, so `range(n)` reads one family off the top:
+            # the v4 cross holdout's first 40 rows were 39x f_range_end and one
+            # other, which turned a six-family generalisation check into a
+            # single-family one. The seed is fixed so the slice is identical
+            # across steps and across runs, which is what makes readings
+            # comparable at all.
+            eval_ds = eval_ds.shuffle(seed=1234).select(range(args.eval_max))
         # `label` is the v1/v2 encoding. The exec corpus has no `label` -- its
         # verdict is `differs`, the first boolean of the target -- and counting
         # 0 positives here aborted the run on a corpus whose holdout is 46%

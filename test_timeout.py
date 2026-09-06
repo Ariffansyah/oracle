@@ -55,6 +55,6 @@ assert r.suggestion == [], r.suggestion
 b = lambda w: FileReview(path="x", risk="unclear", why_unclear=w).badge
 assert b("timeout") == "Command Timed Out"
 assert b("baseline") == "Baseline Already Failing"
-assert b("not-exercised") == "No Observable Change — Worth Checking"
+assert b("not-exercised") == "Command Output Unchanged — Worth Checking"
 
 print("ok")

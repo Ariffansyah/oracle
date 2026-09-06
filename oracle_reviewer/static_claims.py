@@ -17,7 +17,7 @@ import re
 
 from .splitdiff import split
 
-__all__ = ["TextChange", "ui_text_change"]
+__all__ = ["TextChange", "ui_text_change", "membership_changed"]
 
 # One element, opening and closing tag on the same line, with plain text
 # between them. Anything nested, multi-line or interpolated is out of scope.
@@ -178,6 +178,74 @@ def _pair_run(dels: list, adds: list) -> list[tuple]:
     return pairs + [(None, a) for a in left]
 
 
+
+# ------------------------------------------------------- changed filter clause
+# The same fact `broadened` reports, in query-builder syntax rather than JS: a
+# filter clause whose accepted VALUE SET changed, where the diff settles the set
+# on both sides. `.eq(f, "X")` is a set of one; `.in(f, [...])` is the list.
+#
+# Kept separate from `broadened` rather than folded into it because the evidence
+# is different. `broadened` needs two lines -- a list defined here, a comparison
+# replaced there -- and refuses unless both are in the diff. This pattern is
+# settled by ONE edited line, so there is nothing to correlate; the guard that
+# matters instead is that one side must CONTAIN the other. Without that check
+# `.eq(f, "a")` -> `.in(f, ["b", "c"])` would be reported as widening when it is
+# a replacement, and the reader would be told `a` is still accepted when the
+# diff says it is not.
+#
+# `one_change` cannot carry this: `.eq` -> `.in` and `"X"` -> `["X", "Y"]` are
+# two edited spans, so it returns None and the line degrades to "rewritten" --
+# which is what this whole file exists to do better than.
+_EQ_CALL = re.compile(r"""\.eq\(\s*(?P<field>"[^"]*"|'[^']*'|[\w.]+)\s*,\s*"""
+                      r"""(?P<lit>"[^"]*"|'[^']*')\s*\)""")
+_IN_CALL = re.compile(r"""\.in\(\s*(?P<field>"[^"]*"|'[^']*'|[\w.]+)\s*,\s*"""
+                      r"""\[(?P<items>[^\]]*)\]\s*\)""")
+
+_unquote = lambda t: t[1:-1] if t[:1] in "\"'" else t
+_fmt = lambda vs: ", ".join(f"`{v}`" for v in vs)
+
+
+def _value_set(line: str) -> tuple[str, list[str]] | None:
+    """(field, accepted values) for an `.eq` or `.in` clause on this line."""
+    m = _IN_CALL.search(line)
+    if m:
+        vals = [_unquote(i.strip()) for i in m["items"].split(",") if i.strip()]
+        return (_unquote(m["field"]), vals) if vals else None
+    m = _EQ_CALL.search(line)
+    return (_unquote(m["field"]), [_unquote(m["lit"])]) if m else None
+
+
+def membership_changed(diff: str) -> tuple[int, str] | None:
+    """A filter clause whose accepted value set grew or shrank, or None.
+
+    Returns the NEW file's line number and a sentence. Only the two containment
+    cases are reported. A set that neither contains nor is contained by the
+    other -- `["a", "b"]` becoming `["b", "c"]` -- is a replacement, and no
+    single sentence describes it without implying one of the two directions, so
+    it says nothing instead.
+    """
+    for left, right in split(diff):
+        if not (left and right) or left[2] != "del":
+            continue
+        a, b = _value_set(left[1]), _value_set(right[1])
+        if not a or not b or a[0] != b[0]:
+            continue              # a different column, or not a filter clause
+        field, was, now = a[0], a[1], b[1]
+        sw, sn = set(was), set(now)
+        if sw == sn:
+            continue              # the same values, rewritten
+        at = right[0] or left[0]
+        if sw < sn:
+            return (at, f"the `{field}` filter took only {_fmt(was)}; it now "
+                        f"takes {_fmt(now)} — so {_fmt(sorted(sn - sw))} is "
+                        f"included where it was not before")
+        if sn < sw:
+            return (at, f"the `{field}` filter took {_fmt(was)}; it now takes "
+                        f"only {_fmt(now)} — so {_fmt(sorted(sw - sn))} is "
+                        f"excluded where it was included before")
+    return None
+
+
 def describe(diff: str, limit: int = 6) -> list[str]:
     """Plain statements of what the diff did. Never about what it caused.
 
@@ -239,6 +307,13 @@ def describe(diff: str, limit: int = 6) -> list[str]:
     flush()
 
     out = _group(out)
+    # A changed filter clause replaces the line's own entry, which without this
+    # reads "line N: rewritten" -- true, and useless.
+    widened = membership_changed(diff)
+    if widened:
+        at, sentence = widened
+        out = [l for l in out if not l.startswith(f"line {at}:")]
+        out.insert(0, sentence)
     wider = broadened(diff)
     if wider:
         name, sentence = wider

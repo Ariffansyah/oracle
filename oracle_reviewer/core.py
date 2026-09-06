@@ -113,8 +113,17 @@ class FileReview:
             # "Not covered" was wrong for BOTH unclear cases. A dead baseline is
             # not a coverage fact at all, and identical output does not prove
             # the change went unrun -- see review_body.
+            #
+            # The subject of this badge is the COMMAND'S OUTPUT, never the code.
+            # It read "No Observable Change — Worth Checking" until two separate
+            # readers, given the same review of a commit that rewrote a payment
+            # cron's logic, both took it as a verdict that the code was
+            # unchanged in effect -- one of them while quoting the body text
+            # that says the opposite three lines down. A badge is what gets read
+            # in a list; if it can be mistaken for a clean bill of health it
+            # will be, however careful the paragraph beneath it is.
             return {"baseline": "Baseline Already Failing"}.get(
-                self.why_unclear, "No Observable Change — Worth Checking")
+                self.why_unclear, "Command Output Unchanged — Worth Checking")
         return {"high": "High Risk", "change": "Behavior Change",
                 "fixes": "Fixes A Failure", "none": "Cosmetic Only",
                 "unverified": "Unverified"}[self.risk]

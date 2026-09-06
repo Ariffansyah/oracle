@@ -251,4 +251,91 @@ got = describe("@@ -5,2 +5,3 @@\n func f() {\n"
 assert len({g.split(":")[0] for g in got}) == len(got), got   # distinct lines
 assert any("line 6" in g for g in got) and any("line 7" in g for g in got), got
 
+# ---------------------------------------------------- changed filter clause
+# `.eq(f, "X")` -> `.in(f, ["X", "Y"])`. One edited line, two edited spans, so
+# `one_change` returns None and the line used to degrade to "rewritten".
+from oracle_reviewer.static_claims import membership_changed
+
+qhead = ("diff --git a/r.ts b/r.ts\n--- a/r.ts\n+++ b/r.ts\n@@ -28,7 +28,7 @@\n")
+q = lambda body: qhead + body
+
+WIDEN = q('       .eq("order_status", "waiting_payment")\n'
+          '-      .eq("payment_status", "unpaid")\n'
+          '+      .in("payment_status", ["unpaid", "pending"])\n'
+          '       .lt("created_at", expirationTime);\n')
+
+got = membership_changed(WIDEN)
+assert got, got
+at, sentence = got
+assert at == 29, at                          # the NEW file's line
+assert "`payment_status`" in sentence
+assert "`unpaid`" in sentence and "`pending`" in sentence
+assert "included where it was not before" in sentence
+
+# and it REPLACES the useless line rather than sitting beside it
+out = describe(WIDEN)
+assert any("payment_status" in l for l in out), out
+assert not any("rewritten" in l for l in out), out
+
+# single quotes and a bare identifier field both parse
+assert membership_changed(q("-      .eq('payment_status', 'unpaid')\n"
+                            "+      .in('payment_status', ['unpaid', 'pending'])\n"))
+assert membership_changed(q('-      .eq(col, "unpaid")\n'
+                            '+      .in(col, ["unpaid", "pending"])\n'))
+
+# --- the negatives, which matter more -------------------------------------
+# a DIFFERENT column: the two calls are unrelated, nothing is settled
+assert membership_changed(q('-      .eq("payment_status", "unpaid")\n'
+                            '+      .in("order_status", ["unpaid", "pending"])\n')) is None
+
+# a REPLACEMENT, not a widening: `unpaid` is no longer accepted, and a sentence
+# saying it "now takes unpaid, pending" would be flatly false
+assert membership_changed(q('-      .eq("payment_status", "unpaid")\n'
+                            '+      .in("payment_status", ["paid", "pending"])\n')) is None
+
+# the same single value, wrapped in a list: nothing was widened
+assert membership_changed(q('-      .eq("payment_status", "unpaid")\n'
+                            '+      .in("payment_status", ["unpaid"])\n')) is None
+
+# NARROWING: the same clause shrinking. Reported in its own words -- a sentence
+# written for widening would say the reverse of the truth here, so the direction
+# is decided by containment rather than assumed.
+got = membership_changed(q('-      .in("payment_status", ["unpaid", "pending"])\n'
+                           '+      .eq("payment_status", "unpaid")\n'))
+assert got, got
+assert "took `unpaid`, `pending`" in got[1], got[1]
+assert "now takes only `unpaid`" in got[1], got[1]
+assert "`pending` is excluded where it was included before" in got[1], got[1]
+
+# narrowing within `.in`, and widening within `.in`: the clause kind is not the
+# signal, the value set is
+assert "excluded" in membership_changed(
+    q('-      .in("s", ["a", "b", "c"])\n+      .in("s", ["a", "b"])\n'))[1]
+assert "included" in membership_changed(
+    q('-      .in("s", ["a"])\n+      .in("s", ["a", "b"])\n'))[1]
+
+# a CROSSING set is neither: `["a","b"]` -> `["b","c"]` drops `a` and adds `c`,
+# and no single sentence says that without implying one direction
+assert membership_changed(
+    q('-      .in("s", ["a", "b"])\n+      .in("s", ["b", "c"])\n')) is None
+
+# `.eq` -> `.eq` with a different value is a plain replacement, and one_change
+# already describes it accurately
+assert membership_changed(
+    q('-      .eq("s", "a")\n+      .eq("s", "b")\n')) is None
+
+# not one edited line: an `.eq` deleted in one hunk and an `.in` added in
+# another are two separate edits, and pairing them would invent a transition
+SPLIT_HUNKS = (qhead
+               + '       .eq("order_status", "waiting_payment")\n'
+                 '-      .eq("payment_status", "unpaid")\n'
+                 '       .lt("created_at", expirationTime);\n'
+                 '@@ -70,3 +70,4 @@\n'
+                 '       .from("orders")\n'
+                 '+      .in("payment_status", ["unpaid", "pending"])\n')
+assert membership_changed(SPLIT_HUNKS) is None
+
+# an unrelated diff must not trip it
+assert membership_changed(EW) is None
+
 print("ok")

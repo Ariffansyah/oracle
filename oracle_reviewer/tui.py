@@ -69,6 +69,13 @@ class Reviewer(App):
        keystroke, so a persistent one makes the letter keys unreachable. */
     #cmdline { display: none; }
     #cmdline.active { display: block; }
+    /* Same rule as the command line: hidden until asked for, so it never
+       competes for the keys that drive the review. */
+    #settings { display: none; }
+    #settings.active {
+        display: block; height: auto; padding: 1 2;
+        background: $panel; border-top: solid $panel-darken-2;
+    }
     """
 
     BINDINGS = [
@@ -78,7 +85,14 @@ class Reviewer(App):
         Binding("e", "copy_review", "copy review"),
         Binding("y", "copy_all", "copy all"),
         Binding("w", "write_report", "write file", show=False),
+        Binding("s", "settings", "settings"),
         Binding("colon", "command_mode", ": command"),
+        # Only act while the panel is open. A bare "1" silently changing how
+        # the next review runs is the kind of surprise a settings bar exists
+        # to prevent.
+        Binding("1", "toggle_gate", "gate", show=False),
+        Binding("2", "toggle_auto", "auto-review", show=False),
+        Binding("3", "cycle_timeout", "timeout", show=False),
         Binding("tab", "switch_pane", "switch pane", show=False),
         Binding("j,down", "move_next", "next", show=False),
         Binding("k,up", "move_prev", "prev", show=False),
@@ -88,8 +102,17 @@ class Reviewer(App):
     def __init__(self, repo: str = ".", run: str = "",
                  host: str = "http://localhost:8111",
                  model: str = "oracle-reviewer-3b",
-                 timeout: int = core.TIMEOUT) -> None:
+                 timeout: int = core.TIMEOUT, gate: bool = True) -> None:
         super().__init__()
+        # `gate_ready` is not the same as `gate_on`. Stage 1 can only be loaded
+        # before the TUI takes the terminal (see core.preload_gate: torch's
+        # resource_tracker spawn dies once a full-screen app owns the fds), so
+        # a session started with --no-gate can never turn it on again. The
+        # panel says so rather than offering a switch that cannot work.
+        self.gate_ready = gate
+        self.gate_on = gate
+        self.auto_review = False
+        self._settings_open = False
         # An empty `run` means "work it out from the repository". Defaulting to
         # a Python command made the tool look broken on every project that is
         # not Python: the baseline could only ever fail.
@@ -116,6 +139,7 @@ class Reviewer(App):
                              id="review")
                 with VerticalScroll(id="diffwrap"):
                     yield Static("", id="diff")
+        yield Static("", id="settings")
         yield Static("", id="status")
         yield Input(placeholder="run python main.py", id="cmdline",
                     disabled=True)
@@ -202,7 +226,8 @@ class Reviewer(App):
     # ----------------------------------------------------------------- review
     def action_review(self) -> None:
         lv = self.query_one("#commits", ListView)
-        if not self.commits or lv.index is None:
+        if not self.commits or lv.index is None \
+                or not 0 <= lv.index < len(self.commits):
             self._say("no commit selected", "#f38ba8")
             return
         if not self.run_cmd:
@@ -215,8 +240,12 @@ class Reviewer(App):
         self.query_one("#files", ListView).clear()
         self._show(None)
         self._say(f"reviewing {sha} with `{self.run_cmd}` …", "#f9e2af")
-        self.query_one("#stage1", Static).update("Stage 1 (JIT): scoring …")
-        self.run_gate(self.repo, sha)
+        if self.gate_on:
+            self.query_one("#stage1", Static).update("Stage 1 (JIT): scoring …")
+            self.run_gate(self.repo, sha)
+        else:
+            self.query_one("#stage1", Static).update(
+                "Stage 1 (JIT): off — every commit goes to the model")
         self.run_review(self.repo, sha, self.run_cmd, self.model)
 
     @work(thread=True, exclusive=True, group="gate")
@@ -256,11 +285,26 @@ class Reviewer(App):
             lv.index = 0
             self._show(rs[0])
 
+    @on(ListView.Highlighted, "#commits")
+    def _pick_commit(self, ev: ListView.Highlighted) -> None:
+        """Off by default: a review is two runs of the command per file, so
+        moving down a list with it on is expensive by accident."""
+        i = ev.list_view.index
+        if self.auto_review and self.run_cmd and i is not None \
+                and 0 <= i < len(self.commits):
+            self.action_review()
+
     @on(ListView.Highlighted, "#files")
     def _pick_file(self, ev: ListView.Highlighted) -> None:
         self._armed = None
-        if self.reviews and ev.list_view.index is not None:
-            self._show(self.reviews[ev.list_view.index])
+        # `ListView.clear()` is deferred, so a Highlighted carrying the PREVIOUS
+        # review's index can arrive after `self.reviews` has been replaced by a
+        # shorter one -- review a five-file commit, then a two-file commit, and
+        # the stale index 4 indexes a list of 2. Bounds-checked rather than
+        # guarded on emptiness alone, which is what crashed.
+        i = ev.list_view.index
+        if i is not None and 0 <= i < len(self.reviews):
+            self._show(self.reviews[i])
 
     # ----------------------------------------------------------------- render
     def _show(self, r: core.FileReview | None) -> None:
@@ -405,6 +449,70 @@ class Reviewer(App):
             self._say(f"restored {r.path} from {base} — your working tree was "
                       f"edited", "#a6e3a1")
 
+    # -------------------------------------------------------------- settings
+    # Every switch here is one the tool actually has. Nothing is offered that
+    # cannot be honoured: Stage 1 is shown as unavailable rather than as an
+    # option, when the session was started without it.
+    def _settings_rows(self) -> list[tuple[str, str, str, str]]:
+        return [
+            ("1", "Stage 1 (JIT) gate",
+             "on" if self.gate_on else "off",
+             "" if self.gate_ready
+             else "unavailable — restart without --no-gate"),
+            ("2", "auto-review on select",
+             "on" if self.auto_review else "off",
+             "reviews as you move; costs a run per commit"),
+            ("3", "run timeout", f"{self.timeout}s",
+             "each command gets this long, twice per file"),
+        ]
+
+    def _settings_text(self) -> str:
+        rows = [f"SETTINGS   s or escape closes"]
+        for key, name, value, note in self._settings_rows():
+            rows.append(f"  {key}  {name:<24} {value:<8} {note}")
+        return "\n".join(rows)
+
+    def _refresh_settings(self) -> None:
+        self.query_one("#settings", Static).update(self._settings_text())
+
+    def action_settings(self) -> None:
+        panel = self.query_one("#settings", Static)
+        self._settings_open = not self._settings_open
+        panel.set_class(self._settings_open, "active")
+        if self._settings_open:
+            self._refresh_settings()
+            self._say("settings — press the number to change, s or escape to close")
+        else:
+            self._say("")
+
+    def action_toggle_gate(self) -> None:
+        if not self._settings_open:
+            return
+        if not self.gate_ready:
+            self._say("Stage 1 cannot be loaded from inside the UI — restart "
+                      "without --no-gate", "#f38ba8")
+            return
+        self.gate_on = not self.gate_on
+        self._refresh_settings()
+        self._say(f"Stage 1 gate {'on' if self.gate_on else 'off'}", "#a6e3a1")
+
+    def action_toggle_auto(self) -> None:
+        if not self._settings_open:
+            return
+        self.auto_review = not self.auto_review
+        self._refresh_settings()
+        self._say(f"auto-review {'on' if self.auto_review else 'off'}", "#a6e3a1")
+
+    def action_cycle_timeout(self) -> None:
+        if not self._settings_open:
+            return
+        steps = [60, 120, 300, 600]
+        nxt = next((v for v in steps if v > self.timeout), steps[0])
+        self.timeout = nxt
+        self._refresh_settings()
+        self._subtitle()
+        self._say(f"each run may take up to {nxt}s", "#a6e3a1")
+
     # ----------------------------------------------------------- command line
     def action_command_mode(self) -> None:
         line = self.query_one("#cmdline", Input)
@@ -459,6 +567,10 @@ class Reviewer(App):
             self._say("cancelled")
             event.stop()
             return
+        if event.key == "escape" and self._settings_open:
+            self.action_settings()
+            event.stop()
+            return
         if self._armed is not None and event.key != "a":
             self._armed = None
             self._say("apply cancelled")
@@ -480,14 +592,19 @@ def main() -> int:
                          f"(default {core.TIMEOUT}); a lint or build over a "
                          "large codebase needs more")
     a = ap.parse_args()
-    if not a.no_gate:
+    gate = not a.no_gate
+    if gate:
         # Before the TUI starts, never inside it -- see core.preload_gate.
         print("loading Stage 1 (JIT gate) …", flush=True)
         why = core.preload_gate()
         if why:
             print(f"  Stage 1 unavailable: {why}", flush=True)
+            # A failed preload is indistinguishable from --no-gate as far as
+            # the settings panel is concerned: either way it cannot be turned
+            # on later, so it must not be offered as a switch.
+            gate = False
     Reviewer(repo=a.repo, run=a.run, host=a.host, model=a.model,
-             timeout=a.timeout).run()
+             timeout=a.timeout, gate=gate).run()
     return 0
 
 

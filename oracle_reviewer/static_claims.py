@@ -512,6 +512,22 @@ _HAZARDS: list[tuple[re.Pattern, str]] = [
                 r"|!==?\s*null|===?\s*undefined|not\s+\w+\s*:|!\w)"),
      "a null/empty guard was removed. The code it protected now runs on the "
      "value the guard used to reject."),
+    # Go: the canonical defect in the language. `if err != nil` is how every
+    # failure is surfaced, so deleting one discards an error silently -- the
+    # code continues with a zero value it never checked.
+    (re.compile(r"^\s*if\s+err\s*!=\s*nil\b"),
+     "a Go error check (`if err != nil`) was removed. The error is now "
+     "discarded and execution continues with an unchecked zero value."),
+    (re.compile(r"^\s*defer\s+"),
+     "a `defer` was removed. The cleanup it scheduled -- close, unlock, "
+     "rollback -- no longer runs when the function returns."),
+    # C/C++: same shape as the null guard above, different spelling.
+    (re.compile(r"^\s*if\s*\(.*\b(nullptr|NULL)\b"),
+     "a null-pointer check was removed. The pointer it guarded is now "
+     "dereferenced without being tested."),
+    (re.compile(r"^\s*(free\s*\(|delete\s|delete\[\])"),
+     "a `free`/`delete` was removed. If nothing else releases this, the "
+     "allocation leaks; if something does, it may now be a double free."),
 ]
 
 # Edits where BOTH sides exist and the pairing itself is the hazard. A `now`

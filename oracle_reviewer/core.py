@@ -138,6 +138,7 @@ class FileReview:
             # Name the check instead, so the badge cannot be read as a verdict on
             # the code when it is only a verdict on the style.
             return {"style": "Style Checked — Behaviour Unchecked",
+                    "analysis": "Statically Analysed — Behaviour Unchecked",
                     "types": "Types Checked — Behaviour Unchecked",
                     "build":  "Builds — Behaviour Unchecked"}.get(
                 self.checks, "Command Output Unchanged — Worth Checking")
@@ -567,7 +568,9 @@ def _npm(root: pathlib.Path) -> tuple[str, str] | None:
         return None
     scripts = pkg.get("scripts") or {}
     runner = ("pnpm" if (root / "pnpm-lock.yaml").exists() else
-              "yarn" if (root / "yarn.lock").exists() else "npm")
+              "yarn" if (root / "yarn.lock").exists() else
+              "bun" if (root / "bun.lockb").exists()
+                    or (root / "bun.lock").exists() else "npm")
     # Prefer a command whose OUTPUT changes with behaviour. `dev` and `start`
     # are servers -- they never exit, so they can measure nothing.
     # typecheck before lint: it is usually much faster and it is about
@@ -578,6 +581,10 @@ def _npm(root: pathlib.Path) -> tuple[str, str] | None:
             # anything else needs an explicit `run`.
             verb = "" if name == "test" else "run "
             return (f"{runner} {verb}{name}", f"package.json scripts.{name}")
+    # bun ships a test runner, so an empty `scripts` is not a dead end there
+    # the way it is for npm.
+    if runner == "bun":
+        return ("bun test", "bun's built-in test runner, no test script")
     if (root / "tsconfig.json").exists():
         return ("npx tsc --noEmit", "tsconfig.json, no test script")
     return None
@@ -595,7 +602,16 @@ def _make(root: pathlib.Path) -> tuple[str, str] | None:
 
 
 def _python(root: pathlib.Path) -> tuple[str, str] | None:
-    if (root / "tests").is_dir() or list(root.glob("test_*.py")):
+    # Django owns its own runner; pytest against a Django project without
+    # pytest-django configured collects nothing and looks like a clean pass.
+    if (root / "manage.py").exists():
+        return ("python manage.py test", "manage.py (Django)")
+    if (root / "tox.ini").exists():
+        return ("tox", "tox.ini")
+    if (root / "noxfile.py").exists():
+        return ("nox", "noxfile.py")
+    if (root / "tests").is_dir() or (root / "test").is_dir() \
+            or list(root.glob("test_*.py")):
         return ("pytest -q", "a tests directory")
     for entry in ("main.py", "app.py", "run.py", "manage.py"):
         if (root / entry).exists():
@@ -603,8 +619,52 @@ def _python(root: pathlib.Path) -> tuple[str, str] | None:
     return None
 
 
+def _cmake(root: pathlib.Path) -> tuple[str, str] | None:
+    """C++ needs a CONFIGURED build tree; without one there is nothing to run.
+
+    `cmake --build` on an unconfigured source dir fails for a reason that has
+    nothing to do with the commit, which would read as "this change broke the
+    build". Returning nothing is the honest answer -- the caller then asks.
+    """
+    for b in ("build", "cmake-build-debug", "out", "_build"):
+        d = root / b
+        if (d / "CTestTestfile.cmake").exists():
+            return (f"ctest --test-dir {b} --output-on-failure", f"{b}/, ctest")
+        if (d / "CMakeCache.txt").exists():
+            return (f"cmake --build {b}", f"{b}/, a configured cmake tree")
+    return None
+
+
+def _meson(root: pathlib.Path) -> tuple[str, str] | None:
+    for b in ("build", "builddir", "_build"):
+        if (root / b / "build.ninja").exists():
+            return (f"meson test -C {b}", f"{b}/, a configured meson tree")
+    return None
+
+
+def _deno(root: pathlib.Path) -> tuple[str, str] | None:
+    import json as _json
+    for name in ("deno.json", "deno.jsonc"):
+        f = root / name
+        if not f.exists():
+            continue
+        try:
+            tasks = (_json.loads(f.read_text()) or {}).get("tasks") or {}
+        except Exception:
+            tasks = {}
+        for t in ("test", "check", "lint"):
+            if t in tasks:
+                return (f"deno task {t}", f"{name} tasks.{t}")
+        return ("deno test -A", name)
+    return None
+
+
 _DETECT = [
     ("package.json", _npm),
+    ("deno.json", _deno),
+    ("deno.jsonc", _deno),
+    ("CMakeLists.txt", _cmake),
+    ("meson.build", _meson),
     ("Makefile", _make),
     ("go.mod", lambda r: ("go test ./...", "go.mod")),
     ("Cargo.toml", lambda r: ("cargo test", "Cargo.toml")),
@@ -614,6 +674,11 @@ _DETECT = [
     ("composer.json", lambda r: ("composer test", "composer.json")),
     ("pyproject.toml", _python),
     ("setup.py", _python),
+    ("manage.py", _python),
+    ("tox.ini", _python),
+    ("noxfile.py", _python),
+    ("requirements.txt", _python),
+    ("Pipfile", _python),
     ("main.py", _python),
 ]
 
@@ -659,6 +724,18 @@ _READS = {
     "go": {".go", ".mod", ".sum"},
     "cargo": {".rs", ".toml"},
     "stylelint": {".css", ".scss", ".less"},
+    # C/C++ analysers and compilers read translation units and their headers.
+    "clang-tidy": {".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx"},
+    "cppcheck": {".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx"},
+    "g++": {".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx"},
+    "clang++": {".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx"},
+    "gofmt": {".go"},
+    "staticcheck": {".go", ".mod"},
+    "deno": {".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".json"},
+    "bun": {".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".json"},
+    # ctest, cmake and meson are deliberately absent: a test binary may read
+    # fixtures, configs or data of any extension, so "cannot reach" would be a
+    # strong claim with nothing behind it.
 }
 # What a command can ESTABLISH, which is a different question from which files
 # it reads. eslint reads a .tsx file happily, so `unreachable` stays quiet -- and
@@ -671,11 +748,22 @@ _READS = {
 # of safety; it is no evidence about behaviour whatsoever, and the review has to
 # say which of those two it is holding.
 _STYLE = ("eslint", "prettier", "stylelint", "flake8", "pylint", "rubocop",
-          "standard", "biome", "oxlint", "golint", "credo", "ruff")
-_TYPES = ("tsc", "mypy", "pyright", "flow", "typecheck")
-_BUILD = ("build", "webpack", "rollup", "esbuild", "compile")
+          "standard", "biome", "oxlint", "golint", "credo", "ruff",
+          "gofmt", "goimports", "clang-format", "cpplint", "black", "isort")
+_TYPES = ("tsc", "mypy", "pyright", "flow", "typecheck",
+)
+# Not style checkers and not type checkers: these report real defects (lost
+# struct tags, format-string mismatches, null derefs) by reasoning about the
+# code without running it. Calling them linters understates them; calling them
+# tests overstates them badly.
+_ANALYSIS = ("go vet", "govet", "staticcheck", "clang-tidy", "cppcheck",
+             "scan-build", "infer", "semgrep", "codeql")
+_BUILD = ("build", "webpack", "rollup", "esbuild", "compile",
+          "g++", "gcc", "clang++", "cmake", "ninja", "msbuild", "go build")
 _TESTS = ("pytest", "jest", "vitest", "mocha", "jasmine", "ava", "rspec",
-          "phpunit", "junit", "unittest", "nose", "tap", "cypress", "playwright")
+          "phpunit", "junit", "unittest", "nose", "tap", "cypress", "playwright",
+          "ctest", "gtest", "catch2", "doctest", "tox", "nox", "meson test",
+          "go test", "cargo test", "deno test", "bun test")
 
 # Order matters: the test rule runs first, so `cargo test` classifies as tests
 # rather than as a build, and a script named `test:lint-clean` is a test run
@@ -683,8 +771,10 @@ _TESTS = ("pytest", "jest", "vitest", "mocha", "jasmine", "ava", "rspec",
 def command_class(cmd: str) -> str:
     """style | types | build | tests | unknown -- what this command can show."""
     c = cmd.lower()
-    if re.search(r"\b(test|spec)\b", c) or any(t in c for t in _TESTS):
+    if re.search(r"\b(tests?|specs?)\b", c) or any(t in c for t in _TESTS):
         return "tests"
+    if any(t in c for t in _ANALYSIS):
+        return "analysis"
     if any(t in c for t in _TYPES):
         return "types"
     if re.search(r"\blint\b", c) or any(t in c for t in _STYLE):
@@ -701,6 +791,10 @@ _ESTABLISHES = {
               "means the style is unchanged. It says nothing at all about "
               "behaviour -- not weakly, not partially: this command could not "
               "show a behavioural difference even if there were a large one"),
+    "analysis": ("runs STATIC ANALYSIS and does not execute the code. "
+                 "Identical output means it flagged nothing new. It reasons "
+                 "about the code rather than running it, so a defect it has no "
+                 "rule for passes silently and behaviour stays unverified"),
     "types": ("checks TYPES, not behaviour, and does not execute the code. "
               "Identical output means no new type error. Code that type-checks "
               "can still do the wrong thing at runtime"),

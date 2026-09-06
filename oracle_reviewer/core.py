@@ -100,6 +100,7 @@ class FileReview:
     suggestion: list[str] = field(default_factory=list)
     verified: bool = True
     why_unclear: str = ""          # "" | baseline | not-exercised | timeout
+    checks: str = ""               # style | types | build | tests | unknown
     static: list = field(default_factory=list)   # facts read from the diff
 
     @property
@@ -130,8 +131,16 @@ class FileReview:
             # that says the opposite three lines down. A badge is what gets read
             # in a list; if it can be mistaken for a clean bill of health it
             # will be, however careful the paragraph beneath it is.
-            return {"baseline": "Baseline Already Failing"}.get(
-                self.why_unclear, "Command Output Unchanged — Worth Checking")
+            if self.why_unclear == "baseline":
+                return "Baseline Already Failing"
+            # A linter cannot see behaviour AT ALL, so "output unchanged" flatters
+            # it -- that phrasing suggests a check happened and came back level.
+            # Name the check instead, so the badge cannot be read as a verdict on
+            # the code when it is only a verdict on the style.
+            return {"style": "Style Checked — Behaviour Unchecked",
+                    "types": "Types Checked — Behaviour Unchecked",
+                    "build":  "Builds — Behaviour Unchecked"}.get(
+                self.checks, "Command Output Unchanged — Worth Checking")
         return {"high": "High Risk", "change": "Behavior Change",
                 "fixes": "Fixes A Failure", "none": "Cosmetic Only",
                 "unverified": "Unverified"}[self.risk]
@@ -651,6 +660,61 @@ _READS = {
     "cargo": {".rs", ".toml"},
     "stylelint": {".css", ".scss", ".less"},
 }
+# What a command can ESTABLISH, which is a different question from which files
+# it reads. eslint reads a .tsx file happily, so `unreachable` stays quiet -- and
+# then the review said "the changed code never ran, or it ran and made no
+# difference to what this command prints". Both halves are wrong for a linter:
+# it never executes the code, so nothing "ran", and no amount of running it
+# could ever show a behavioural difference.
+#
+# That is the confusion this fixes. Identical LINT output is not weak evidence
+# of safety; it is no evidence about behaviour whatsoever, and the review has to
+# say which of those two it is holding.
+_STYLE = ("eslint", "prettier", "stylelint", "flake8", "pylint", "rubocop",
+          "standard", "biome", "oxlint", "golint", "credo", "ruff")
+_TYPES = ("tsc", "mypy", "pyright", "flow", "typecheck")
+_BUILD = ("build", "webpack", "rollup", "esbuild", "compile")
+_TESTS = ("pytest", "jest", "vitest", "mocha", "jasmine", "ava", "rspec",
+          "phpunit", "junit", "unittest", "nose", "tap", "cypress", "playwright")
+
+# Order matters: the test rule runs first, so `cargo test` classifies as tests
+# rather than as a build, and a script named `test:lint-clean` is a test run
+# and not a lint. Only that ordering makes single-token matching safe here.
+def command_class(cmd: str) -> str:
+    """style | types | build | tests | unknown -- what this command can show."""
+    c = cmd.lower()
+    if re.search(r"\b(test|spec)\b", c) or any(t in c for t in _TESTS):
+        return "tests"
+    if any(t in c for t in _TYPES):
+        return "types"
+    if re.search(r"\blint\b", c) or any(t in c for t in _STYLE):
+        return "style"
+    if any(t in c for t in _BUILD):
+        return "build"
+    return "unknown"
+
+
+# What identical output from each class does and does not settle. The `tests`
+# wording is the only one that may talk about the code having run.
+_ESTABLISHES = {
+    "style": ("only checks STYLE and never executes the code. Identical output "
+              "means the style is unchanged. It says nothing at all about "
+              "behaviour -- not weakly, not partially: this command could not "
+              "show a behavioural difference even if there were a large one"),
+    "types": ("checks TYPES, not behaviour, and does not execute the code. "
+              "Identical output means no new type error. Code that type-checks "
+              "can still do the wrong thing at runtime"),
+    "build": ("checks that the code COMPILES, and does not exercise it. "
+              "Identical output means it still builds. A program that builds "
+              "can still be wrong"),
+    "tests": ("does execute the code. Identical output means either the change "
+              "was never reached by these tests, or it ran and changed nothing "
+              "they assert on -- which of the two is NOT known"),
+    "unknown": ("produced identical output. Whether it exercises this change "
+                "at all is not known, so nothing is established either way"),
+}
+
+
 # What WOULD check a file this command cannot read.
 _CHECKS = {
     ".yml": "yamllint", ".yaml": "yamllint",
@@ -864,12 +928,10 @@ def review_body(r: FileReview, cmd: str) -> str:
             # "logic" overstates it: substantive() only separates code from
             # comments, and a changed string literal is neither logic nor a
             # comment.
-            body = (f"This file's code changed and `{cmd}` produced byte-for-"
-                    f"byte identical output. Two things produce that, and this "
-                    f"cannot tell them apart: the changed code never ran, or it "
-                    f"ran and made no difference to what this command prints. "
-                    f"Either way nothing is established beyond the inputs this "
-                    f"command happens to use. It is NOT a clean bill of health. "
+            kind = r.checks or command_class(cmd)
+            body = (f"This file's code changed. `{cmd}` "
+                    f"{_ESTABLISHES.get(kind, _ESTABLISHES['unknown'])}. "
+                    f"It is NOT a clean bill of health. "
                     f"Worth checking what else calls into what changed.")
         # Show the measurement here too. It used to appear only for the
         # attributable verdicts, so an unclear file printed prose about the
@@ -1042,6 +1104,7 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
                 out.append(r)
                 continue
             r.risk, r.why_unclear = "unclear", "not-exercised"
+            r.checks = command_class(cmd)
             say(f"[{i}/{len(files)}] {path}: not covered by `{cmd}` ...")
             explain(host, model, r, message, cmd,
                     "the output is byte-for-byte IDENTICAL. That means either "

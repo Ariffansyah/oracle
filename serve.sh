@@ -54,12 +54,20 @@ start() {
     # both in one shell makes pkill kill the shell that is about to start it.
     remote 'pkill -f "llm_explainer[.]serve" 2>/dev/null; sleep 1'
     echo "serving $MODEL (reported as \"$WANT\") — loading weights, ~1min"
-    # </dev/null is load-bearing: nohup redirects stdout and stderr, but the
-    # detached server keeps ssh's stdin open, so ssh never sees EOF and blocks
-    # forever on a process it has already successfully launched. This wedged a
-    # batch run for eleven minutes with the server up and answering.
-    remote "cd ~/oracle && nohup .venv/bin/python -m llm_explainer.serve --port $PORT \
-         --model $MODEL > ~/oracle/serve.log 2>&1 < /dev/null &"
+    # ssh can block on a process it has ALREADY launched successfully: it waits
+    # for the remote channel to close, which needs every holder of the inherited
+    # fds to exit. `nohup ... > log 2>&1 < /dev/null &` is supposed to release
+    # all three, and mostly does -- but not reliably. It wedged a batch run for
+    # eleven minutes once, and again for THREE HOURS on 6 Sep with the server up
+    # and answering the whole time, blocking the guarded arm behind it.
+    #
+    # So do not trust the launch call to return. Cap it, and let the readiness
+    # poll below be the thing that decides whether the server actually came up
+    # -- which it already was. A timeout here is not a failure: the server is
+    # nohup'd on the box and outlives the ssh that started it.
+    timeout 20 ssh $SSHOPTS "$H" "bash -lc 'cd ~/oracle && nohup .venv/bin/python \
+         -m llm_explainer.serve --port $PORT --model $MODEL \
+         > ~/oracle/serve.log 2>&1 < /dev/null &'" 2>/dev/null || true
     # Wait for the server to answer on the box before tunnelling; a tunnel to
     # nothing "works" until the first request and misreports as down.
     for i in $(seq 1 60); do

@@ -71,6 +71,37 @@ FIXDIR = ("The project's own test was FAILING before this commit and PASSES "
           "that the test now passes: that is the outcome you were given, and it "
           "tells the developer nothing.")
 
+# What the deployed reviewer must say when the command printed the same thing
+# both times. `core.review_commit` case 5 sends EVERY byte-identical result
+# here, and its outcome string is explicit that the two possibilities cannot be
+# told apart. `SAME` was written for a corpus whose values were printed scalars,
+# where "the output is still 27" is informative; in the pytest corpus both sides
+# are the sentinel "the test passes", so SAME degenerates to "the output is
+# still the test passes" and the teacher writes "behaviour did not change"
+# instead. That sentence is true of a generated pair -- both sides really were
+# run -- and false of the deployed case, and it is the sentence the guard chain
+# withholds on real commits.
+NOTCOVERED = (
+    "The command printed the SAME thing before and after, so it established "
+    "NOTHING about this change: it may never have reached the changed code, or "
+    "reached it and made no difference to what this command prints, and which "
+    "of the two happened is not known. Do NOT write that the change is safe, "
+    "harmless, cosmetic, minor, or that behaviour is unchanged -- none of that "
+    "was measured. Name the construct the diff edits and say what a developer "
+    "should check to settle it: callers of it, other code reading the value, or "
+    "a test that would reach it. Do not quote the words 'the test passes'; that "
+    "is the outcome, not a finding.")
+
+# Sentences that assert safety. The teacher reaches for these when it has
+# nothing to report, and a corpus that keeps them trains the exact claim the
+# deployed guard exists to suppress.
+SAFETY = re.compile(
+    r"\b(no (observable |visible |functional )?(change|effect|impact)"
+    r"|does not (affect|change|alter|impact)"
+    r"|behaviou?r (is |remains )?(the same|unchanged)"
+    r"|remains? unchanged|no behaviou?ral change"
+    r"|is (safe|harmless|cosmetic)|purely cosmetic|only cosmetic)\b", re.I)
+
 SYSTEM = ("You are ORACLE. You explain commits to developers in plain prose, "
           "using only facts you are given.")
 
@@ -198,6 +229,12 @@ def grounded(expl: str, row: dict, sentinels: set[str] | None = None) -> str | N
         if a and a.lower() not in sent and a not in expl:
             return "missing the after value"
     else:
+        # The row established nothing, so a sentence asserting safety is not a
+        # phrasing problem -- it is the wrong claim, and the deployed guard
+        # would withhold it. Dropping it here is cheaper than teaching it and
+        # suppressing it later.
+        if SAFETY.search(expl):
+            return "claims safety on a row that established nothing"
         if b and b.lower() not in sent and b not in expl:
             return "missing the unchanged value"
     # a number that is in neither the facts nor the diff is invented
@@ -254,6 +291,13 @@ def main() -> int:
                 # instructions from a value-to-value change. See FIXDIR.
                 (FIXDIR if str(row["after"]).strip().lower() in SENTINELS
                  else DIFF) if row["differs"]
+                # Both identical-output kinds -- ran-and-identical and
+                # never-reached -- get NOTCOVERED. They are one outcome to the
+                # deployed reviewer and must be one lesson here. SAME survives
+                # only for the older printed-scalar corpora, where the
+                # unchanged value is a real thing to quote.
+                else NOTCOVERED
+                if str(row["before"]).strip().lower() in SENTINELS
                 else SAME.format(before=row["before"])))
         keep = None
         for _ in range(args.retries + 1):

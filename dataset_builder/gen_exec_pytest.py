@@ -56,6 +56,16 @@ from dataset_builder.gen_exec_corpus import (  # noqa: E402
 
 PASS = "the test passes"
 
+# Quoted from oracle_reviewer/core.py so the corpus trains on the exact string
+# the deployed prompt supplies. If either drifts, the model meets an outcome it
+# has never seen and falls back on what the values look like -- which is the
+# failure this class of row exists to fix.
+NOT_EXERCISED = ("the output is byte-for-byte IDENTICAL. That means either "
+                 "the changed code never ran, or it ran and changed nothing "
+                 "this command prints -- which of the two is NOT known. "
+                 "Nothing was established either way")
+FIXED_IT = "the run started PASSING after this change"
+
 # The harness the generated program is executed inside. `exec` rather than a
 # subprocess so a raise surfaces as pytest's own one-line signature instead of
 # a CalledProcessError wrapping a traceback.
@@ -129,6 +139,32 @@ def run_value(wd: pathlib.Path, source: str) -> str | None:
     return p.stdout.strip() if p.returncode == 0 else None
 
 
+
+# --------------------------------------------------------- the unexercised case
+# `core.review_commit` case 5 routes EVERY byte-identical result to
+# `not-exercised`, and its outcome string says so: "either the changed code
+# never ran, or it ran and changed nothing this command prints -- which of the
+# two is NOT known". The corpus had only the second kind, and taught the model
+# to answer "behaviour did not change, the output is still X" -- true of a
+# generated pair that was actually run, and wrong of the deployed case, where
+# not being run is equally consistent with what was observed. The model then
+# produces the trained sentence on a real commit and the guard withholds it.
+#
+# This makes the first kind. The mutation is real and sits in a function the
+# harness never calls, so the test passes on both sides for a reason the diff
+# cannot show -- which is the situation, not a defect in the sample.
+#
+# It indents the program into a function body, which also moves the diff off
+# column zero. BugsInPy diffs are inside functions; the generated ones were not.
+_UNEXERCISED_TAG = "ready"
+
+
+def unexercised(src: str) -> str:
+    """`src` as the body of a function nothing calls, beside a main that prints."""
+    body = "\n".join(("    " + l) if l.strip() else l for l in src.splitlines())
+    return (f"def _configure():\n{body}\n\n\n"
+            f"print({_UNEXERCISED_TAG!r})\n")
+
 def write_splits(out: list[dict], stem: pathlib.Path, seed: int,
                  holdout_families: int, holdout_frac: float) -> None:
     """train / within-family / cross-family, the same three `gen_exec_corpus`
@@ -191,6 +227,12 @@ def main() -> None:
     ap.add_argument("--context", type=int, default=3)
     ap.add_argument("--preserve-rate", type=float, default=0.15)
     ap.add_argument("--break-rate", type=float, default=0.15)
+    ap.add_argument("--unexercised-rate", type=float, default=0.12, metavar="F",
+                    help="fraction of samples whose change sits in a function "
+                         "the test never calls — the deployed not-exercised "
+                         "case, which the corpus had no example of. Each one "
+                         "is drawn from a would-be POSITIVE, so it costs a "
+                         "positive: 0.12 holds the balance near v3's 39%%")
     ap.add_argument("--min-frame-ratio", type=float, default=0.35)
     ap.add_argument("--audit", action="store_true")
     ap.add_argument("--out", type=pathlib.Path)
@@ -219,6 +261,15 @@ def main() -> None:
                     alt = _break(r, pre)
                     if alt: post, changed = alt
 
+                # A share of samples become the not-exercised case: the same
+                # real mutation, moved inside a function the harness never
+                # calls. Both sides then pass, and the reason they pass is
+                # invisible to the command -- which is the deployed situation.
+                unexercised_row = (pre != post
+                                   and r.random() < args.unexercised_rate)
+                if unexercised_row:
+                    pre, post = unexercised(pre), unexercised(post)
+
                 # Pin the assertion to what the FIXED side prints. If that side
                 # raises there is no value to pin and the sample is unusable.
                 expected = run_value(wd, post)
@@ -235,11 +286,24 @@ def main() -> None:
                     continue
 
                 differs = before is not None
+                if unexercised_row and differs:
+                    # The mutation escaped into the module body somehow; the
+                    # sample is no longer the case it was built to be.
+                    stats["unexercised-still-differs"] += 1
+                    continue
                 # The corpus is stated in the FIX direction, so the diff shown
                 # is pre -> post and `before` carries the failure.
                 out.append({
                     "family": fam.__name__,
-                    "category": cat if differs else "clean",
+                    "category": ("unexercised" if unexercised_row
+                                 else cat if differs else "clean"),
+                    # The deployed `outcome`, verbatim from core.review_commit.
+                    # It is the ONLY input that separates a run-and-identical
+                    # row from a never-reached one, which is the point: the
+                    # model has to learn to read it rather than infer safety
+                    # from two equal values.
+                    "outcome": (NOT_EXERCISED if not differs
+                                else FIXED_IT),
                     "changed": changed, "differs": differs,
                     "diff": unified(pre, post, f"{fam.__name__}.py",
                                     args.context),
@@ -258,8 +322,16 @@ def main() -> None:
     import statistics as st
     print(f"{len(out)} pairs, {len(FAMILIES)} families")
     print(f"  distinct diff FRAMES (slots stripped) : {len(frames)}")
+    # Three classes, not two. The two identical-output kinds are one label and
+    # one outcome string but different situations, and the split has to be
+    # visible: an all-unexercised negative pool would teach "say nothing was
+    # established" as the answer to every non-difference.
+    nx = sum(1 for o in out if o["category"] == "unexercised")
+    same = sum(1 for o in out if not o["differs"])
     print(f"  differs / same by EXECUTION           : "
-          f"{sum(o['differs'] for o in out)} / {sum(not o['differs'] for o in out)}")
+          f"{sum(o['differs'] for o in out)} / {same}"
+          f"   ({100*sum(o['differs'] for o in out)/max(1,len(out)):.0f}% positive)")
+    print(f"    of the same: ran-and-identical {same - nx}, never-reached {nx}")
     if sigs:
         ln = sorted(len(s) for s in sigs)
         withcls = sum(1 for s in sigs if re.match(r"^[A-Za-z_][A-Za-z0-9_]*Error", s))

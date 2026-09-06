@@ -37,7 +37,14 @@ Answer with one JSON object, with the keys in this order:
 changed and say what it does to the output, quoting both values
 
 Work the values out first and let the explanation follow from them. Report only \
-what the code determines; do not guess at consequences you cannot derive."""
+what the code determines; do not guess at consequences you cannot derive.
+
+You are also given the OUTCOME of running the project's own test. It is \
+measured and it is correct. When it says the output was byte-for-byte \
+identical, nothing was established about the change: it may never have reached \
+the changed code. Do NOT write that such a change is safe, harmless, cosmetic, \
+or that behaviour is unchanged -- say what was edited and what a developer \
+should check to settle it."""
 
 USER = """## Commit
 {message}
@@ -45,7 +52,35 @@ USER = """## Commit
 ## Changes
 ```diff
 {diff}
-```"""
+```
+
+## Outcome of running the project's own test
+{outcome}"""
+
+# Why `outcome` is here and `before`/`after` are not.
+#
+# The deployed prompt (oracle_reviewer.core.USER) hands the model the measured
+# before, the measured after AND an outcome sentence. Training handed it a diff
+# alone and asked it to work the values out. The gap that actually bit was the
+# outcome: `core.review_commit` case 5 routes EVERY byte-identical result to
+# "nothing was established either way", and the model had never seen that string
+# in any input, so it fell back on what 709 identical-valued training rows had
+# taught it -- "behaviour did not change" -- and the guard withheld it.
+#
+# Adding `outcome` closes that. Adding `before`/`after` too would close the rest
+# of the gap and is the obvious next experiment, but it also deletes the
+# property this corpus was built around: with the values supplied, the first
+# three target fields become copying and only the prose is learned. The 87%
+# bench arm came from a model that had to derive them. So this change is the
+# narrow one, and full prompt alignment is left as its own measurement rather
+# than smuggled in beside a corpus change.
+_OUTCOME_FALLBACK = {
+    True: "the run started PASSING after this change",
+    False: ("the output is byte-for-byte IDENTICAL. That means either the "
+            "changed code never ran, or it ran and changed nothing this "
+            "command prints -- which of the two is NOT known. Nothing was "
+            "established either way"),
+}
 
 
 def frame(s: str) -> str:
@@ -61,8 +96,12 @@ def to_sft(rows: list[dict]) -> list[dict]:
                   "after": o["after"], "explanation": o["explanation"]}
         out.append({"messages": [
             {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": USER.format(message=o["message"],
-                                                    diff=o["diff"])},
+            {"role": "user", "content": USER.format(
+                message=o["message"], diff=o["diff"],
+                # Corpora generated before the outcome field get the string
+                # their label implies, so an old file still builds.
+                outcome=o.get("outcome")
+                or _OUTCOME_FALLBACK[bool(o["differs"])])},
             {"role": "assistant",
              "content": json.dumps(target, ensure_ascii=False)},
         ], "family": o["family"], "category": o["category"],

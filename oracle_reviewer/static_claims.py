@@ -17,7 +17,8 @@ import re
 
 from .splitdiff import split
 
-__all__ = ["TextChange", "ui_text_change", "membership_changed"]
+__all__ = ["TextChange", "ui_text_change", "membership_changed",
+           "cosmetic_only", "risky_edits"]
 
 # One element, opening and closing tag on the same line, with plain text
 # between them. Anything nested, multi-line or interpolated is out of scope.
@@ -407,3 +408,177 @@ def broadened(diff: str) -> tuple[str, str] | None:
                      f"{', '.join(f'`{i}`' for i in items)} — so that branch "
                      f"now also runs for {', '.join(f'`{i}`' for i in added)}")
     return None
+
+
+# ------------------------------------------------- when the run settles nothing
+# `describe` says what an edit did. These two say what that MEANS, in the only
+# two cases where the diff settles it on its own:
+#
+#   cosmetic_only  proves behaviour cannot have changed
+#   risky_edits    names an edit whose hazard follows from the language
+#
+# Both exist because the runner usually measures nothing. On a real repo 11 of
+# 12 commits produced byte-identical command output, and every one of them fell
+# through to "Command Output Unchanged -- Worth Checking", which is true and
+# useless. Neither of these asks the model, and neither needs a run: they are
+# checkable by reading the diff, which is what makes them safe to print where a
+# measurement established nothing.
+
+# Comment syntax is per-language, and guessing it wrong turns a CSS id selector
+# (`#main {`) into "a comment". The diff header carries the path, so read it.
+_PATH = re.compile(r"^\+\+\+ b/(.+)$", re.M)
+_HASH_LANGS = {".py", ".pyi", ".sh", ".bash", ".zsh", ".yml", ".yaml",
+               ".toml", ".rb", ".pl", ".r", ".jl", ".tf", ".dockerfile"}
+_SLASH_LANGS = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts",
+                ".java", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".go",
+                ".rs", ".swift", ".kt", ".scala", ".php", ".dart", ".css",
+                ".scss", ".less", ".sql"}
+
+
+def _comment_prefixes(diff: str) -> tuple[str, ...]:
+    """Which prefixes actually start a comment in THIS file."""
+    m = _PATH.search(diff)
+    ext = ("." + m.group(1).rsplit(".", 1)[-1].lower()) if m and "." in m.group(1) else ""
+    if ext in _HASH_LANGS:
+        return ("#",)
+    if ext in _SLASH_LANGS:
+        # `*` catches JSDoc continuation lines, which are the bulk of a moved
+        # or reflowed doc block.
+        return ("//", "/*", "*/", "*", "<!--", "-->")
+    if ext in (".html", ".vue", ".svelte", ".xml", ".md"):
+        return ("<!--", "-->")
+    return ()          # unknown language: claim nothing
+
+
+def _sides(diff: str) -> tuple[list[tuple], list[tuple]]:
+    """(removed, added) as (lineno, text), content lines only."""
+    dels, adds = [], []
+    for left, right in split(diff):
+        if left and left[2] == "del" and left[1].strip():
+            dels.append((left[0], left[1]))
+        if right and right[2] == "add" and right[1].strip():
+            adds.append((right[0], right[1]))
+    return dels, adds
+
+
+def cosmetic_only(diff: str) -> str | None:
+    """A sentence, when the diff CANNOT have changed behaviour. Else None.
+
+    This is the one case where "no behavioural change" is a measurement-free
+    fact rather than the unfounded reassurance the guard exists to strip. It is
+    deliberately narrow: every changed line must be a comment, or the change
+    must be pure whitespace. Anything else returns None, because a wrong claim
+    here is exactly the false all-clear this project keeps having to remove.
+    """
+    dels, adds = _sides(diff)
+    if not dels and not adds:
+        return None
+
+    marks = _comment_prefixes(diff)
+    is_comment = (lambda t: bool(marks) and t.strip().startswith(marks))
+
+    if all(is_comment(t) for _, t in dels + adds):
+        which = "comments" if (dels and adds) else (
+            "comment lines" if adds else "comment lines")
+        return (f"Only {which} changed. Nothing here reaches the running "
+                f"program, so behaviour is unchanged -- this is provable from "
+                f"the diff, not inferred from the run.")
+
+    # Pure reindent: the same content, differently indented. COLLAPSE runs of
+    # whitespace, never remove it -- removing it entirely made
+    # `>BankJatim<` and `>Bank Jatim<` compare equal, and this function
+    # announced "behaviour is unchanged" about a commit whose whole purpose was
+    # changing a label a user reads. Collapsing keeps the one-space difference
+    # that distinguishes them while still ignoring indentation depth.
+    squash = lambda t: re.sub(r"\s+", " ", t).strip()
+    if sorted(squash(t) for _, t in dels) == sorted(squash(t) for _, t in adds):
+        return ("Only indentation changed -- every line here is identical once "
+                "runs of spacing are collapsed. Behaviour is unchanged, provable "
+                "from the diff.")
+    return None
+
+
+# Each entry is (pattern on the REMOVED text, what its absence means). The
+# sentences state a consequence that follows from the LANGUAGE, not from a run:
+# dropping `await` leaves a promise unawaited whether or not anything executed
+# it today. That is why these are safe next to a run that measured nothing --
+# but they are still framed as what to check, never as what happened.
+_HAZARDS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"^\s*(try\s*\{|try:)"),
+     "a `try` block was removed. Whatever it wrapped now raises to the caller."),
+    (re.compile(r"^\s*(\}?\s*catch\s*\(|except\b|\.catch\s*\()"),
+     "error handling was removed. Failures that were caught here now propagate."),
+    (re.compile(r"^\s*(if|elif)\b.*\b(is\s+None|==\s*None|!=\s*None|===?\s*null"
+                r"|!==?\s*null|===?\s*undefined|not\s+\w+\s*:|!\w)"),
+     "a null/empty guard was removed. The code it protected now runs on the "
+     "value the guard used to reject."),
+]
+
+# Edits where BOTH sides exist and the pairing itself is the hazard. A `now`
+# of None means "the construct is simply gone from the new line".
+#
+# `await` and `?.` live here, NOT in _HAZARDS, because dropping a construct
+# leaves a line that still closely resembles the original -- and the removal
+# path skips near-identical lines as moved rather than deleted. `u?.name` and
+# `u.name` are 90% alike, so the one edit that matters looked like a move.
+_FLIPS: list[tuple[re.Pattern, re.Pattern | None, str]] = [
+    (re.compile(r"\bawait\s+"), None,
+     "`await` was dropped. The call still runs, but nothing waits for it: "
+     "errors it raises become unhandled rejections and the value read next is "
+     "a promise, not the result."),
+    (re.compile(r"\?\."), None,
+     "optional chaining (`?.`) was removed. This now throws when the left side "
+     "is null or undefined, where before it produced undefined."),
+    (re.compile(r"[^<>=!]<[^=]"), re.compile(r"<="),
+     "`<` became `<=` -- the bound now includes its endpoint, one more "
+     "iteration or one more element."),
+    (re.compile(r"[^<>=!]>[^=]"), re.compile(r">="),
+     "`>` became `>=` -- the bound now includes its endpoint."),
+    (re.compile(r"<="), re.compile(r"[^<>=!]<[^=]"),
+     "`<=` became `<` -- the endpoint is now excluded, one fewer iteration."),
+    (re.compile(r"==="), re.compile(r"[^=!]==[^=]"),
+     "strict equality (`===`) became loose (`==`). Type coercion now applies, "
+     "so values of different types can compare equal."),
+    (re.compile(r"!=="), re.compile(r"[^=!]!=[^=]"),
+     "strict inequality (`!==`) became loose (`!=`). Type coercion now applies."),
+]
+
+
+def risky_edits(diff: str, limit: int = 4) -> list[str]:
+    """Hazards readable off the diff, as `line N: <what to check>`.
+
+    Only patterns whose consequence follows from the language are listed. A
+    removal counts only when nothing similar was added back, so moving a guard
+    is not reported as deleting one.
+    """
+    dels, adds = _sides(diff)
+    if not dels and not adds:
+        return []
+    added_text = [t for _, t in adds]
+    out: list[str] = []
+
+    for at, text in dels:
+        # A line that came back in near-identical form was moved, not deleted.
+        if any(_alike(text, a, 0.75) for a in added_text):
+            continue
+        for pat, sentence in _HAZARDS:
+            if pat.search(text):
+                out.append(f"line {at}: {sentence}")
+                break
+
+    for left, right in split(diff):
+        if not (left and right and left[2] == "del" and right[2] == "add"):
+            continue
+        old, new = left[1], right[1]
+        for was, now, sentence in _FLIPS:
+            if was.search(old) and not was.search(new) \
+                    and (now is None or now.search(new)):
+                out.append(f"line {right[0] or left[0]}: {sentence}")
+                break
+
+    seen, uniq = set(), []
+    for line in out:
+        if line not in seen:
+            seen.add(line)
+            uniq.append(line)
+    return uniq[:limit]

@@ -37,7 +37,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from exec_contract import (contradiction, direction_reversed,  # noqa: E402
                            swapped, unmeasured_claim,
                            phantom_removal)
-from .static_claims import describe, ui_text_change
+from .static_claims import (cosmetic_only, describe, risky_edits,
+                            ui_text_change)
 
 # `next lint` or `tsc` over a real codebase does not finish in two minutes, and
 # the cost is paid once per file in the commit. Raised, and made configurable,
@@ -107,6 +108,13 @@ class FileReview:
             return "Not Checked By This Command"
         if self.risk == "ui-text":
             return "UI Text Change"
+        if self.risk == "provably-safe":
+            # The ONLY badge in this list that promises anything. It is earned
+            # by the diff, not by the run: comments or indentation only, so
+            # there is nothing here the interpreter can reach. Every other
+            # identical-output result stays "Worth Checking", because for those
+            # the run genuinely settled nothing.
+            return "No Code Changed"
         if self.risk == "unclear" and self.why_unclear == "timeout":
             return "Command Timed Out"
         if self.risk == "unclear":
@@ -899,9 +907,20 @@ def _from_diff(r: FileReview) -> str:
     -- restating an edit is not a claim about what the edit caused.
     """
     facts = describe(r.diff)
-    if not facts:
-        return ""
-    return "\n\nFrom the diff:\n" + "\n".join(f"  · {f}" for f in facts)
+    body = ("\n\nFrom the diff:\n" + "\n".join(f"  · {f}" for f in facts)
+            if facts else "")
+    # Hazards are worth printing whatever the run found, but they matter most
+    # where it found nothing: on a real repo 11 of 12 commits produced
+    # byte-identical output, and this is the only thing left that can speak.
+    # Measured on 457 real BugsInPy defects, these patterns fire on 16% of the
+    # bug-INTRODUCING direction against 4% of the fix direction -- so they are
+    # a signal, not a coin flip, and they are labelled as read-from-the-diff so
+    # they are never mistaken for something that was observed.
+    hazards = risky_edits(r.diff)
+    if hazards:
+        body += ("\n\nWorth checking, from the diff alone:\n"
+                 + "\n".join(f"  ! {h}" for h in hazards))
+    return body
 
 
 # ---------------------------------------------------------------- the review
@@ -1010,6 +1029,16 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
             if text:
                 r.risk, r.static = "ui-text", text
                 say(f"[{i}/{len(files)}] {path}: display text only ...")
+                out.append(r)
+                continue
+            # Identical output plus a diff that cannot reach the interpreter
+            # is the one case where "nothing changed" is provable rather than
+            # merely unrefuted. Saying so is not the false all-clear the guard
+            # strips; withholding it is just an unhelpful shrug.
+            proof = cosmetic_only(diff)
+            if proof:
+                r.risk, r.static = "provably-safe", [proof]
+                say(f"[{i}/{len(files)}] {path}: comments/indentation only ...")
                 out.append(r)
                 continue
             r.risk, r.why_unclear = "unclear", "not-exercised"

@@ -1,0 +1,401 @@
+{
+ "c-loop-bound-loosen": {
+  "buggy": true,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "-145166842\n",
+   "out": "-145166842",
+   "err": ""
+  },
+  "differs": true
+ },
+ "c-rounding-direction": {
+  "buggy": true,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "4\n",
+   "out": "4",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3\n",
+   "out": "3",
+   "err": ""
+  },
+  "differs": true
+ },
+ "go-boundary-flip": {
+  "buggy": true,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "true true false\n",
+   "out": "true true false",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "true false false\n",
+   "out": "true false false",
+   "err": ""
+  },
+  "differs": true
+ },
+ "go-loop-bound-loosen": {
+  "buggy": true,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "raw": "",
+   "out": "",
+   "err": "exit status 2"
+  },
+  "differs": true
+ },
+ "go-unit-scale": {
+  "buggy": true,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3000\n",
+   "out": "3000",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3\n",
+   "out": "3",
+   "err": ""
+  },
+  "differs": true
+ },
+ "java-loop-bound-loosen": {
+  "buggy": true,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "raw": "",
+   "out": "",
+   "err": "\tat Main.main(Main.java:11)"
+  },
+  "differs": true
+ },
+ "java-unit-scale": {
+  "buggy": true,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "5000\n",
+   "out": "5000",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "500\n",
+   "out": "500",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-fallback-swap": {
+  "buggy": true,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous ada\n",
+   "out": "anonymous ada",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous anonymous\n",
+   "out": "anonymous anonymous",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-loop-bound-loosen": {
+  "buggy": true,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "NaN\n",
+   "out": "NaN",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-precedence-total": {
+  "buggy": true,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "16\n",
+   "out": "16",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "7\n",
+   "out": "7",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-swallowed-error": {
+  "buggy": true,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "caught: bad config\n",
+   "out": "caught: bad config",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "{}\n",
+   "out": "{}",
+   "err": ""
+  },
+  "differs": true
+ },
+ "php-loop-bound-loosen": {
+  "buggy": true,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "a,b,c,\n",
+   "out": "a,b,c,",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "a,b,c,,\n",
+   "out": "a,b,c,,",
+   "err": "PHP Warning:  Undefined array key 3 in /tmp/tmpgkepcfkq/post.php on line 5"
+  },
+  "differs": true
+ },
+ "php-shadow-update": {
+  "buggy": true,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "0\n",
+   "out": "0",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-boundary-flip": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "[False, True, True]\n",
+   "out": "[False, True, True]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "[False, False, True]\n",
+   "out": "[False, False, True]",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-loop-bound-loosen": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "raw": "",
+   "out": "",
+   "err": "IndexError: list index out of range"
+  },
+  "differs": true
+ },
+ "py-precedence-avg": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "30\n",
+   "out": "30",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "20\n",
+   "out": "20",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-rounding-direction": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "4\n",
+   "out": "4",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3\n",
+   "out": "3",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-shadow-update": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "0\n",
+   "out": "0",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rb-fallback-swap": {
+  "buggy": true,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous\nada\n",
+   "out": "anonymous\nada",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous\nanonymous\n",
+   "out": "anonymous\nanonymous",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rb-loop-bound-loosen": {
+  "buggy": true,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "raw": "",
+   "out": "",
+   "err": "\tfrom /tmp/tmpebtkvax7/post.rb:11:in '<main>'"
+  },
+  "differs": true
+ },
+ "rb-swallowed-error": {
+  "buggy": true,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "caught: bad port: http\n",
+   "out": "caught: bad port: http",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "0\n",
+   "out": "0",
+   "err": ""
+  },
+  "differs": true
+ }
+}

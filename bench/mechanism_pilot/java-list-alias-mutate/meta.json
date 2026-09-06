@@ -1,0 +1,22 @@
+{
+  "id": "java-list-alias-mutate",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "alias",
+      "copy",
+      "same list",
+      "caller",
+      "mutat"
+    ]
+  ],
+  "note": "the defensive copy `new ArrayList<>(items)` is dropped, so the helper appends to the CALLER's list instead of its own. Same family as py-list-alias-mutate and js-array-alias-mutate, third syntax. Verified: caller list unchanged -> caller list gains the sentinel",
+  "check": {
+    "probe": "call `withSentinel(data)` and then print `data` itself, not just the return value",
+    "watch": "`new ArrayList<>(items)` is gone, so `out` and `items` name the same list \u2014 check whether appending to `out` is visible through `data`",
+    "restored": "the `new ArrayList<>(items)` copy is back, so check that appending inside the helper leaves the caller's list alone"
+  }
+}

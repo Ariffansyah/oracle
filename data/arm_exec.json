@@ -1,0 +1,5203 @@
+{
+ "arm": "exec",
+ "counts": {
+  "parsed": 518,
+  "before": 492,
+  "after": 487,
+  "both": 483,
+  "reversed": 0,
+  "phantom": 0
+ },
+ "rows": [
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `combine` was changed from `None` to an empty list `[]`, which removes the need for explicit initialization inside the function. This refactoring simplifies the code while preserving the program's behavior, which still prints [27] [9] [16].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal argument passed to `summarise` was changed from 30 to 33, which updated the second element of the printed list from 30 to 33.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The default return value in `compute_shared` was changed from 0 to 1, but the program's behavior did not change because the input to `compute_shared` is never negative, so the output remains 23.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The literal value associated with the key `'a'` in the dictionary passed to `aggregate` was changed from 9 to 7, but the program's output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `tally_up_inner` function, which documents its purpose without altering the program's behavior. The output remains 43.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `reduce_all_helper` function, which documents its purpose without altering the program's behavior. The output remains 110.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": true,
+   "explanation": "The literal argument passed to `aggregate` was changed from 26 to 28, which updated the printed output from `n=26` to `n=28`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The literal value associated with the key `'c'` in the dictionary passed to `combine` was changed from 9 to 11, but the program's output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `reduce_all` was changed from `None` to an empty list `[]`, which causes the program's output to change from `[3] [14] [15]` to `[3, 14, 15] [3, 14, 15] [3, 14, 15]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The `aggregate` function now returns the difference between the minimum and maximum values instead of the maximum and minimum, causing the program's output to change from 37 to -37.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": true,
+   "explanation": "The literal `14` in the list passed to `measure` was changed to `13`, which reduced the program's output from 83 to 82.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal value in the list passed to `combine` was changed from 39 to 37, which reduced the program's output from 131 to 129.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The default argument `y` in `fold_util` was changed from 5 to 7, but the program's behavior did not change because the function is never called with the default argument, so the output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The function `collect` was renamed to `collect_v2`, but the program's behavior did not change, and the output remains 18.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The initial value of `total` was changed from 0 to 2, which increased the program's output from 666 to 668.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `range` was changed from `n + 1` to `n + 0`, which removed the extra iteration, causing the program's output to decrease from 55 to 45.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `reduce_all` function definition, which is a documentation-only change that does not affect the program's behavior. The output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `collect_util` function, which documents its purpose without altering the program's behavior. The output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `sum_so_far` variable was removed from the loop, which causes the program's output to change from `[31, 11, 19]` to `[31, 42, 61]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The string concatenation inside `tally_up` was replaced with an f-string, which preserves the program's behavior but changes the output format from \"n=26\" to \"n=26\".",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]` to `[0, 3, 6, 9, 12, 15, 18]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The function `compute` was renamed to `compute_inner`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains 20.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "A docstring was added to `measure_util`, which documents its purpose without altering the program's behavior. The output remains 73.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The literal added to the `measure_inner` function was changed from 38 to 41, but the program's behavior did not change because this function is never called, so the output remains [17] [13] [13].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `compute` was changed from `n + 1` to `n`, which reduced the program's output from 190 to 171.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The literal value associated with the key `'c'` in the dictionary passed to `compute` was changed from 3 to 2, but the program's output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `reduce_all` was changed from `n + 1` to `n`, which reduced the program's output from 190 to 171.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `aggregate` was added, which documents its purpose as \"Total of xs.\" This change does not affect the program's behavior, and the output remains 59.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `sum_so_far` variable was removed from the loop, which caused the program's output to change from `[9, 10, 20]` to `[9, 19, 39]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The `collect` function was changed from using `dict.get` with a default value of 0 to directly accessing the dictionary key, which removed the default argument and caused the program to raise a `KeyError: 'absent'` instead of printing 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The literal added to the `fold_misc` function was changed from 11 to 12, but the program's behavior did not change because this function is never called, so the output remains 83.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces `len(xs) == 0` with `not xs`, which is a more idiomatic way to check for an empty list in Python. This refactoring does not alter the program's behavior, as the output remains 81.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The function `combine` was renamed to `combine_inner`, but the program's behavior did not change because the input value remains 19, so the output is still low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The literal value in the list passed to `fold` was changed from 38 to 36, which reduced the program's output from 118 to 116.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `fold_misc` function, which documents its purpose without altering the program's behavior. The output remains 81.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `fold` was changed from 9 to 10, which increased the program's output from 45 to 55.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'absent'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The literal value in the list passed to `walk` was changed from 3 to 2, which reduced the program's output from 116 to 115.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `collect` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing `46`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `collect_util` function, which is a documentation-only change that does not affect the program's behavior. The output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `collect` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing the correct sum of 66.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The literal argument passed to `combine` was changed from 15 to 17, but the program's output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The width argument in `fold_aux` was changed from 8 to 6, but the program's behavior did not change because the function is never called, so the output remains 39.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The padding character in `aggregate_inner` was changed from `'0'` to `'1'`, but the program's behavior did not change because this function is never called, so the output remains `[33, 18, 31]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The conditional threshold in `measure` was flipped from `> 29` to `<= 29`, which changes the output from `high` to `low` when the input is 30.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The change alters the step size from 2 to 3 in the `summarise` function, which shifts the output from `[0, 2, 4, 6, 8]` to `[0, 3, 6, 9]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The loop bound in `compute` was changed from 23 to 24, but the program's output remains unchanged at [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The function `reduce_all` was renamed to `reduce_all_inner`, but the program's behavior did not change, and it still prints high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The filter condition in `combine_util` was changed from `v != 5` to `v != 3`, but this modification does not affect the program's behavior, which still prints [8] [16] [13].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The function `reduce_all` was renamed to `reduce_all_v2`, but the program's behavior did not change, and the output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The docstring was added to the `collect_misc` function, which is a documentation-only change that does not affect the program's behavior. The output remains 30.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The threshold in the `combine` function was increased from 30 to 31, but the program's behavior did not change because the input value (9) is still below the new threshold, so the output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The literal value associated with the key `'a'` in the dictionary passed to `collect` was changed from 7 to 8, but the program's output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `tally_up_shared` function, which is a documentation-only change that does not affect the program's behavior. The output remains 65.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `walk` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing the correct sum of 174.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The class attribute `LIMIT` was updated from 17 to 20, but the program's behavior did not change because this variable is not used in the execution path that produces the final output of 42.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The swap of `max` and `min` inside the `walk` function changes the program's output from 41 to -41.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The accumulator `sum_so_far` was moved outside the inner loop, causing it to reset at the start of each row instead of after each element. This change increased the program's output from `[14, 24, 17]` to `[14, 38, 55]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The function `compute` was renamed to `compute_step`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard in `combine` causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The class attribute `LIMIT` was updated from 20 to 23, but the program's behavior did not change because the guard clause checks for an empty list, which is not reached in this execution path.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 1, which increased the number of elements in the returned list from 13 to 27.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `reduce_all` function, which documents its purpose without altering the program's behavior. The output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The default argument `y` in `summarise_shared` was changed from 4 to 5, but this modification does not affect the program's behavior, which still prints 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `combine` was increased from `n + 1` to `n + 2`, which caused the program's output to increase from 528 to 561.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The `tally_up` function now returns the difference between the minimum and maximum values instead of the maximum and minimum, causing the program's output to change from 31 to -31.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The swap of `max` and `min` inside the `fold` function changes the sign of the output from 9 to -9.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The `COMPUTE_UTIL` constant was updated from 38 to 39, but the program's behavior did not change because this variable is not used in the execution path that produces the output of 40.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The class attribute `LIMIT` was updated from 21 to 22, but the program's behavior did not change because this variable is not used in the execution path that produces the final output of 68.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The function `combine` was renamed to `combine_step`, but the program's behavior did not change because the input value remains 17, so the output is still n=17.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 4, which reduced the number of elements returned by the `collect` function from 15 to 8.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal value `4` in the list passed to `aggregate` was changed to `3`, which reduced the program's output from 126 to 125.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop step in `combine` was changed from `-1` to `-0`, which causes the loop to terminate immediately without executing any iterations. This change alters the program's output from 60 to `ValueError: range() arg 3 must not be zero`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `walk` was updated to \"Total of xs.\" This change does not affect the program's behavior, as the output remains 74.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The literal `29` was changed to `31` inside the list passed to `summarise`, but the program's output remains 34.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The multiplier in `fold_misc` was changed from 10 to 9, but the program's behavior did not change because the input value is still 15, which remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal `39` inside the list passed to `measure` was changed to `40`, which increased the program's output from 85 to 86.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `compute` was added, which documents the function's purpose without altering its behavior. The program's output remains 31.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The function `reduce_all` was renamed to `reduce_all_impl`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains [23] [23] [7].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The default argument `y` in `fold_aux` was changed from 9 to 11, but the program's behavior did not change because this function is never called, so the output remains 9.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces the `len(xs) == 0` guard with `not xs`, which is an equivalent check that removes the need for explicit equality comparison. The program's behavior remains unchanged, and the output is still 47.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The literal argument passed to `fold` was changed from 39 to 42, but the program's output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `summarise` function definition, which is a documentation-only change that does not affect the program's behavior. The output remains [0, 2, 4, 6, 8, 10, 12, 14].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces `len(xs) == 0` with `not xs`, which is an equivalent guard that simplifies the conditional logic without altering the program's behavior. The output remains 40.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The class attribute `LIMIT` was changed from 35 to 33, but the program's behavior did not change because this variable is not used in the execution path that produces the final output of 78.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `fold` was changed from `n + 1` to `n`, which reduced the program's output from 561 to 528.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces `len(xs) == 0` with `not xs`, which is a more idiomatic way to check for an empty list. This refactoring does not alter the program's behavior, so the output remains 20.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `summarise` function, which is a purely documentation change that does not alter the program's behavior. The output remains 26.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The `measure` function was updated to use an f-string instead of concatenation, which preserves the program's behavior as the output remains n=17.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The literal value `8` in the third row of the input list was changed to `7`, which reduced the final output from 14 to 13.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring of `collect_aux` was updated to describe its return value, which is a purely documentation change that does not affect the program's behavior. The output remains 29.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `walk_inner` function definition, which is a documentation-only change that does not affect the program's behavior. The output remains 31.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `walk` was changed from `range(len(entries) - 1, -1, -1)` to `range(len(entries), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 54.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The threshold in the `compute` function was increased from 15 to 16, but the program's behavior did not change because the input value remains 29, which still causes the function to return 'high'.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The loop bound in `tally_up` was changed from 21 to 24, which increased the program's output from `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]` to `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The initial accumulator value was changed from 0 to 3, which increased the program's output from 630 to 633.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The function `aggregate` was renamed to `aggregate_step`, but the program's behavior did not change, and the output remains 104.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "A docstring was added to `compute_inner`, which documents its purpose without altering the program's behavior. The output remains 72.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The function `summarise` was renamed to `summarise_impl`, but the program's behavior did not change, and the output remains 39.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit replaces the `str.format` method with an f-string literal inside the `fold` function, which changes the program's output from `n=19` to `n=19`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The constant `SUMMARISE_SHARED` was changed from 9 to 8, but the program's behavior did not change because this variable is not used in the execution path. The output remains n=41.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal `10` in the list passed to `walk` was changed to `13`, which increased the program's output from 59 to 62.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The class attribute `LIMIT` was changed from 30 to 29, but this did not affect the program's behavior because the `scale` method is never called, so the output remains n=24.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12, 14]` to `[0, 3, 6, 9, 12, 15]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The multiplier in `compute_inner` was changed from 17 to 19, but the program's behavior did not change because the function is never called, so the output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The function `collect` was renamed to `collect_v2`, but the program's behavior did not change, and the output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `combine_aux` function, which is a documentation-only change that does not affect the program's behavior. The output remains 42.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": true,
+   "explanation": "The literal argument passed to `fold` was changed from 30 to 32, which updated the printed output from `n=30` to `n=32`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "A docstring was added to the `walk` function, which documents its purpose without altering the program's behavior. The output remains 81.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `tally_up` was changed from `None` to an empty list `[]`, which causes the program's output to change from `[13] [7] [11]` to `[13, 7, 11] [13, 7, 11] [13, 7, 11]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop step in `collect` was changed from `-1` to `-3`, which causes the program's output to drop from 102 to 59.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The function `fold` was renamed to `fold_v2`, but the program's behavior did not change, and the output remains [0, 2, 4, 6, 8, 10].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": true,
+   "explanation": "The literal argument passed to `combine` was changed from 42 to 43, which updated the printed output from \"n=42\" to \"n=43\".",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The literal added to the `summarise_inner` function was changed from 16 to 18, but the program's behavior did not change because this function is never called, so the output remains 50.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `collect` was changed from `None` to an empty list `[]`, which causes the program's output to change from `[8] [17] [2]` to `[8, 17, 2] [8, 17, 2] [8, 17, 2]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": true,
+   "explanation": "The first element of the list passed to `fold` was changed from 1 to 0, which reduced the program's output from 47 to 46.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The initial value of `running` was changed from 0 to 1, which increased the program's output from 561 to 562.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal `15` inside the list passed to `fold` was changed to `17`, which increased the program's output from 109 to 111.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The literal `35` in the list passed to `combine` was changed to `33`, which reduced the program's output from 169 to 167.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `collect` was changed from `range(len(items) - 1, -1, -1)` to `range(len(items), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 94.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `11` inside the list passed to `tally_up` was changed to `10`, which reduced the program's output from 34 to 33.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard from `reduce_all` causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The multiplier in `collect_util` was changed from 16 to 15, but the program's behavior did not change because this function is never called, so the output remains 74.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop index in `combine` was changed from `range(len(points) - 1, -1, -1)` to `range(len(points) - 4, -1, -1)`, which reduced the program's output from 51 to 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The function `walk` was renamed to `walk_step`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains 103.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "The change updates the `collect` function's guard clause from checking for `b == 0` to `b == 2`, which causes the program to raise a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `tally_up` function, which documents its purpose without altering the program's behavior. The output remains unchanged at n=50.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'absent'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `fold` function, which documents its purpose without altering the program's behavior. The output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'missing'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The function `walk` was renamed to `aggregate_helper`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains [15] [11] [24].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal `22` in the second argument of `aggregate` was changed to `21`, which updated the program's output from `[1] [22] [20]` to `[1] [21] [20]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `aggregate` was changed from `>` to `<=`, which shifts the threshold for the `'high'` category from 28 to 27. This modification does not alter the program's behavior, as the input value 23 still results in the output `low`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]` to `[0, 3, 6, 9, 12, 15, 18, 21, 24]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The default value in `aggregate` was changed from 0 to 1, which increased the program's output from 0 to 1 when the key `'missing'` is accessed.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The initial value of `tally` inside the `collect` function was changed from 0 to 1, which increased the program's output from 171 to 172.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `measure` was reduced from `n + 1` to `n`, which decreased the program's output from 120 to 105.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `tally_up` was changed from `>` to `<=`, which shifts the threshold from 6 to 7. This modification does not alter the program's behavior, so the output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The initial accumulator value inside `aggregate` was changed from 0 to 1, which increased the first element of the output list from 31 to 32.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `combine_aux` function, which documents its purpose without altering the program's behavior. The output remains 65.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The `combine` function's guard was updated from `len(xs) == 0` to `not xs`, which is a more idiomatic way to check for an empty list in Python. This change does not alter the program's behavior, as the output remains 88.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]` to `[0, 3, 6, 9, 12, 15, 18, 21, 24, 27]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `walk` was added, which documents the function's purpose without altering its behavior. The program's output remains 53.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The literal `23` in the list passed to `walk` was changed to `24`, which increased the program's output from 16 to 16.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'absent'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The literal value in `AGGREGATE_UTIL` was changed from 7 to 5, but this modification did not affect the program's behavior, which still prints high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound was changed from `i < len(items)` to `i <= len(items)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing the correct sum of 176.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "The division guard was updated from `b == 0` to `b == 1`, which changes the program's output from `0` to `3.0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'nope'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The `collect` function was changed from using `dict.get` with a default value of 0 to directly accessing the dictionary key, which removed the default fallback and caused the program to raise a `KeyError: 'missing'` instead of printing 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "The default return value in `collect` was changed from 0 to 1 when the divisor is 0, which alters the program's output from 0 to 1.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces `len(xs) == 0` with `not xs`, which is an equivalent guard that checks for an empty list. This refactoring does not alter the program's behavior, so the output remains 73.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `acc` variable was removed from the inner loop, which causes the program's output to change from `[28, 11, 22]` to `[28, 39, 61]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'nope'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The `range` start value was changed from 0 to 2, which shifts the first element of the returned list from 0 to 2, causing the program's output to change from `[0, 2, 4, 6, 8, 10, 12, 14, 16]` to `[2, 4, 6, 8, 10, 12, 14, 16]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `collect` was changed from `>` to `<=`, which shifts the threshold from 8 to 7. This modification causes the function to return `'low'` instead of `'high'` when the input is 9, changing the program's output from `high` to `low`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The change flips the comparison operator in the `collect` function from `>` to `<=`, which shifts the threshold for returning `'high'` from 20 to 21. This modification does not alter the program's behavior, so the output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `summarise` function definition, which has no effect on execution. The program's behavior remains unchanged, and the output is still [12] [1] [19].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The `measure` function was changed from using `get` with a default value to direct access via `[]`, which removed the default argument and caused the program to raise a `KeyError: 'absent'` instead of returning `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The function `measure` was renamed to `measure_impl`, but the program's behavior did not change, and the output remains [11, 23, 23].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `summarise_shared` function was removed, which did not affect the program's behavior because it was never called. The output remains [20, 26, 6].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal argument passed to `aggregate` was changed from 19 to 20, which updated the second element of the printed list from 19 to 20.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The `measure` function was updated to use an f-string instead of concatenation, which preserves the program's behavior but changes the output format from \"n=39\" to \"n=39\".",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `walk` was changed from `n + 1` to `n`, which reduced the program's output from 231 to 210.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "A docstring was added to the `tally_up` function, which is a documentation-only change that does not alter the program's behavior. The output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `combine` was changed from `n + 1` to `n`, which reduced the program's output from 666 to 630.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The function `compute` was renamed to `compute_inner`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The constant `COMPUTE_INNER` was changed from 16 to 15, but the program's behavior did not change because this variable is not used in the execution path. The output remains n=32.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The default argument `y` in `tally_up_aux` was changed from 6 to 4, but the program's behavior did not change because this function is never called, so the output remains 34.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `combine_shared` function, which documents its purpose without altering the program's behavior. The output remains 17.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]` to `[0, 3, 6, 9, 12, 15, 18, 21, 24, 27]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The second element of the list passed to `measure` was changed from 39 to 38, but the program's output remains 9.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The default value in `d.get(k, 0)` was changed to 1, which alters the program's output from 0 to 1 when calling `summarise({'a': 7, 'b': 9, 'c': 4}, 'absent')`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `combine_util` function was removed, which caused the program's output to change from `[20, 22, 39]` to `[20, 42, 81]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The second element of the first row was changed from 8 to 10, which increased the program's output from 26 to 28.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12]` to `[0, 3, 6, 9, 12]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal argument passed to `summarise` was changed from 8 to 9, which updated the second element of the printed list from 8 to 9.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The literal `6` in the list passed to `combine` was changed to `7`, which reduced the program's output from 11 to 10.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `measure` was changed from `>` to `<=`, which shifts the threshold from 25 to 24, but the program's behavior did not change because the input value is still 12, so the output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `walk_extra` function, which documents its purpose without altering the program's behavior. The output remains 66.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The literal `11` in the list passed to `measure` was changed to `12`, which increased the program's output from 86 to 87.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `collect` function, which documents its purpose without altering the program's behavior. The output remains 78.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `aggregate` was changed from `None` to an empty list `[]`, which removes the need for explicit initialization inside the function. This refactoring simplifies the code while preserving the program's behavior, which still prints `[15, 29, 17] [15, 29, 17] [15, 29, 17]`.",
+   "quotes_before": false,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `tally_up` was changed from `n + 1` to `n`, which reduced the program's output from 378 to 351.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `measure` was changed from a mutable list to a literal empty list, which causes the program's output to change from `[5] [13] [18]` to `[5, 13, 18] [5, 13, 18] [5, 13, 18]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The default argument `y` in `combine_helper` was changed from 3 to 6, but the program's behavior did not change because the function was never called with the default argument. The output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The function `fold` was renamed to `fold_step`, but the program's behavior did not change, and the output remains [0, 2, 4, 6, 8, 10, 12].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `reduce_all` was updated to describe its total functionality, but the program's behavior did not change, and the output remains 41.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "The division guard in `aggregate` was changed from checking for zero to one, which altered the program's output from 0 to 3.0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `summarise` was updated to describe its purpose as \"Total of xs.\" This change does not affect the program's behavior, which still prints 64.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `fold` function, which documents its purpose as \"Total of xs.\" This documentation change does not affect the program's behavior, and the output remains 66.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The change flips the comparison operator in `collect` from `>` to `<=`, which shifts the threshold from 20 to 21. This modification does not alter the program's behavior, so the output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The literal value of `WALK_EXTRA` was changed from 32 to 33, but this modification does not affect the program's behavior, which still prints [22] [15] [26].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `summarise` function, which documents its purpose without altering the program's behavior. The output remains [6] [7] [17].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The multiplier in `summarise_helper` was changed from 4 to 7, but the program's behavior did not change because the function is never called, so the output remains [18, 22, 36].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `fold` was changed from `len(values) - 1` to `len(values) - 2`, which reduced the program's output from 60 to 36.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step size in `aggregate` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10]` to `[0, 3, 6, 9]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The default argument `y` in `aggregate_util` was changed from 2 to 1, but the program's behavior did not change because this function is never called, so the output remains [33, 33, 32].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The commit adds a comment `# kept for compatibility` above the `combine_helper` function definition, which has no effect on execution. The program's behavior remains unchanged, and the output is still `[28] [10] [11]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The multiplier in `measure_shared` was changed from 10 to 11, but the program's behavior did not change because this function is never called, so the output remains [25, 9, 29].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The modulo divisor in `reduce_all_util` was changed from 13 to 12, but the program's behavior did not change because the input value is not used in the calculation that produces the final output, which remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The multiplier in `summarise_extra` was changed from 22 to 24, but the program's behavior did not change because this function is never called, so the output remains [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The swap of `max` and `min` inside the `aggregate` function changes the sign of the output from 15 to -15.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The function `compute` was renamed to `compute_impl`, but the program's behavior did not change, and the output remains [33, 13, 2].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `summarise_misc` function definition, which is a documentation-only change that does not affect the program's behavior. The output remains n=41.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `tally_up` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing the correct sum of 183.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The initial accumulator value in `reduce_all` was changed from 0 to 2, which increased the program's output from 145 to 147.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The literal multiplier in `measure_util` was changed from 2 to 5, but the program's behavior did not change because the division by zero guard still returns 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `measure` was changed from `>` to `<=`, which shifts the threshold for the `'high'` return value from greater than 6 to less than or equal to 6. This change does not alter the program's behavior, as the output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The literal in `COLLECT_INNER` was changed from 25 to 26, but the program's behavior did not change because this variable is not used in the execution path that produces the final output of 23.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The `combine` function was refactored to use an f-string instead of concatenation, which is a more modern and readable approach. The program's behavior did not change, and the output remains n=20.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The string concatenation inside `combine` was replaced with an f-string, which preserves the program's behavior but changes the output format from \"n=16\" to \"n=16\".",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The default return value in `aggregate` was changed from 0 to 1, but the program's behavior did not change because the input list is non-empty, so the output remains 43.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `combine` was changed from `n + 1` to `n`, which reduced the program's output from 21 to 15.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `running` variable was removed from the inner loop, which causes the program's output to change from `[33, 13, 23]` to `[33, 46, 69]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The `tally_up_shared` function now returns 1 when its input is negative, which changes the program's output from 0 to 1.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The padding character in `fold_util` was changed from `'0'` to `'1'`, but the program's behavior did not change because the function is never called, so the output remains 34.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": true,
+   "explanation": "The literal argument passed to `tally_up` was changed from 24 to 22, which updated the printed output from `n=24` to `n=22`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal `30` in the `collect` call was changed to `32`, but the program's output remains `[17] [32] [7]`.",
+   "quotes_before": false,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `walk` was changed from `range(len(entries) - 1, -1, -1)` to `range(len(entries), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 137.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The default argument `y` in `reduce_all_helper` was changed from 13 to 11, but the program's behavior did not change because this function is never called, so the output remains 171.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The literal `13` in the `fold_helper` list comprehension was changed to `14`, but the program's behavior did not change because the input values are not passed through `fold_helper`. The output remains `[8] [25] [12]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `fold_extra` function was removed, which causes the program's output to change from `[16, 21, 35]` to `[16, 37, 72]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The first element of the list passed to `walk` was changed from 18 to 19, which increased the program's output from 56 to 57.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `compute_shared` function, which documents its behavior without altering the program's output. The program's behavior remains unchanged, and the printed result is still 71.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `1` in the list passed to `summarise` was changed to `4`, which increased the program's output from 25 to 28.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The default argument `y` in `aggregate_misc` was changed from 3 to 5, but the program's behavior did not change because this function is never called, so the output remains 40.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The `compute` function was updated to swap the order of `max` and `min` calls, causing the program's output to change from 10 to -10.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The function `walk` was renamed to `walk_v2`, but the program's behavior did not change because the output remains n=12.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `combine` function, which documents its purpose as \"Total of xs.\" This change does not alter the program's behavior, so the output remains 88.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `summarise_extra`, `measure_aux`, and `summarise_inner` functions were removed, which did not alter the program's behavior. The output remains [29, 17, 16].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `18` in the list passed to `summarise` was changed to `21`, which increased the program's output from 48 to 51.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `summarise` function definition, which is a documentation-only change that does not affect the program's behavior. The output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The `fold_util` function was updated to filter out the literal 9 instead of 11, but the program's behavior did not change because this function is never called, so the output remains 136.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The change alters the step size in `summarise` from 2 to 3, which shifts the output list from `[0, 2, 4, 6, 8, 10, 12, 14, 16]` to `[0, 3, 6, 9, 12, 15]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The swap of `max` and `min` inside the `walk` function changes the sign of the output from 16 to -16.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `collect_aux` function, which documents its purpose without altering the program's behavior. The output remains 97.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `measure_util` function, which is a documentation-only change that does not affect the program's behavior. The output remains [22, 18, 8].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The first element of the list passed to `summarise` was changed from 5 to 7, which increased the program's output from 135 to 137.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The string concatenation inside `summarise` was replaced with an f-string, which preserves the program's output as `n=45`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The multiplier in the `combine_misc` dictionary comprehension was changed from 11 to 14, but the program's behavior did not change because the function is never called, so the output remains n=26.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The `combine_helper` function was updated to return 2 instead of 0 when the input is negative, but this change did not affect the program's output, which remains [0, 2, 4, 6, 8, 10].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The literal `13` in the `SUMMARISE_UTIL` list was changed to `14`, but the program's behavior did not change because the division by zero guard still returns `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `combine` was changed from `>` to `<=`, which shifts the threshold for the `'high'` return value from 25 to 24. This modification causes the program's output to change from `'low'` to `'low'`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The `fold_extra` function was updated to return 1 instead of 0 when the input is negative, but the program's behavior did not change because the input to `fold_extra` was never negative, so the output remains n=24.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The function `fold` was renamed to `fold_v2`, but the program's behavior did not change, and the output remains 52.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal 18 in the third call to `fold` was changed to 16, which updated the program's output from `[8] [15] [18]` to `[8] [15] [16]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step size in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]` to `[0, 3, 6, 9, 12, 15, 18, 21]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `walk` was changed from a list literal to an empty list, which removes the need for the explicit `if acc is None` check. This refactoring simplifies the function's logic without altering its behavior, so the program output remains [19] [16] [7].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `compute` function, which documents its purpose as \"Total of xs.\" This change does not alter the program's behavior, so the output remains 60.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change updates the guard condition in `collect` from checking for an empty list to an exact length of one, but the program's behavior did not change because the input list still contains three elements, so the output remains 38.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The literal `8` in the list `MEASURE_AUX` was changed to `11`, but the program's behavior did not change because the default argument `acc` is never passed as a mutable list, so the output remains `[7] [20] [22]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The width argument in `measure_extra` was changed from 14 to 12, but the program's behavior did not change because the input value is 15, which falls within the `low` range.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `measure` was changed from `<` to `<=`, which causes the program to access an index that no longer exists, resulting in an `IndexError: list index out of range` instead of the previous output of 121.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `measure_inner` function, which is a purely documentation change that does not alter the program's behavior. The output remains 143.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal argument passed to `fold` was changed from 4 to 6, which updated the first element of the printed list from 4 to 6.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The commit removes the redundant `REDUCE_ALL_MISC` constant definition, which does not affect the program's behavior. The output remains [19, 26, 17].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The `collect` function was changed from using `get` with a default argument to direct indexing, which removed the default value and caused the program to raise a `KeyError: 'nope'` instead of returning `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The third element of the input list was changed from 6 to 9, which increased the program's output from 8 to 9.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The threshold in `fold_shared` was changed from checking if `x < 0` to `x < 1`, but the program's behavior did not change because the input value is still positive, so the output remains 31.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `reduce_all` was changed from `range(len(values) - 1, -1, -1)` to `range(len(values), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing `60`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `collect_misc` function, which documents its purpose without altering the program's behavior. The output remains unchanged, still printing n=14.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": true,
+   "explanation": "The literal `8` in the list passed to `collect` was changed to `9`, which increased the program's output from 34 to 35.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The `combine` function was changed from using `get` with a default value of 0 to directly accessing the dictionary key, which removed the default fallback and caused the program to raise a `KeyError: 'missing'` instead of printing 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The threshold in `fold_inner` was changed from checking if `x < 0` to `x < 1`, but the program's behavior did not change because the input values do not trigger this condition, so the output remains [21, 11, 4].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The `combine` function was refactored from using string concatenation to an f-string, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains n=14.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The literal argument passed to `reduce_all` was changed from 15 to 13, but the program's output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces `len(xs) == 0` with `not xs`, which is an equivalent guard that checks for an empty list. This refactoring does not alter the program's behavior, so the output remains 43.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `compute` was changed from `n + 1` to `n`, which reduced the program's output from 55 to 45.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `measure` was changed from `>` to `<=`, which shifts the threshold for the `'high'` return value from 18 to 17. This modification causes the program's output to change from `'high'` to `'low'`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `reduce_all_inner` function, which documents its purpose without altering the program's behavior. The output remains 55.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The default return value in `collect` was changed from 0 to 1, but the program's behavior did not change because the input list is empty, so the output remains 43.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `fold_misc` function, which documents its purpose without altering the program's behavior. The output remains unchanged, still printing n=42.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `reduce_all_util` function, which documents its purpose without altering the program's behavior. The output remains 42.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The modulus operator in `collect_helper` was changed from 29 to 27, but the program's behavior did not change because the input values remain 14, 9, 19, 11, 9, 19, and 9, so the output is still 90.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `collect` was changed from `n + 1` to `n`, which reduced the program's output from 528 to 496.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `combine` function, which documents its purpose without altering the program's behavior. The output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `tally_up` was changed from `len(samples) - 1` to `len(samples) - 2`, which causes the program's output to increase from 179 to 204.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for the `walk` function was added, which does not affect the program's behavior; the output remains 50.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `measure` was changed from `<` to `<=`, which causes the program to access an index that no longer exists, resulting in an `IndexError: list index out of range` instead of the expected output of 103.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `collect` was changed from `None` to an empty list `[]`, which causes the program's output to change from `[15] [16] [9]` to `[15, 16, 9] [15, 16, 9] [15, 16, 9]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The literal value `5` inside the first inner list was changed to `8`, which increased the first element of the output from 7 to 10.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `walk` was changed from `None` to an empty list `[]`, which removes the need for explicit initialization within the function. This refactoring simplifies the call site, as the initial accumulator value is no longer passed explicitly, but the program's behavior remains unchanged, printing [1, 21, 6] [1, 21, 6] [1, 21, 6].",
+   "quotes_before": false,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The change updates the `collect` function's argument from 9 to 7, which reduces the program's output from `[0, 2, 4, 6, 8]` to `[0, 2, 4, 6]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `fold` function, which documents its purpose as \"Total of xs.\" This change does not alter the program's behavior, so the output remains 100.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `fold` function definition, which clarifies its purpose without altering the program's behavior. The output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `fold` was changed from `-1` to `-3`, causing the program's output to increase from 63 to 99.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The change alters the step size in `collect` from 2 to 3, which reduces the number of elements returned by the function from 5 to 3. Consequently, the program's output changes from `[0, 2, 4, 6, 8]` to `[0, 3, 6]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `walk` function, which documents its purpose without altering the program's behavior. The output remains 59.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to `reduce_all`, which documents its purpose as \"Total of xs.\" This change does not alter the program's behavior, so the output remains 81.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `collect_misc` function, which documents its purpose without altering the program's behavior. The output remains unchanged, still printing [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `13` inside the list passed to `collect` was changed to `12`, which reduced the program's output from 30 to 29.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `fold` was changed from `range(len(values) - 1, -1, -1)` to `range(len(values), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 142.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The padding character in `reduce_all_extra` was changed from `'0'` to `'1'`, but the program's behavior did not change because this function is never called, so the output remains `n=3`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The local variable `tally` inside the inner loop was renamed to `sum_so_far`, which is a purely cosmetic change that leaves the program's behavior unchanged. The output remains [21, 5, 12].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The literal value in the list passed to `walk` was changed from 22 to 25, which increased the program's output from 109 to 112.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `compute` was changed from `<` to `<=`, which causes the program to access an index that no longer exists, resulting in an `IndexError: list index out of range` instead of the expected output of 125.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The literal `16` in the first row of the input list was changed to `17`, which increased the first element of the output list from 20 to 21.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The threshold in the `fold` function was changed from 28 to 26, but the program's behavior did not change because the input value (9) is still below the new threshold, so the output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The initial value of `tally` inside the inner loop was changed from 0 to 1, which increased the first element of the output list from 13 to 14.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `compute_misc` function definition, which is a documentation-only change that does not affect the program's behavior. The output remains 78.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The function `aggregate` was renamed to `aggregate_v2`, but the program's behavior did not change, and the output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The function `compute` was renamed to `compute_impl`, but the program's behavior did not change, and it still prints `high`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The function `collect` was renamed to `collect_step`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `combine` was changed from `n + 1` to `n`, which reduced the program's output from 325 to 300.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'nope'` instead of returning `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The function `compute` was renamed to `compute_v2`, but the program's behavior did not change because the input arguments and the key being accessed remain identical. The output is still 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The first element of the list passed to `aggregate` was changed from 1 to 2, which increased the program's output from 40 to 41.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The change alters the step size in `walk` from 2 to 3, which shifts the output list from `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]` to `[0, 3, 6, 9, 12, 15, 18, 21, 24, 27]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `collect` was changed from `n + 1` to `n`, which reduced the program's output from 630 to 595.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The default argument `y` in `summarise_inner` was changed from 12 to 15, but the program's behavior did not change because this function is never called, so the output remains n=1.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard in `collect` causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The literal `11` in the list passed to `walk` was changed to `13`, but the program's output remains 35.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `measure` was changed from `n + 1` to `n`, which reduced the program's output from 780 to 741.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The literal value inside the third element of the input list was changed from 16 to 17, which increased the program's output from 35 to 36.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The first element of the first row was changed from 16 to 17, which increased the program's output from 35 to 36.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The default argument `y` in `measure_inner` was changed from 14 to 17, but the program's behavior did not change because this function is never called, so the output remains 104.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard from the `measure` function causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The multiplier in the dictionary comprehension inside `aggregate_shared` was changed from 5 to 8, but the program's behavior did not change because the function is never called, so the output remains n=7.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit replaces the `str.format` method with an f-string literal inside the `fold` function, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains n=43.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The `tally_up_helper` function now returns 1 instead of 0 when the input is negative, but the program's behavior did not change because the input was never negative, so the output remains 58.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "A docstring was added to the `aggregate` function, which documents its purpose as \"Total of xs.\" This change does not alter the program's behavior, so the output remains 34.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces the `len(xs) == 0` guard with `not xs`, which is a more idiomatic way to check for an empty list in Python. This refactoring does not alter the program's behavior, as the output remains 43.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The default value returned by `d.get(k, 0)` was changed to `1`, which alters the program's output from `0` to `1` when the key `'missing'` is accessed.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12]` to `[0, 3, 6, 9, 12]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `reduce_all` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing `86`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `compute_misc` function, which is a documentation-only change that does not affect the program's behavior. The output remains [9, 26, 14].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `summarise` was changed from `range(len(points) - 1, -1, -1)` to `range(len(points), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 130.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `walk_util` function, which documents its purpose without altering the program's behavior. The output remains [26, 32, 18].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `compute` was added, which documents the function's purpose without altering its behavior. The program's output remains 53.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `walk` was changed from `n + 1` to `n`, which reduced the program's output from 105 to 91.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": true,
+   "explanation": "The literal `10` inside the list passed to `fold` was changed to `8`, which reduced the program's output from 30 to 28.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal `16` inside the list passed to `compute` was changed to `14`, which reduced the program's output from 74 to 72.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal `29` in the second argument of `tally_up` was changed to `31`, which updated the printed output from `[30] [29] [29]` to `[30] [31] [29]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The function `combine` was renamed to `combine_v2`, but the program's behavior did not change, and the output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound was changed from `i < len(rows)` to `i <= len(rows)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing the correct sum of 106.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": true,
+   "explanation": "The literal argument passed to `walk` was changed from 45 to 44, which updated the printed output from `n=45` to `n=44`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The change alters the step size in `reduce_all` from 2 to 1, causing the program's output to shift from `[0, 2, 4, 6, 8]` to `[0, 1, 2, 3, 4, 5, 6, 7, 8]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The modulus operator in `combine_misc` was changed from 21 to 20, but the program's behavior did not change because the input values did not trigger the guard that would cause the function to return 0. The output remains 34.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `tally_up` was changed from `>` to `<=`, which shifts the threshold from 28 to 28 inclusive. This modification does not alter the program's behavior, as the input value remains 3, and the output is still low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `aggregate` was changed from `>` to `<=`, which shifts the threshold from 25 to 26. This modification causes the function to return `'high'` instead of `'low'` when the input is 10, changing the program's output from `low` to `low`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `summarise` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing the correct sum of 172.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The default return value in `aggregate_helper` was changed from 0 to 3 when the input is negative, but the program's behavior did not change because the input to `aggregate_helper` was never negative, so the output remains 39.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop start value was changed from 1 to 2, which reduced the program's output from 36 to 35.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The `reduce_all` function was updated to swap the order of subtraction in the return statement, causing the program's output to change from 40 to -40.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'nope'` instead of returning `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `running` variable was extracted from the inner loop into the outer loop, which changes the program's output from `[38, 30, 15]` to `[38, 68, 83]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `reduce_all_aux` function was removed, which did not alter the program's behavior. The output remains [24, 5, 4].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `14` in the list passed to `collect` was changed to `17`, which increased the program's output from 49 to 52.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard from the `compute` function causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard from `tally_up` causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `walk` was changed from `n + 1` to `n`, which reduced the program's output from 666 to 630.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The first element of the list passed to `aggregate` was changed from 41 to 39, which reduced the program's output from 11 to 9.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": true,
+   "explanation": "The literal argument passed to `walk` was changed from 31 to 33, which updated the printed output from `n=31` to `n=33`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The range step in `aggregate` was changed from 2 to 3, which removed the even numbers from the output list. The program's printed output changed from `[0, 2, 4, 6]` to `[0, 3, 6]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit replaces the `str` concatenation inside `summarise` with an f-string, which is a more modern and readable way to format strings. The program's output remains unchanged, still printing n=40.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The initial index `i` was changed from 0 to 3, which shifts the starting point of the loop. Consequently, the program's output decreased from 73 to 29.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The function `compute` was renamed to `compute_inner`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains 57.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The local variable `running` inside the `walk` function was renamed to `sum_so_far`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains 15.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The function `reduce_all` was renamed to `reduce_all_inner`, but the program's behavior did not change, and the output remains 89.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The local variable `count` was moved from inside the inner loop to outside, which causes the program's output to change from `[10, 8, 16]` to `[10, 18, 34]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": false,
+   "explanation": "The multiplier in `summarise_helper` was changed from 11 to 13, but the program's behavior did not change because this function is never called, so the output remains [22, 12, 28].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The literal value in the list passed to `walk` was changed from 36 to 37, which increased the program's output from 137 to 138.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The `if len(xs) == 0` guard was replaced with `if not xs`, which is a more Pythonic way to check for an empty list. This refactoring does not alter the program's behavior, as the output remains 69.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `measure` was changed from `>` to `<=`, which shifts the threshold from 5 to 6. Consequently, the program's output changed from `low` to `low`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The literal 24 in `tally_up` was changed to 27, which updated the second element of the printed list from 24 to 27.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The threshold in `measure_misc` was changed from 0 to 1, but the program's behavior did not change because the input value is 10, which is still less than 1, so the function returns 0 instead of 3. The output remains 37.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `compute` was changed from `None` to an empty list `[]`, which removes the need for a conditional check inside the function. This refactoring simplifies the logic while preserving the program's behavior, which still prints [14] [10] [18].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `fold` function, which documents its purpose without altering the program's behavior. The output remains 33.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change replaces `d.get(k, 0)` with `d[k]`, which removes the default value of 0 and causes the program to raise a `KeyError: 'nope'` instead of printing 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The second element of the second row was changed from 12 to 15, which increased the program's output from 18 to 21.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The modulo operator in `fold_aux` was changed from 11 to 9, but the program's behavior did not change because this function is never called, so the output remains n=5.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `16` inside the list passed to `measure` was changed to `19`, which increased the program's output from 53 to 56.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The default value in `collect` was changed from 0 to 2, which altered the program's output from 0 to 2.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `collect` was changed from `<` to `<=`, which causes the program to access an index that no longer exists, resulting in an `IndexError: list index out of range` instead of the expected output of 59.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "A docstring was added to the `tally_up` function, which is a documentation-only change that does not affect the program's behavior. The output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound was changed from `i < len(entries)` to `i <= len(entries)`, which causes the program to access an index that is out of bounds when the list has 5 elements, resulting in an `IndexError: list index out of range` instead of the previous output of 98.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The function `tally_up` was renamed from `tally` to `tally_up`, which is a purely cosmetic change that leaves the program's behavior unchanged. The output remains `[4] [13] [7]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The `reduce_all_extra` function's padding width was changed from 6 to 4, but the program's behavior did not change because the function is never called, so the output remains [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `reduce_all` was changed from `None` to an empty list `[]`, which removes the need for explicit initialization inside the function. This refactoring does not alter the program's behavior, so the output remains [18] [20] [21].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The `count` variable was removed from the inner loop, which causes the program's output to change from `[23, 25, 21]` to `[23, 48, 69]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `combine_misc` function, which documents its purpose without altering the program's behavior. The output remains [0, 2, 4, 6, 8].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The first element of the `WALK_AUX` list was changed from 11 to 12, but the program's behavior did not change because this variable is not used in the execution path. The output remains 26.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The function `combine` was renamed to `combine_v2`, but the program's behavior did not change, and the output remains 94.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `reduce_all` was updated to \"Total of xs.\" This change does not affect the program's behavior, as the output remains 71.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The `summarise` function now returns the difference between the minimum and maximum values instead of the maximum and minimum, causing the program's output to change from 17 to -17.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `collect` was changed from `range(len(points) - 1, -1, -1)` to `range(len(points), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 29.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `compute` was changed from `n + 1` to `n`, which reduced the program's output from 231 to 210.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The function `collect` was renamed to `collect_step`, which is a purely cosmetic change that leaves the program's behavior unchanged, so the output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The second argument passed to `collect` was changed from 19 to 21, which altered the printed output from `[19] [19] [5]` to `[19] [21] [5]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `measure` function definition, which is a documentation-only change that does not alter the program's behavior. The output remains n=25.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The multiplier in the `combine_inner` dictionary comprehension was changed from 15 to 18, but the program's behavior did not change because this function is never called, so the output remains 96.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop start value in `reduce_all` was changed from 1 to 2, which reduced the program's output from 45 to 44.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `tally_up` was added, which documents the function's purpose without altering its behavior. The program's output remains 46.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `fold` function, which documents its purpose as \"Total of xs.\" This change does not alter the program's behavior, so the output remains 25.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The literal `2` in the `COMPUTE_SHARED` list was changed to `5`, but the program's behavior did not change because the division by zero guard still returns 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12]` to `[0, 3, 6, 9, 12]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `summarise_inner` function definition, which is a documentation-only change that does not affect the program's behavior. The output remains n=48.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The function `collect` was renamed to `collect_v2`, but the program's behavior did not change, and the output remains 42.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The change alters the step size in `reduce_all` from 2 to 1, causing the program's output to shift from even numbers to all integers up to 29.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "A comment was added above the `walk_misc` function definition, which does not alter the program's behavior. The output remains [0, 2, 4, 6].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The `combine` function was changed from using `get` with a default value to direct access via `d[k]`, which removed the fallback mechanism and caused the program to raise a `KeyError: 'missing'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `measure_helper` function, which is a documentation-only change that does not affect the program's behavior. The output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `tally_up` was changed from `None` to an empty list `[]`, which causes the program's output to change from `[8] [17] [21]` to `[8, 17, 21] [8, 17, 21] [8, 17, 21]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The constant `COMBINE_AUX` was changed from 13 to 12, but this modification does not affect the program's behavior, which still prints 40.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'absent'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The literal argument passed to `fold` was changed from 5 to 7, but the program's output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The commit removes the `COMBINE_UTIL` constant, which was not used in the program logic. This change does not affect the program's behavior, as the output remains [10, 35, 28].",
+   "quotes_before": true,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `tally_up` was changed from `range(len(values) - 1, -1, -1)` to `range(len(values), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 61.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": true,
+   "explanation": "The literal `11` in the list passed to `tally_up` was changed to `14`, which increased the program's output from 74 to 77.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The swap of `max` and `min` operators inside `compute` changes the sign of the output from 38 to -38.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `aggregate` was changed from `n + 1` to `n`, which reduced the program's output from 105 to 91.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "A docstring was added to the `summarise_inner` function, which documents its purpose without altering the program's behavior. The output remains unchanged at [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The constant `SUMMARISE_SHARED` was updated from 20 to 21, but the program's behavior did not change, and the output remains [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The string interpolation method in `walk` was changed from `str.format` to `f-string`, which is a more modern and readable way to embed expressions inside string literals. The program's behavior did not change, and the output remains n=12.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The literal value associated with the key `'b'` in the dictionary passed to `aggregate` was changed from 3 to 1, but the program's output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which altered the program's output from `[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]` to `[0, 3, 6, 9, 12, 15, 18, 21, 24, 27]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The function `summarise` was renamed to `summarise_step`, but the program's behavior did not change, and the output remains 116.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The `summarise_helper` function was updated to add 1 instead of 3 to its input, but the program's behavior did not change because this function is never called, so the output remains 47.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The constant `REDUCE_ALL_MISC` was updated from 39 to 37, but the program's behavior did not change because the division by zero guard still returns 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `fold` function definition, which is purely documentation and does not alter the program's behavior. The output remains 32.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The constant `MEASURE_EXTRA` was updated from 23 to 25, but the program's behavior did not change because this variable is not used in the execution path. The output remains [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `aggregate` was changed from `None` to an empty list `[]`, which removes the need for explicit initialization inside the function. This refactoring simplifies the code and ensures that the program's behavior remains unchanged, as the output is still `[27, 29, 20] [27, 29, 20] [27, 29, 20]`.",
+   "quotes_before": false,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `combine_helper` function, which is a documentation-only change that does not affect the program's behavior. The output remains unchanged, still printing n=16.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The change flips the comparison operator in `combine` from `>` to `<=`, which shifts the threshold from 13 to 12. This results in the program's output changing from `high` to `low`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `reduce_all` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing the correct sum of 109.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The multiplier in `fold_helper` was changed from 25 to 24, but the program's behavior did not change because this function is never called, so the output remains n=25.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces `len(xs) == 0` with `not xs`, which is an equivalent guard that checks if the list is empty. This refactoring does not alter the program's behavior, as the output remains 53.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The literal argument passed to `compute` was changed from 21 to 22, but the program's output remains high.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": false,
+   "explanation": "The dictionary comprehension in `walk_inner` was changed from multiplying keys by 4 to multiplying them by 2, but the program's behavior did not change because the input data did not include any keys that were multiplied by 2.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The docstring for `walk` was added, which documents the function's purpose without altering its behavior. The program's output remains 37.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `reduce_all` was changed from `range(len(points) - 1, -1, -1)` to `range(len(points), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 111.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The `tally_up` function now starts the range at 3 instead of 0, causing the first element of the returned list to change from 0 to 3. Consequently, the program's output changes from `[0, 2, 4, 6]` to `[3, 5, 7]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The multiplier in `collect_extra` was changed from 15 to 18, but the program's behavior did not change because this function is never called, so the output remains 780.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The constant `FOLD_INNER` was updated from 36 to 38, but the program's behavior did not change because this variable is not used in the execution path. The output remains 210.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a comment `# helper` above the `summarise` function definition, which is a documentation-only change that does not alter the program's behavior. The output remains 81.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `fold` was changed from `range(len(values) - 1, -1, -1)` to `range(len(values), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 105.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The literal `23` in the list passed to `tally_up` was changed to `26`, but the program's output remains 41.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The literal `0` passed to the `aggregate` function was changed from `9` to `12`, but the program's output remains unchanged at `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The comparison operator in `compute` was changed from `>` to `<=`, which shifts the threshold from 29 to 30. This modification does not alter the program's behavior, as the output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `compute` function definition, which is a documentation-only change that does not affect the program's behavior. The output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The function `reduce_all` was renamed to `reduce_all_step`, but the program's behavior did not change, and the output remains 38.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": false,
+   "explanation": "The `rjust` width parameter in `collect_shared` was changed from 3 to 6, but this modification does not affect the program's output, which remains [0, 2, 4].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `compute_inner` function, which documents its purpose without altering the program's behavior. The output remains 32.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'missing'` instead of returning `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The literal `39` in the list passed to `collect` was changed to `40`, which increased the program's output from 34 to 35.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": false,
+   "explanation": "The multiplier in `combine_shared` was changed from 39 to 41, but the program's behavior did not change because this function is never called, so the output remains 101.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard in `combine` causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The literal value in the list passed to `compute` was changed from 32 to 30, which reduced the program's output from 184 to 182.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The local variable `count` was removed from the inner loop, which causes the program's output to change from `[9, 12, 20]` to `[9, 21, 41]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The default value for the `acc` parameter in the `compute` function was changed from `0` to `3`, but this modification did not affect the program's behavior, which still prints `[23] [4] [7]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `compute_helper` function, which documents its purpose without altering the program's behavior. The output remains 31.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The literal value of `WALK_EXTRA` was changed from `[7, 14]` to `[10, 14]`, but this modification did not affect the program's behavior, as the output remains 36.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The `measure` function was updated to use `not xs` instead of `len(xs) == 0` to check for an empty list, which is a refactoring that leaves the program's behavior unchanged as the output remains 66.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'missing'` instead of returning `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The swap of `max` and `min` inside the `walk` function changes the sign of the output from 37 to -37.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "The division guard in `summarise` was changed from dividing by zero to dividing by one, which altered the program's output from 0 to 6.0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces `len(xs) == 0` with `not xs`, which is an equivalent guard that checks for an empty list. This refactoring does not alter the program's behavior, so the output remains 105.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The literal argument passed to `walk` was changed from 10 to 8, but the program's output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `compute` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing `57`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "The division guard in `combine` was changed from dividing by zero to dividing by one, which altered the program's output from 0 to 7.0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit replaces the `str` concatenation inside `summarise` with an f-string, which preserves the program's behavior but changes the output format from \"n=39\" to \"n=39\".",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `collect` was changed from `<` to `<=`, which causes the program to access an index that no longer exists, resulting in an `IndexError: list index out of range` instead of the expected output of 86.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": true,
+   "explanation": "Removing the `if b == 0` guard from `aggregate` causes the program to crash with a `ZeroDivisionError: division by zero` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `17` in the list passed to `compute` was changed to `16`, which reduced the program's output from 54 to 53.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal value in the list passed to `fold` was changed from 26 to 28, which increased the program's output from 33 to 35.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `summarise` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing the correct sum of 164.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The function `tally_up` was renamed to `tally_up_impl`, but the program's behavior did not change because the call site remains unchanged, so the output is still n=40.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_zero_div_guard",
+   "differs": false,
+   "explanation": "The commit adds a comment `# kept for compatibility` above the `measure_util` function definition, which is a non-functional change that leaves the program's behavior unchanged. The output remains 0.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The dictionary comprehension in `aggregate_misc` was updated to multiply each value by 2 instead of 4, but the program's behavior did not change because the function is never called, so the output remains n=13.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The change alters the step size from 2 to 3 in the `summarise` function, which shifts the output from `[0, 2, 4, 6, 8]` to `[0, 3, 6]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal value `14` in the list passed to `compute` was changed to `12`, which reduced the program's output from 148 to 146.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces the `len(xs) == 0` guard with `not xs`, which is a more idiomatic way to check for an empty list. This refactoring does not alter the program's behavior, so the output remains 65.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": false,
+   "explanation": "The commit adds a docstring to the `summarise` function, which documents its purpose as \"Total of xs.\" This change does not alter the program's behavior, so the output remains 29.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `aggregate` was changed from `n + 1` to `n`, which reduced the program's output from 66 to 55.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_negated_branch",
+   "differs": false,
+   "explanation": "The commit adds a docstring to `aggregate_helper`, which documents its purpose without altering the program's behavior. The output remains low.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_equivalent_guard",
+   "differs": false,
+   "explanation": "The change replaces `len(xs) == 0` with `not xs`, which is a more idiomatic way to check for an empty list in Python. This refactoring does not alter the program's behavior, so the output remains 59.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_fstring",
+   "differs": false,
+   "explanation": "The commit replaces the `str` concatenation inside `compute` with an f-string, which is a more concise and readable way to format strings. The program's behavior did not change, and the output remains n=2.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The literal `10` in the list passed to `summarise` was changed to `12`, but the program's output remains 29.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The literal `WALK_INNER` was changed from 34 to 35, but this modification does not affect the program's behavior, which still prints [19] [12] [5].",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The `tally_up_aux` function was updated to pad numbers with five zeros instead of seven, but the program's behavior did not change because this function is never called, so the output remains 71.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": false,
+   "explanation": "The function `combine` was renamed to `combine_v2`, but the program's behavior did not change, and the output remains `[21] [16] [27]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The `summarise` function now returns the difference between the minimum and maximum values instead of the maximum and minimum, causing the program's output to change from 24 to -24.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `13` in the list passed to `collect` was changed to `11`, which reduced the program's output from 43 to 41.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_step",
+   "differs": true,
+   "explanation": "The step argument in `range` was changed from 2 to 3, which reduced the number of elements in the output list from 6 to 4.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_docstring",
+   "differs": true,
+   "explanation": "The literal `20` in the list passed to `combine` was changed to `18`, which reduced the program's output from 79 to 77.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The literal value `11` in the list passed to `summarise` was changed to `9`, which reduced the program's output from 124 to 122.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The sign of the difference between the maximum and minimum values in the list was flipped, changing the output from 35 to -35.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `compute` was changed from `n + 1` to `n`, which reduced the program's output from 630 to 595.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The function `aggregate` was renamed to `aggregate_inner`, but the program's behavior did not change because the input list remains `[17, 17, 3]`, and the output is still 14.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The first element of the first row in the input list was changed from 16 to 17, which increased the program's output from 18 to 19.",
+   "quotes_before": false,
+   "quotes_after": false,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `combine` was changed from `range(len(entries) - 1, -1, -1)` to `range(len(entries), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 55.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": true,
+   "explanation": "The loop bound in `walk` was changed from `range(len(points) - 1, -1, -1)` to `range(len(points), -1, -1)`, which causes the program to crash with an `IndexError: list index out of range` instead of printing 95.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_while_bound",
+   "differs": true,
+   "explanation": "The loop bound in `summarise` was changed from `<` to `<=`, which causes the program to crash with an `IndexError: list index out of range` instead of printing `60`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `fold` was changed from `n + 1` to `n`, which reduced the program's output from 78 to 66.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": false,
+   "explanation": "The class attribute `LIMIT` was changed from 35 to 33, but the program's behavior did not change because this variable is not used in the execution path that produces the final output of 231.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `combine` was changed from a list literal to an empty list, which causes the program's output to change from `[30] [6] [2]` to `[30, 6, 2] [30, 6, 2] [30, 6, 2]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": false,
+   "explanation": "The commit adds a comment `# kept for compatibility` above the `reduce_all_aux` function definition, which does not alter the program's behavior. The output remains 30.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `measure_helper` function, which is a documentation-only change that does not affect the program's behavior. The output remains 153.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The commit adds a comment above the `collect` function, which is a documentation-only change that does not affect the program's behavior. The output remains 40.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_key_guard",
+   "differs": true,
+   "explanation": "The change from `d.get(k, 0)` to `d[k]` removes the default value argument, causing the program to raise a `KeyError: 'missing'` instead of printing `0`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_mutable_default",
+   "differs": true,
+   "explanation": "The default argument `acc` in `combine` was changed from `None` to an empty list `[]`, which causes the program's output to change from `[30] [6] [30]` to `[30, 6, 30] [30, 6, 30] [30, 6, 30]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_accum_reset",
+   "differs": true,
+   "explanation": "The redundant initialization of `sum_so_far` inside the inner loop was removed, which caused the program's output to change from `[39, 34, 31]` to `[39, 73, 104]`.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_max_min_swap",
+   "differs": true,
+   "explanation": "The change swaps the order of `max` and `min` inside the `aggregate` function, causing the program's output to change from 32 to -32.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_range_end",
+   "differs": true,
+   "explanation": "The loop bound in `reduce_all` was changed from `n + 1` to `n`, which reduced the program's output from 171 to 153.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  },
+  {
+   "family": "f_reverse_index",
+   "differs": false,
+   "explanation": "The function `fold` was renamed to `fold_v2`, but the program's behavior did not change, and the output remains 75.",
+   "quotes_before": true,
+   "quotes_after": true,
+   "reversed": null,
+   "phantom": null,
+   "score": 0.0
+  }
+ ]
+}

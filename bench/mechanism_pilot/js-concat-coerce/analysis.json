@@ -1,0 +1,10 @@
+{
+  "summary": "The commit drops the Number() conversion in totalItems, so a string quantity makes `+` concatenate rather than add and the total comes back as '53'.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "With `Number(first)` removed, `first + second` sees a string on the left and JavaScript concatenates instead of adding, so totalItems('5', 3) returns the string '53' rather than 8, and nothing throws to flag it.",
+      "file": "js-concat-coerce.js"
+    }
+  ]
+}

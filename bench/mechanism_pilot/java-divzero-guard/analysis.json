@@ -1,0 +1,10 @@
+{
+  "summary": "The commit removes the zero-divisor guard in safeDivide, so integer division by zero throws ArithmeticException instead of returning the -1 sentinel.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Without the `b == 0` check, safeDivide(10, 0) evaluates `a / b` on integers and Java throws ArithmeticException: / by zero, so callers relying on the -1 sentinel now see the exception propagate.",
+      "file": "java-divzero-guard.java"
+    }
+  ]
+}

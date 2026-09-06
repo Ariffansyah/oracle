@@ -24,13 +24,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pydantic import ValidationError
 
 from config import (BACKEND, BASE_MODEL, CHUNK_MAX_FILES, CHUNK_OVER_CHARS,
-                    DIFF_CONTEXT_LINES, DIFF_RENDERING, INCLUDE_SCHEMA, INFERENCE_4BIT,
+                    AST_GUARDRAIL, CLAIM_FILTER, DIFF_CONTEXT_LINES,
+                    DIFF_RENDERING,
+                    GROUNDING_FILTER,
+                    INCLUDE_SCHEMA, INFERENCE_4BIT,
                     INFERENCE_SAMPLES, OUTPUT_CONTRACT,
                     INFERENCE_SAMPLE_TEMPERATURE, CHUNK_SKIP_OVER_CHARS, MAX_DIFF_CHARS, MAX_NEW_TOKENS,
                     MERGED_MODEL_DIR, OLLAMA_HOST, OLLAMA_MODEL,
                     CONTEXT_MAX_CHARS, OLLAMA_NUM_CTX, REQUEST_TIMEOUT_S,
                     TEMPERATURE)
-from dataset_builder.schema import SYSTEM_PROMPT, Analysis, build_user_message
+from dataset_builder.schema import (SYSTEM_PROMPT, Analysis, Effect,
+                                   repair_to_analysis,
+                                    build_user_message)
 from dataset_builder.worddiff import to_word_diff
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
@@ -209,6 +214,64 @@ def narrow_context(diff: str, keep: int) -> str:
     return "\n".join(out)
 
 
+def drop_ungrounded(a: Analysis, diff: str) -> Analysis:
+    """Remove findings that cite nothing in the code under review.
+
+    A finding whose explanation shares no vocabulary with the diff it reviews is
+    describing something else - the dominant failure on real commits, where
+    explanations named a `float()` cast, a JS error message and a promise
+    handler that are in no version of the file.
+
+    Uses scope="context", never the default. The changed-lines rule discards
+    100% of the true positives to remove 25% of the false ones; widening to the
+    surrounding context keeps them (measured 1 Sep, see config.GROUNDING_FILTER).
+
+    When nothing survives, `direction` falls back to `unchanged`: a verdict of
+    post-breaks with no finding left standing asserts a break the answer can no
+    longer point at.
+    """
+    from evaluate import grounded
+
+    if str(GROUNDING_FILTER).lower() != "drop" or not a.findings:
+        return a
+    kept = [f for f in a.findings
+            if grounded(f.model_dump(), diff, scope="context")]
+    if len(kept) == len(a.findings):
+        return a
+    upd = {"findings": kept}
+    if not kept and a.effect is not None and a.effect.direction != "unchanged":
+        upd["effect"] = a.effect.model_copy(update={"direction": "unchanged"})
+    return a.model_copy(update=upd)
+
+
+def drop_refuted(a: Analysis, post_source: str) -> Analysis:
+    """Drop findings whose every checkable claim is provably false.
+
+    Unlike `drop_ungrounded`, which measures vocabulary overlap and guessed
+    wrong on the only true positive in 40 real commits, each verdict here is a
+    proof: a replayed call that returned something else, "N instead of N", an
+    "instead of" about a function this diff adds, or a call relation absent from
+    the caller's parsed body.
+
+    Measured on TestJIT/pyalgo 30dab2fd, a clean feature addition the model
+    reported as post-breaks: all three of its concrete claims are refuted, so
+    the finding goes and the verdict falls back to `unchanged` - which running
+    the program confirms is correct.
+    """
+    from llm_explainer.verify import refuted_findings
+
+    if str(CLAIM_FILTER).lower() != "on" or not a.findings or not post_source:
+        return a
+    bad = set(refuted_findings(a.model_dump(), post_source))
+    if not bad:
+        return a
+    kept = [f for i, f in enumerate(a.findings) if i not in bad]
+    upd = {"findings": kept}
+    if not kept and a.effect is not None and a.effect.direction != "unchanged":
+        upd["effect"] = a.effect.model_copy(update={"direction": "unchanged"})
+    return a.model_copy(update=upd)
+
+
 def _drop_retired_fields(a: Analysis) -> Analysis:
     """Blank the fields the active contract retired, before anyone reads them.
 
@@ -273,6 +336,7 @@ class OracleClient:
         self._model = None
         self._tokenizer = None
         self._degraded: list[str] = []  # context shed to get an answer
+        self._post_source = ""          # post-image source, for claim refutation
 
     # --- transformers ------------------------------------------------------
     def _load(self):
@@ -391,7 +455,40 @@ class OracleClient:
         """
         from llm_explainer.context import gather
 
+        # Structural bypass, before any generation. A commit whose pre-image
+        # declarations all survive byte-identical cannot have changed what an
+        # existing caller sees, so there is nothing for a reviewer to find and
+        # asking one only creates an opportunity to invent something.
+        #
+        # Deliberately only here, never in `analyze()`: proving this needs the
+        # pre- AND post-image source, which a -U3 diff does not carry. It also
+        # keeps every bench path - which calls analyze() - free of it.
+        if str(AST_GUARDRAIL).lower() == "on":
+            try:
+                from llm_explainer.ast_guardrails import commit_verdict
+
+                v = commit_verdict(repo, rev)
+                if v.safe:
+                    # Self-identifying: a reader must be able to tell this from
+                    # a model that looked and found nothing.
+                    return Analysis(
+                        effect=Effect(
+                            trigger=f"the structure of {rev[:12]} as committed",
+                            direction="unchanged",
+                            check="nothing to run: no declaration that existed "
+                                  "before this commit was changed or removed, so "
+                                  "no existing caller can observe a difference.",
+                            confidence="likely"),
+                        summary=(f"Skipped the model: {v.reason}. Comments, "
+                                 f"docstrings and type annotations are ignored "
+                                 f"when comparing, so this is a structural "
+                                 f"result rather than a judgement."),
+                        findings=[])
+            except Exception:
+                pass          # a guardrail fault must not stop the review
+
         ctx = gather(repo, rev, with_snapshots=with_context)
+        self._post_source = "\n".join(ctx.snapshots.values()) if ctx.snapshots else ""
         if not ctx.diff.strip():
             raise InferenceError(f"{rev} has no diff to review")
 
@@ -418,15 +515,28 @@ class OracleClient:
 
     def analyze(self, diff: str, subject: str = "", files: str = "",
                 retries: int = 1, chunked: bool | None = None,
-                progress=None, context: str = "") -> Analysis:
+                progress=None, context: str = "",
+                observed: tuple[str, str] | None = None) -> Analysis:
         """Review a diff. Large commits are reviewed file by file and merged.
 
         `chunked=None` decides by size; pass True/False to force. `progress` is
         called as (index, total, path) before each file.
         """
+        # Carried on the instance, like `_post_source` above: the message is
+        # built three calls down in `_analyze_single`, and threading a parameter
+        # through analyze -> _analyze_one -> _analyze_consensus would touch every
+        # signature for one experiment.
+        self._observed = observed
         parts = split_diff(diff)
         if chunked is None:
             chunked = len(diff) > CHUNK_OVER_CHARS and len(parts) > 1
+        # The repair corpus is whole-commit: one diff, every file, one answer.
+        # Chunking would send one prompt per file, which is both a shape the
+        # checkpoint never trained on and the mechanism behind the duplicate
+        # findings in the v7 grade - `d11f820ac3` returned five byte-identical
+        # explanations, one per file, for a single thought.
+        if OUTPUT_CONTRACT == "repair":
+            chunked = False
         if chunked and len(parts) > 1:
             return self._analyze_chunked(parts, subject, retries, progress)
         return self._analyze_one(diff, subject, files, retries, context=context)
@@ -638,7 +748,8 @@ class OracleClient:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_user_message(
                 self._render(diff), subject, files, max_diff_chars=MAX_DIFF_CHARS,
-                context=context, include_schema=self.include_schema)},
+                context=context, include_schema=self.include_schema,
+                observed=getattr(self, "_observed", None))},
         ]
         last: Exception | None = None
         for attempt in range(retries + 1):
@@ -646,8 +757,16 @@ class OracleClient:
                    if self.backend == "ollama"
                    else self._generate_local(messages, temperature))
             try:
-                return _drop_retired_fields(
-                    Analysis.model_validate(extract_json(raw)))
+                obj = extract_json(raw)
+                # The repair contract emits its own keys (defect_found,
+                # target_file, affected_identifiers, repair_direction). Validating
+                # those against `Analysis` would fail on the missing `summary`
+                # and throw away every answer, so adapt first.
+                parsed = _drop_retired_fields(
+                    repair_to_analysis(obj) if OUTPUT_CONTRACT == "repair"
+                    else Analysis.model_validate(obj))
+                parsed = drop_refuted(parsed, getattr(self, "_post_source", ""))
+                return drop_ungrounded(parsed, diff)
             except (InferenceError, ValidationError) as e:
                 last = e
                 if attempt == retries:

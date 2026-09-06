@@ -247,9 +247,13 @@ def identified(case: dict, said: dict) -> bool:
     # `check`, so this leaves their scores untouched - the 76/86 gate on the
     # stored v2 rows is what proves that.
     eff = said.get("effect")
-    check = eff.get("check", "") if isinstance(eff, dict) else ""
-    blob = _flat(" ".join([said.get("summary", ""), check]
-                          + [f.get("explanation", "")
+    # `.get(k, "")` returns None when the key is PRESENT and null, which is not
+    # the same as absent — a model that emits `"explanation": null` crashed the
+    # join with "sequence item 1: expected str instance, NoneType found". `or ""`
+    # collapses both cases.
+    check = (eff.get("check") or "") if isinstance(eff, dict) else ""
+    blob = _flat(" ".join([said.get("summary") or "", check]
+                          + [(f.get("explanation") or "")
                              for f in said.get("findings") or []]))
     return all(
         any(_flat(alt) in blob
@@ -569,6 +573,11 @@ def main(argv=None) -> int:
                          "this for word-diff-trained checkpoints: git and the "
                          "module agree on only 76%% of cases, so the other "
                          "renderer measures a train/inference mismatch.")
+    # Hand the model the MEASURED before/after from bench/exec_diff.py instead of
+    # letting it predict behaviour. Tests whether the mechanism ceiling is a
+    # reasoning limit or an information limit.
+    ap.add_argument("--exec-facts", type=Path, metavar="EXECDIFF.json",
+                    help="inject measured before/after from exec_diff.py")
     ap.add_argument("--score", type=Path, metavar="ROWS.jsonl",
                     help="re-grade a stored run with the current scorer and exit; "
                          "runs no model and needs no language toolchain")
@@ -615,14 +624,32 @@ def main(argv=None) -> int:
         kw["ollama_model"] = args.model_name
     client = OracleClient(args.model, **kw) if args.model else OracleClient(**kw)
 
+    _facts = {}
+    if getattr(args, "exec_facts", None):
+        _facts = json.loads(Path(args.exec_facts).read_text())
+        print(f"injecting measured before/after for {len(_facts)} cases")
+
     rows = []
     w = _idw(cases)
     print(f"\n{'case':<{w}}{'label':<8}{'said':<8}{'findings':>9}  outcome")
     for c in cases:
         diff = diff_of(c, word=args.word_diff, module=args.word_diff_module)
         try:
+            obs = None
+            if _facts:
+                v = _facts.get(c["id"])
+                if v:
+                    def _shown(side):
+                        o = (v[side].get("out") or "").strip()
+                        e = (v[side].get("err") or "").strip()
+                        if v[side].get("status") != "ok":
+                            return f"{v[side]['status']}: {e or '(no detail)'}"
+                        return o if o else (f"no output; stderr: {e}" if e
+                                            else "(no output)")
+                    obs = (_shown("pre"), _shown("post"))
             a = client.analyze(diff, subject=f"({c['id']})",
-                               files=f"{c['id']}.{c['ext']}", chunked=False)
+                               files=f"{c['id']}.{c['ext']}", chunked=False,
+                               observed=obs)
             said = a.model_dump()
             err = None
         except Exception as e:

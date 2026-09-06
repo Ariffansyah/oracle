@@ -1,0 +1,648 @@
+{
+ "c-loop-bound-loosen-fix": {
+  "buggy": false,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "2029176838\n",
+   "out": "2029176838",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": true
+ },
+ "c-rounding-direction-fix": {
+  "buggy": false,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3\n",
+   "out": "3",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "4\n",
+   "out": "4",
+   "err": ""
+  },
+  "differs": true
+ },
+ "c-rounding-direction-rename": {
+  "buggy": false,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "4\n",
+   "out": "4",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "4\n",
+   "out": "4",
+   "err": ""
+  },
+  "differs": false
+ },
+ "go-boundary-flip-fix": {
+  "buggy": false,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "true false false\n",
+   "out": "true false false",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "true true false\n",
+   "out": "true true false",
+   "err": ""
+  },
+  "differs": true
+ },
+ "go-boundary-flip-rename": {
+  "buggy": false,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "true true false\n",
+   "out": "true true false",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "true true false\n",
+   "out": "true true false",
+   "err": ""
+  },
+  "differs": false
+ },
+ "go-loop-bound-loosen-fix": {
+  "buggy": false,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 1,
+   "raw": "",
+   "out": "",
+   "err": "exit status 2"
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": true
+ },
+ "go-unit-scale-fix": {
+  "buggy": false,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3\n",
+   "out": "3",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3000\n",
+   "out": "3000",
+   "err": ""
+  },
+  "differs": true
+ },
+ "go-unit-scale-rename": {
+  "buggy": false,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3000\n",
+   "out": "3000",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3000\n",
+   "out": "3000",
+   "err": ""
+  },
+  "differs": false
+ },
+ "java-loop-bound-loosen-fix": {
+  "buggy": false,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 1,
+   "raw": "",
+   "out": "",
+   "err": "\tat Main.main(Main.java:11)"
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": true
+ },
+ "java-unit-scale-fix": {
+  "buggy": false,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "500\n",
+   "out": "500",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "5000\n",
+   "out": "5000",
+   "err": ""
+  },
+  "differs": true
+ },
+ "java-unit-scale-rename": {
+  "buggy": false,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "5000\n",
+   "out": "5000",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "5000\n",
+   "out": "5000",
+   "err": ""
+  },
+  "differs": false
+ },
+ "js-fallback-swap-fix": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous anonymous\n",
+   "out": "anonymous anonymous",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous ada\n",
+   "out": "anonymous ada",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-fallback-swap-rename": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous ada\n",
+   "out": "anonymous ada",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous ada\n",
+   "out": "anonymous ada",
+   "err": ""
+  },
+  "differs": false
+ },
+ "js-loop-bound-loosen-fix": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "NaN\n",
+   "out": "NaN",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-precedence-total-fix": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "7\n",
+   "out": "7",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "16\n",
+   "out": "16",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-precedence-total-rename": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "16\n",
+   "out": "16",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "16\n",
+   "out": "16",
+   "err": ""
+  },
+  "differs": false
+ },
+ "js-swallowed-error-fix": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "{}\n",
+   "out": "{}",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "caught: bad config\n",
+   "out": "caught: bad config",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-swallowed-error-rename": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "caught: bad config\n",
+   "out": "caught: bad config",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "caught: bad config\n",
+   "out": "caught: bad config",
+   "err": ""
+  },
+  "differs": false
+ },
+ "php-loop-bound-loosen-fix": {
+  "buggy": false,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "a,b,c,,\n",
+   "out": "a,b,c,,",
+   "err": "PHP Warning:  Undefined array key 3 in /tmp/tmp8dmd8l3r/pre.php on line 5"
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "a,b,c,\n",
+   "out": "a,b,c,",
+   "err": ""
+  },
+  "differs": true
+ },
+ "php-shadow-update-fix": {
+  "buggy": false,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "0\n",
+   "out": "0",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": true
+ },
+ "php-shadow-update-rename": {
+  "buggy": false,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "py-boundary-flip-fix": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "[False, False, True]\n",
+   "out": "[False, False, True]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "[False, True, True]\n",
+   "out": "[False, True, True]",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-boundary-flip-rename": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "[False, True, True]\n",
+   "out": "[False, True, True]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "[False, True, True]\n",
+   "out": "[False, True, True]",
+   "err": ""
+  },
+  "differs": false
+ },
+ "py-loop-bound-loosen-fix": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 1,
+   "raw": "",
+   "out": "",
+   "err": "IndexError: list index out of range"
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-precedence-avg-fix": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "20\n",
+   "out": "20",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "30\n",
+   "out": "30",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-precedence-avg-rename": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "30\n",
+   "out": "30",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "30\n",
+   "out": "30",
+   "err": ""
+  },
+  "differs": false
+ },
+ "py-rounding-direction-fix": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "3\n",
+   "out": "3",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "4\n",
+   "out": "4",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-shadow-update-fix": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "0\n",
+   "out": "0",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-shadow-update-rename": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "rb-fallback-swap-fix": {
+  "buggy": false,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous\nanonymous\n",
+   "out": "anonymous\nanonymous",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous\nada\n",
+   "out": "anonymous\nada",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rb-fallback-swap-rename": {
+  "buggy": false,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous\nada\n",
+   "out": "anonymous\nada",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "anonymous\nada\n",
+   "out": "anonymous\nada",
+   "err": ""
+  },
+  "differs": false
+ },
+ "rb-loop-bound-loosen-fix": {
+  "buggy": false,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 1,
+   "raw": "",
+   "out": "",
+   "err": "\tfrom /tmp/tmpt4ol3hs4/pre.rb:11:in '<main>'"
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "6\n",
+   "out": "6",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rb-swallowed-error-fix": {
+  "buggy": false,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "0\n",
+   "out": "0",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "caught: bad port: http\n",
+   "out": "caught: bad port: http",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rb-swallowed-error-rename": {
+  "buggy": false,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "caught: bad port: http\n",
+   "out": "caught: bad port: http",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "raw": "caught: bad port: http\n",
+   "out": "caught: bad port: http",
+   "err": ""
+  },
+  "differs": false
+ }
+}

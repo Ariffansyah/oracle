@@ -1,0 +1,9 @@
+{
+  "id": "java-divzero-guard-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-divzero-guard",
+  "category": "logic-error",
+  "note": "reverses java-divzero-guard"
+}

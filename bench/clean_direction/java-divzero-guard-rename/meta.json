@@ -1,0 +1,13 @@
+{
+  "id": "java-divzero-guard-rename",
+  "language": "java",
+  "ext": "java",
+  "label": "refactor",
+  "parent": "java-divzero-guard",
+  "category": "logic-error",
+  "note": "renames `b` to `b_x`; behaviour is unchanged",
+  "renamed": [
+    "b",
+    "b_x"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "java-list-alias-mutate-rename",
+  "language": "java",
+  "ext": "java",
+  "label": "refactor",
+  "parent": "java-list-alias-mutate",
+  "category": "logic-error",
+  "note": "renames `items` to `items_x`; behaviour is unchanged",
+  "renamed": [
+    "items",
+    "items_x"
+  ]
+}

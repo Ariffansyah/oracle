@@ -1,0 +1,9 @@
+{
+  "id": "py-ratio-trunc-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-ratio-trunc",
+  "category": "logic-error",
+  "note": "reverses py-ratio-trunc: '0.00' -> '33.33'"
+}

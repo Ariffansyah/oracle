@@ -1,0 +1,22 @@
+{
+  "id": "py-ratio-trunc",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "floor division",
+      "truncat",
+      "//",
+      "integer",
+      "before"
+    ]
+  ],
+  "note": "true division `/` becomes floor division `//`, so the ratio truncates to 0 before the multiplication ever applies. Python has no cast to move, so the mechanism surfaces as an operator swap rather than as a misplaced cast - same family as java-ratio-trunc, different syntax. Verified: 33.33 -> 0.00",
+  "check": {
+    "probe": "call `score_percentage(1, 3)`, two ints that do not divide evenly",
+    "watch": "`correct / total` is now `correct // total`, so check whether the division floors to 0 before the `* 100.0` runs",
+    "restored": "`/` is back in place of `//`, so check that the ratio keeps its fraction instead of flooring to zero first"
+  }
+}

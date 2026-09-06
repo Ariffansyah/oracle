@@ -1,0 +1,9 @@
+{
+  "id": "java-list-alias-mutate-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-list-alias-mutate",
+  "category": "logic-error",
+  "note": "reverses java-list-alias-mutate"
+}

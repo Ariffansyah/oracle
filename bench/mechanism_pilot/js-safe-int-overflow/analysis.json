@@ -1,0 +1,10 @@
+{
+  "summary": "The commit removes the safe-integer check in safeAdd, so a sum past 2^53-1 is returned as a silently rounded number instead of being reported as unsafe.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Without `Number.isSafeInteger(sum)`, safeAdd(Number.MAX_SAFE_INTEGER, 2) returns 9007199254740992 \u2014 the same value as adding 1 \u2014 because JavaScript numbers lose integer precision past 2^53-1 without throwing.",
+      "file": "js-safe-int-overflow.js"
+    }
+  ]
+}

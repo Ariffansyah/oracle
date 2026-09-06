@@ -66,8 +66,12 @@ _MISSING = object()
 def _git(args: list[str], repo: str, default=_MISSING) -> str:
     """Run git; return stdout. With ``default`` set, failures return it instead
     of raising (root commits have no ``rev^``, new files have no old blob)."""
+    # stdin=DEVNULL rather than inherited: a caller with the terminal taken
+    # over (a TUI) makes the inherited descriptor invalid, and the spawn fails
+    # with "bad value(s) in fds_to_keep". Metrics never read stdin.
     proc = subprocess.run(
-        ["git", "-C", repo, *args], capture_output=True, text=True
+        ["git", "-C", repo, *args], stdin=subprocess.DEVNULL,
+        capture_output=True, text=True
     )
     if proc.returncode != 0:
         if default is _MISSING:

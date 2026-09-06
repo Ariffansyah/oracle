@@ -1,0 +1,9 @@
+{
+  "id": "py-int-str-coerce-fix",
+  "language": "python",
+  "ext": "py",
+  "label": "fix",
+  "parent": "py-int-str-coerce",
+  "category": "logic-error",
+  "note": "reverses py-int-str-coerce"
+}

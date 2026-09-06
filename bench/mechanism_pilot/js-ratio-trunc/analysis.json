@@ -1,0 +1,10 @@
+{
+  "summary": "The commit wraps the ratio in Math.trunc() inside scorePercentage, so the fraction is discarded before the multiplication and every non-divisible input reports 0.00.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Math.trunc(correct / total) floors the ratio to an integer before `* 100.0` applies, so scorePercentage(1, 3) returns 0.00 instead of 33.33 for any pair that does not divide evenly.",
+      "file": "js-ratio-trunc.js"
+    }
+  ]
+}

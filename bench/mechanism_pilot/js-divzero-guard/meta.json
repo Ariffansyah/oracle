@@ -1,0 +1,22 @@
+{
+  "id": "js-divzero-guard",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "zero",
+      "infinity",
+      "guard",
+      "divide",
+      "sentinel"
+    ]
+  ],
+  "note": "the b === 0 guard is removed; JavaScript division by zero yields Infinity rather than throwing, so the sentinel is replaced by a value that arithmetic will happily carry. Same family as py-zerodiv-guard, where the same removal raises ZeroDivisionError instead. Verified: null -> Infinity",
+  "check": {
+    "probe": "call `safeDivide(10, 0)` with a zero divisor",
+    "watch": "the `b === 0` guard is gone before `a / b` \u2014 check what JavaScript returns for division by zero rather than assuming it throws",
+    "restored": "the `b === 0` guard is back before `a / b`, so check that a zero divisor returns the sentinel instead of Infinity"
+  }
+}

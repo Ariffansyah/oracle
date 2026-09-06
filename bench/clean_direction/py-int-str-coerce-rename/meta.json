@@ -1,0 +1,13 @@
+{
+  "id": "py-int-str-coerce-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-int-str-coerce",
+  "category": "logic-error",
+  "note": "renames `target_id` to `target_id_x`; behaviour is unchanged",
+  "renamed": [
+    "target_id",
+    "target_id_x"
+  ]
+}

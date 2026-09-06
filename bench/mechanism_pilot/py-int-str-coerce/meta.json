@@ -1,0 +1,22 @@
+{
+  "id": "py-int-str-coerce",
+  "language": "python",
+  "ext": "py",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "int(",
+      "coerce",
+      "str",
+      "comparison",
+      "type"
+    ]
+  ],
+  "note": "the int() conversion is dropped, so an int id is compared against a str id. Python does NOT coerce across those types, so == is silently False rather than raising. Same family as js-loose-equal-coerce, opposite direction: JS coerces when it should not, Python refuses to and the comparison quietly fails. Verified: True -> False",
+  "check": {
+    "probe": "call `is_match(7, \"7\")` with an int and the same value as a string",
+    "watch": "the `int(target_id)` conversion is gone, so `user_id == target_id` compares an int against a str \u2014 check what Python returns rather than assuming it coerces",
+    "restored": "`int(target_id)` is back before the comparison, so check that an int and its string form compare equal again"
+  }
+}

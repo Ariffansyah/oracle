@@ -79,12 +79,34 @@ def files_in_diff(diff: str) -> set[str]:
     return {m.group(1) for m in re.finditer(r"^\+\+\+ b/(.+)$", diff, re.MULTILINE)}
 
 
-def grounded(finding: dict, diff: str) -> bool:
-    """A finding is grounded when what it talks about appears in the changed code.
+def grounded(finding: dict, diff: str, scope: str = "changed") -> bool:
+    """A finding is grounded when what it talks about appears in the code it reviews.
 
-    It must cite identifiers occurring in the diff's changed lines. A finding
-    that shares no vocabulary with the code it reviews is describing something
-    else.
+    `scope` picks WHICH code, and the two settings are not interchangeable:
+
+      "changed"  (default) only the diff's +/- lines. This is what the corpus
+                 builders and `dpo_pipeline` use and what every number in
+                 docs/RESULTS.md was computed with, so it must not move.
+      "context"  the whole hunk, context lines included.
+
+    Measured 1 Sep against the hand-graded real commits, per seed:
+
+        rule       true positives kept   false alarms dropped
+        changed          0 / 1                 8 / 32   and  2 / 21
+        context          1 / 1                 7 / 32   and  2 / 21
+
+    "changed" discards every true positive to remove a quarter of the noise,
+    which makes it unusable as an output filter however good it is as a corpus
+    check. The one correct finding in 40 real commits said the code "attempts to
+    use `window.Promise`" while the changed lines carry `P.polyfill` and
+    `require('es6-promise')` - the model paraphrased instead of citing, and only
+    the surrounding context redeems it. Use "context" at inference, "changed"
+    when scoring a corpus.
+
+    Under either scope the finding must cite identifiers occurring in that code.
+    A finding sharing no vocabulary with what it reviews is describing something
+    else. Everything below was measured under "changed" and the thresholds are
+    unchanged by the new scope.
 
     Naming a touched file used to be sufficient on its own. That made this a
     no-op: on a single-file commit every finding names the only file, so all of
@@ -115,8 +137,14 @@ def grounded(finding: dict, diff: str) -> bool:
     """
     if finding.get("file") and finding["file"] not in files_in_diff(diff):
         return False
-    changed = "\n".join(l for l in diff.splitlines()
-                        if l.startswith(("+", "-")) and not l.startswith(("+++", "---")))
+    if scope == "context":
+        changed = "\n".join(l for l in diff.splitlines()
+                            if not l.startswith(("diff --git", "index ", "+++",
+                                                 "---", "@@")))
+    else:
+        changed = "\n".join(l for l in diff.splitlines()
+                            if l.startswith(("+", "-"))
+                            and not l.startswith(("+++", "---")))
     said = finding.get("explanation", "")
     if decorated(said) & decorated(changed):
         return True
@@ -481,6 +509,27 @@ if __name__ == "__main__":
     three = {"category": "logic-error", "file": "svc.py",
              "explanation": "fetch now takes count where it took size, so retries is unchanged"}
     assert grounded(three, pydiff), "three plain names shared is grounding"
+
+    # scope="context": the 1 Sep case. The finding paraphrases a symbol that is
+    # in the file but not on a changed line, so "changed" rejects it and
+    # "context" keeps it. Both behaviours are wanted, for different callers.
+    ctxdiff = """diff --git a/lib/axios.js b/lib/axios.js
+--- a/lib/axios.js
++++ b/lib/axios.js
+@@ -5,7 +5,1 @@
+ var utils = require('./utils');
+ var nativePromise = window.Promise;
+-  var P = require('es6-promise');
+-  P.polyfill();
+"""
+    para = {"file": "lib/axios.js",
+            "explanation": "axios attempts to use window.Promise, which throws "
+                           "a ReferenceError in browsers without native support"}
+    assert not grounded(para, ctxdiff), "changed-lines must still reject a paraphrase"
+    assert grounded(para, ctxdiff, scope="context"), "context must keep it"
+    # and the wrong-file guard has to survive the wider scope
+    assert not grounded({"file": "nope.js", "explanation": "window.Promise"},
+                        ctxdiff, scope="context"), "wrong file stays ungrounded"
 
     fix = "-        if token.expires_at >= now():\n+        if token.expires_at > now():\n"
     assert fix_agreement(good, fix) > 0.3, fix_agreement(good, fix)

@@ -1,0 +1,22 @@
+{
+  "id": "js-ratio-trunc",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "math.trunc",
+      "truncat",
+      "before",
+      "ratio",
+      "integer"
+    ]
+  ],
+  "note": "the division is wrapped in Math.trunc(), so the ratio is floored to 0 before the * 100.0 applies. JavaScript has one number type and no integer division, so the mechanism has to be introduced explicitly - same family as java-ratio-trunc and py-ratio-trunc, third syntax. Verified: 33.33 -> 0.00",
+  "check": {
+    "probe": "call `scorePercentage(1, 3)`, two values that do not divide evenly",
+    "watch": "`correct / total` is now wrapped in `Math.trunc(...)`, so check whether the ratio is floored to 0 before `* 100.0` runs",
+    "restored": "the `Math.trunc(...)` wrapper is gone from around `correct / total`, so check that the ratio keeps its fraction instead of being floored first"
+  }
+}

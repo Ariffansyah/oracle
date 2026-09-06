@@ -1,0 +1,784 @@
+{
+ "c-array-bound": {
+  "buggy": true,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "15",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "15",
+   "err": ""
+  },
+  "differs": false
+ },
+ "c-const": {
+  "buggy": false,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "9",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "9",
+   "err": ""
+  },
+  "differs": false
+ },
+ "c-int-division": {
+  "buggy": true,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "2.50",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "2.00",
+   "err": ""
+  },
+  "differs": true
+ },
+ "c-strcpy-bound": {
+  "buggy": true,
+  "lang": "c",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "hello",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": -6,
+   "out": "",
+   "err": "*** stack smashing detected ***: terminated"
+  },
+  "differs": true
+ },
+ "go-accum-reset": {
+  "buggy": true,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[3 7 5]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[3 10 15]",
+   "err": ""
+  },
+  "differs": true
+ },
+ "go-extract-helper": {
+  "buggy": false,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "go-nil-map": {
+  "buggy": true,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "2",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "out": "",
+   "err": "exit status 2"
+  },
+  "differs": true
+ },
+ "go-offbyone": {
+  "buggy": true,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "10",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "out": "",
+   "err": "exit status 2"
+  },
+  "differs": true
+ },
+ "go-rename": {
+  "buggy": false,
+  "lang": "go",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "9",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "9",
+   "err": ""
+  },
+  "differs": false
+ },
+ "java-array-bound": {
+  "buggy": true,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "out": "",
+   "err": "\tat Main.main(Main.java:11)"
+  },
+  "differs": true
+ },
+ "java-concurrent-modify": {
+  "buggy": true,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[1, 3]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "out": "",
+   "err": "\tat Main.main(Main.java:7)"
+  },
+  "differs": true
+ },
+ "java-extract-method": {
+  "buggy": false,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "java-null-guard": {
+  "buggy": true,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "0",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "out": "",
+   "err": "\tat Main.main(Main.java:7)"
+  },
+  "differs": true
+ },
+ "java-string-equals": {
+  "buggy": true,
+  "lang": "java",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "true",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "false",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-extract-helper": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "sum=6 n=3",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "sum=6 n=3",
+   "err": ""
+  },
+  "differs": false
+ },
+ "js-rename-param": {
+  "buggy": false,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "2,4,6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "2,4,6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "js-reverse-index": {
+  "buggy": true,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "10",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "NaN",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-sort-numeric": {
+  "buggy": true,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1,9,10,20",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1,10,20,9",
+   "err": ""
+  },
+  "differs": true
+ },
+ "js-var-capture": {
+  "buggy": true,
+  "lang": "javascript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "0,1,2",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "3,3,3",
+   "err": ""
+  },
+  "differs": true
+ },
+ "php-concat-operator": {
+  "buggy": true,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "hi bob",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 255,
+   "out": "",
+   "err": "  thrown in /tmp/tmpl9musw3u/post.php on line 3"
+  },
+  "differs": true
+ },
+ "php-divzero-guard": {
+  "buggy": true,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "0",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 255,
+   "out": "",
+   "err": "  thrown in /tmp/tmpxu3jy3fa/post.php on line 3"
+  },
+  "differs": true
+ },
+ "php-extract-helper": {
+  "buggy": false,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "php-loose-compare": {
+  "buggy": true,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "bool(false)",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "bool(true)",
+   "err": ""
+  },
+  "differs": true
+ },
+ "php-slice-end": {
+  "buggy": true,
+  "lang": "php",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1,2",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-annotate-only": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[1, 2, 5, 5, 6, 9] [1, 2, 5, 5, 6, 9] [5, 2, 9, 1, 5, 6]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[1, 2, 5, 5, 6, 9] [1, 2, 5, 5, 6, 9] [5, 2, 9, 1, 5, 6]",
+   "err": ""
+  },
+  "differs": false
+ },
+ "py-comprehension": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[2, 4, 6]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[2, 4, 6]",
+   "err": ""
+  },
+  "differs": false
+ },
+ "py-dict-mutate": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[('b', 2)]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "out": "",
+   "err": "RuntimeError: dictionary changed size during iteration"
+  },
+  "differs": true
+ },
+ "py-extract-helper": {
+  "buggy": false,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "py-mutable-default": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[1] [2] [3]",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "[1, 2, 3] [1, 2, 3] [1, 2, 3]",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-pop-guard": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1 0\nIndexError pop from empty list",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1 0\nAttributeError 'NoneType' object has no attribute 'next'",
+   "err": ""
+  },
+  "differs": true
+ },
+ "py-range-bound": {
+  "buggy": true,
+  "lang": "python",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "15",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "10",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rb-int-division": {
+  "buggy": true,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1.5",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rb-nil-guard": {
+  "buggy": true,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "0",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "out": "",
+   "err": "\tfrom /tmp/tmp4_ues5ah/post.rb:5:in '<main>'"
+  },
+  "differs": true
+ },
+ "rb-range-bound": {
+  "buggy": true,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "15",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "10",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rb-rename-var": {
+  "buggy": false,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "rb-string-mutate": {
+  "buggy": true,
+  "lang": "ruby",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "hi",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "hi!",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rs-index-bound": {
+  "buggy": true,
+  "lang": "rust",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 101,
+   "out": "",
+   "err": "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+  },
+  "differs": true
+ },
+ "rs-int-division": {
+  "buggy": true,
+  "lang": "rust",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1.50",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1.00",
+   "err": ""
+  },
+  "differs": true
+ },
+ "rs-overflow": {
+  "buggy": true,
+  "lang": "rust",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "overflow",
+   "err": ""
+  },
+  "post": {
+   "status": "build-error",
+   "err": [
+    "error: this arithmetic operation will overflow"
+   ]
+  },
+  "differs": true
+ },
+ "rs-rename-local": {
+  "buggy": false,
+  "lang": "rust",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "6",
+   "err": ""
+  },
+  "differs": false
+ },
+ "rs-unwrap-none": {
+  "buggy": true,
+  "lang": "rust",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "0",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 101,
+   "out": "",
+   "err": "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+  },
+  "differs": true
+ },
+ "ts-nullish-default": {
+  "buggy": true,
+  "lang": "typescript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "\"\"",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "\"anon\"",
+   "err": ""
+  },
+  "differs": true
+ },
+ "ts-reduce-empty": {
+  "buggy": true,
+  "lang": "typescript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "0",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 1,
+   "out": "",
+   "err": "Node.js v22.23.2"
+  },
+  "differs": true
+ },
+ "ts-rename-param": {
+  "buggy": false,
+  "lang": "typescript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "7",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "7",
+   "err": ""
+  },
+  "differs": false
+ },
+ "ts-slice-end": {
+  "buggy": true,
+  "lang": "typescript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1,2,3",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1,2",
+   "err": ""
+  },
+  "differs": true
+ },
+ "ts-sort-in-place": {
+  "buggy": true,
+  "lang": "typescript",
+  "pre": {
+   "status": "ok",
+   "rc": 0,
+   "out": "3,1,2",
+   "err": ""
+  },
+  "post": {
+   "status": "ok",
+   "rc": 0,
+   "out": "1,2,3",
+   "err": ""
+  },
+  "differs": true
+ }
+}

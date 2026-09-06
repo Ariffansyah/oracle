@@ -1,0 +1,10 @@
+{
+  "summary": "The commit drops the int() conversion in is_match, so an int is compared against a str and the equality is silently False for every caller that passes a string id.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Python does not coerce between int and str, so `user_id == target_id` returns False for is_match(7, \"7\") where the previous `int(target_id)` made it True; the comparison fails quietly rather than raising.",
+      "file": "py-int-str-coerce.py"
+    }
+  ]
+}

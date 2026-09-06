@@ -1,0 +1,10 @@
+{
+  "id": "py-ratio-trunc-rename",
+  "language": "python",
+  "ext": "py",
+  "label": "refactor",
+  "parent": "py-ratio-trunc",
+  "category": "logic-error",
+  "note": "renames the parameter `correct` to `correct_x`; output stays '33.33'",
+  "renamed": ["correct", "correct_x"]
+}

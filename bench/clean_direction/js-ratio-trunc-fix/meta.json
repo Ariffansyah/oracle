@@ -1,0 +1,9 @@
+{
+  "id": "js-ratio-trunc-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-ratio-trunc",
+  "category": "logic-error",
+  "note": "reverses js-ratio-trunc: '0.00' -> '33.33'"
+}

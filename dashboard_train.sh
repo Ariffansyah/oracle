@@ -1,6 +1,16 @@
 #!/bin/bash
-# Lightweight training dashboard — only SFT / DPO / encoder + gpu + checkpoints.
-# Does NOT replace dashboard.sh / status.sh. One SSH round-trip per refresh.
+# Training progress only: SFT / DPO / encoder / gate, the step bar, the loss
+# trace, the held-out kill gate, GPU, and the newest checkpoint. One SSH
+# round-trip per refresh.
+#
+# Trimmed on 6 Sep from a five-section version that also rendered the local
+# corpus table, the scoring suites, the exec-arm grades and the control-run
+# tracker. Those live in ./dashboard.sh; this one is for watching a run.
+#
+# The line that matters during a run is `holdout`, not `loss`. The 2 Sep repair
+# run sat at loss 0.23 with token accuracy 0.93 while its held-out recall was
+# 0.000 -- the loss looked healthy the whole way down. Recall 0.000 on a
+# non-zero positive count is the pre-registered kill.
 #
 #   ./dashboard_train.sh              live (10s)
 #   ./dashboard_train.sh --once       one shot
@@ -37,171 +47,16 @@ bar() { # bar done total [width]
 sec() { printf '\n%s%s%s\n' "$BOLD$CYAN" "$1" "$OFF"; }
 job() { local c; [ "$2" = green ] && c=$GREEN; [ "$2" = red ] && c=$RED; [ "$2" = yellow ] && c=$YELLOW; printf '  %s%-14s %s%s\n' "$c" "$1" "$3" "$OFF"; }
 
-# ---- scoring (score_v4.sh runs LOCALLY and tunnels to the box) --------------
-# Progress comes from the rows files, not the log: `basic_bench.py | tail -18`
-# buffers a whole suite, so a silent log is normal mid-suite and would read as
-# stalled. data/<stem>_<tag>.jsonl is the durable per-suite signal.
-# Log path: $SCORE_LOG if set, else the newest scratchpad score_v4_run*.log.
-SCORE_PY=$([ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
-
-scoring_section() {
-  sec "scoring (local)"
-  local pid slog age elapsed
-  pid=$(pgrep -af 'score_v4\.sh' | grep -vE 'zsh -c|bash -c|grep' | head -1 | awk '{print $1}')
-  # Newest of ANY scoring log: a resume run writes resume_*.log, and locking
-  # onto a stale score_v4_run*.log makes a healthy run read as STALLED (31 Aug).
-  slog=${SCORE_LOG:-$(ls -t /tmp/claude-*/*/*/scratchpad/score_v4_run*.log \
-                            /tmp/claude-*/*/*/scratchpad/resume_*.log 2>/dev/null | head -1)}
-
-  # 12 = 4 checkpoints x 3 suites; the denominator score_v4.sh works through.
-  local made
-  made=$(ls data/basic_bench_v4.jsonl data/heldout_mech_v4.jsonl data/heldout_clean_v4.jsonl \
-            data/basic_bench_v4_seed7.jsonl data/heldout_mech_v4_seed7.jsonl data/heldout_clean_v4_seed7.jsonl \
-            data/basic_bench_v4_ep1.jsonl data/heldout_mech_v4_ep1.jsonl data/heldout_clean_v4_ep1.jsonl \
-            data/basic_bench_v4_ep1_seed7.jsonl data/heldout_mech_v4_ep1_seed7.jsonl data/heldout_clean_v4_ep1_seed7.jsonl \
-            2>/dev/null | wc -l)
-
-  if [ -n "$pid" ]; then
-    elapsed=$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')
-    # GPU idle while alive is the 31 Aug hang signature: server up, script in
-    # do_wait, nothing generating. Log age alone cannot tell those apart.
-    local util; util=$(echo "$GPU" | awk -F, '{gsub(/[^0-9]/,"",$3); print $3}')
-    age=-1; [ -n "$slog" ] && [ -f "$slog" ] && age=$(( ($(date +%s) - $(stat -c %Y "$slog")) / 60 ))
-    if [ -n "$util" ] && [ "$util" -le 2 ] 2>/dev/null && [ "$age" -gt 20 ] 2>/dev/null; then
-      job score red "running but STALLED (gpu ${util}%, ${age}m since log)  pid $pid"
-    else
-      job score green "running  pid $pid  elapsed ${elapsed:-?}  gpu ${util:-?}%"
-    fi
-  elif [ "$made" -eq 12 ]; then
-    job score green "complete — all 12 suites scored"
-  elif [ "$made" -gt 0 ]; then
-    job score yellow "not running — $made/12 suites on disk (interrupted?)"
-  else
-    job score yellow "not started    ./score_v4.sh all"
-  fi
-
-  printf '  %-14s ' "suites"; bar "$made" 12 20; printf '  %d/12\n' "$made"
-  [ -n "$slog" ] && printf '  %s%-14s %s%s\n' "$DIM" "log" "$slog" "$OFF"
-
-  # Current suite: the last `-- bench/...` line the log flushed.
-  if [ -n "$slog" ] && [ -f "$slog" ]; then
-    local cur; cur=$(grep -E '^(=== |  -- bench/)' "$slog" 2>/dev/null | tail -2 | tr '\n' ' ' | cut -c1-88)
-    [ -n "$cur" ] && printf '  %s%-14s %s%s\n' "$DIM" "at" "$cur" "$OFF"
-  fi
-
-  printf '\n  %s%-14s %-13s %-13s %-13s %s%s\n' "$DIM" "tag" "basic n/fa" "mech n/unloc" "clean n/fa" "err" "$OFF"
-  "$SCORE_PY" - <<'PYTBL' 2>/dev/null
-import json, os
-# Per suite, never pooled: heldout_clean is all-clean and heldout_mech all-buggy,
-# so pooling lets one dilute the other into a rate no suite actually has.
-# Denominator is total rows, matching basic_bench.py's own printed false-alarm
-# figure -- the v2 4-15% band was computed that way and must stay comparable.
-for t in ["v4", "v4_seed7", "v4_ep1", "v4_ep1_seed7"]:
-    cells, err, seen = [], 0, False
-    for stem, kind in [("basic_bench", "fa"), ("heldout_mech", "unloc"), ("heldout_clean", "fa")]:
-        p = f"data/{stem}_{t}.jsonl"
-        if not os.path.exists(p):
-            cells.append("."); continue
-        try:
-            rows = [json.loads(l) for l in open(p) if l.strip()]
-        except Exception:
-            cells.append("bad"); continue
-        seen = True
-        n = len(rows)
-        err += sum(1 for r in rows if r.get("error"))
-        if kind == "fa":
-            fa = sum(1 for r in rows if r.get("false_alarm"))
-            cells.append(f"{n} / {round(100*fa/n) if n else 0}%")
-        else:
-            cells.append(f"{n} / {sum(1 for r in rows if r.get('unconfirmed'))}")
-    print(f"  {t:<14} {cells[0]:<13} {cells[1]:<13} {cells[2]:<13} {err if seen else '-'}")
-PYTBL
-  printf '  %sfa=false alarms (bench denominator, total rows); unloc=right verdict, defect unnamed%s\n' "$DIM" "$OFF"
-  printf '  %s./score_v4.sh --report is authoritative; a single seed is a point estimate%s\n' "$DIM" "$OFF"
-}
-
-# ---- control / eval runs (local driver, model served on the box) -----------
-# For the base-model and second-model controls run through
-# `bench/real_commits.py --run`, which are NOT part of score_v*.sh.
-#
-# Two reasons the obvious progress signals do not work here:
-#   - the rows file is written in ONE pass after the last commit
-#     (real_commits.py:196), so a row count reads 0/40 for the entire run;
-#   - the driver's own [i/n] lines were block-buffered into an 8KB buffer a
-#     40-commit run never fills, so its log stayed empty until exit (fixed
-#     1 Sep with line_buffering, but old logs still behave that way).
-# The signal that always works is on the BOX: serve.py logs one
-# "N chars in Xs" line per generation. Note it counts generations since the
-# SERVER started, so it over-reads if one server is reused for several runs.
-control_section() {
-  sec "control run (local driver -> $H)"
-  local pid target total served model elapsed base
-  pid=$(pgrep -af 'real_commits\.py --run' | grep -vE 'zsh -c|bash -c|grep' | head -1 | awk '{print $1}')
-  target=$(pgrep -af 'real_commits\.py --run' | sed -n 's/.*--run \([^ ]*\).*/\1/p' | head -1)
-  served=$(echo "$RAW" | grep '^SERVE_N=' | cut -d= -f2-)
-  model=$(echo "$RAW"  | grep '^SERVE_MODEL=' | cut -d= -f2-)
-  [ -z "$served" ] && served=0
-
-  if [ -n "$pid" ]; then
-    elapsed=$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')
-    base=$(basename "${target:-?}")
-    total=40; [ -f "$target" ] && total=$(wc -l < "$target")
-    job control green "running  pid $pid  elapsed ${elapsed:-?}  $base"
-    printf '  %-14s ' "generated"; bar "$served" "$total" 20; printf '  %s/%s\n' "$served" "$total"
-    printf '  %s%-14s %s%s\n' "$DIM" "rows" "written only at exit — 0 mid-run is normal" "$OFF"
-  else
-    job control yellow "idle — no real_commits.py --run in flight"
-  fi
-
-  # Which checkpoint is actually answering. Serving the wrong one is the single
-  # easiest way to spend an hour measuring nothing, and it has happened twice.
-  if [ -n "$model" ]; then
-    printf '  %s%-14s %s%s\n' "$DIM" "serving" "$model" "$OFF"
-  else
-    printf '  %s%-14s %s%s\n' "$DIM" "serving" "no llm_explainer.serve on $H" "$OFF"
-  fi
-
-  # Completed control runs: answered / total, so a half-finished file is visible
-  # rather than looking the same as a complete one.
-  local f
-  for f in data/real_commits_*.jsonl; do
-    [ -f "$f" ] || continue
-    case "$f" in *real_commits.jsonl) continue ;; esac
-    "$SCORE_PY" - "$f" <<'PYROW' 2>/dev/null
-import json, sys
-p = sys.argv[1]
-rows = [json.loads(l) for l in open(p) if l.strip()]
-ans = sum(1 for r in rows if isinstance(r.get("predicted"), dict) and r["predicted"].get("summary") is not None)
-err = sum(1 for r in rows if r.get("error"))
-find = sum(len((r.get("predicted") or {}).get("findings") or []) for r in rows)
-tag = p.split("real_commits_")[-1].removesuffix(".jsonl")
-print(f"  {'':14}{tag:<16} {ans}/{len(rows)} answered  {find:>3} findings  {err} err")
-PYROW
-  done
-}
-
-# ponytail: single SSH call for all remote state; split if you need per-field timeouts/retries.
 render() {
 printf '%sORACLE train%s   %s   box: %s   refresh %ss%s\n' "$BOLD" "$OFF" "$(date +%H:%M:%S)" "$H" "$INTERVAL" "$DIM(ctrl-c to stop)$OFF"
 
-sec "datasets (local)"
-# honest step count — catches the truncation bug where TRL drops prompt-overflow rows silently
-for f in data/oracle_sft.jsonl data/oracle_dpo.jsonl data/sft_v2_pilot2.jsonl data/sft_mechanism_v1.jsonl; do
-  [ -f "$f" ] || continue
-  n=$(wc -l < "$f")
-  # SFT 2 epochs, DPO 1 epoch, divisor 8 (batch1 * accum8)
-  epochs=2; [[ "$f" == *dpo* ]] && epochs=1
-  steps=$(( n * epochs / 8 ))
-  printf '  %-30s %5d rows  → ~%4d steps (%dx epochs /8)\n' "$(basename "$f")" "$n" "$steps" "$epochs"
-done
-[ -f data/oracle_sft.jsonl ] || printf '  ${DIM}no data/oracle_sft.jsonl — build with: python main.py build-sft --mock${OFF}\n'
-
-sec "training (on $H)"
-# One remote call — SFT + DPO + encoder + log tails. Keeps the refresh light on a slow link.
+# ONE SSH round-trip. Everything below parses this blob; nothing else shells out.
 RAW=$(R '
   for NAME in SFT DPO ENC GATE; do
     case $NAME in
-      SFT) pat="fine_tuning[.]train_sft"; logs=$(ls -t ~/oracle/sft*.log ~/oracle/train_sft*.log 2>/dev/null | head -1);;
+      # run_*.log first: every launcher since 1 Sep writes run_<name>.log, and
+      # matching only sft*/train_sft* rendered a LIVE run as "idle  no log".
+      SFT) pat="fine_tuning[.]train_sft"; logs=$(ls -t ~/oracle/run_*.log ~/oracle/sft*.log ~/oracle/train_sft*.log 2>/dev/null | head -1);;
       DPO) pat="fine_tuning[.]train_dpo"; logs=$(ls -t ~/oracle/dpo*.log ~/oracle/train_dpo*.log 2>/dev/null | head -1);;
       ENC) pat="ml_model[.]train_encoder"; logs=$(ls -t ~/oracle/encoder*.log 2>/dev/null | head -1);;
       GATE) pat="ml_model[.]train_gate"; logs=$(ls -t ~/oracle/gate*.log 2>/dev/null | head -1);;
@@ -212,36 +67,54 @@ RAW=$(R '
       # TRL tqdm bar or HF step log — whichever is freshest
       line=$(tr "\r" "\n" < "$logs" 2>/dev/null | grep -E "[0-9]+%\\||[0-9]+/[0-9]+ \\[|loss|epoch" | tail -1 | cut -c1-90)
       echo "${NAME}_PROG=${line:-—}"
-      # age of log in minutes
       echo "${NAME}_AGE=$(( ($(date +%s) - $(stat -c %Y "$logs" 2>/dev/null || echo 0)) / 60 ))"
     else
       echo "${NAME}_PROG=—"
       echo "${NAME}_AGE=-1"
     fi
   done
+  # Live run detail. The tqdm bar carries step, pace and ETA; logging_steps=5
+  # carries the loss. Both are on \r-separated lines, hence the tr.
+  RLOG=$(ls -t ~/oracle/run_*.log 2>/dev/null | head -1)
+  if [ -n "$RLOG" ] && [ -f "$RLOG" ]; then
+    BAR=$(tr "\r" "\n" < "$RLOG" 2>/dev/null | grep -oE "[0-9]+/[0-9]+ \[[0-9:]+<[0-9:?]+, +[0-9.]+s/it\]" | tail -1)
+    echo "RUN_BAR=${BAR:-—}"
+    echo "RUN_LOSS=$(grep -ao "{.loss.*epoch.: .[0-9.]*.}" "$RLOG" 2>/dev/null | tail -1 | cut -c1-96)"
+    # Count via grad_norm, not "loss": the latter needs a single quote inside a
+    # single-quoted remote heredoc and came back 0 every refresh. grad_norm
+    # appears exactly once per logged point and needs no quoting.
+    echo "RUN_NLOSS=$(grep -aoc grad_norm "$RLOG" 2>/dev/null)"
+    echo "RUN_LOG=$RLOG"
+    echo "RUN_AGE=$(( ($(date +%s) - $(stat -c %Y "$RLOG" 2>/dev/null || echo 0)) / 60 ))"
+    echo "GATE_LINE=$(tr "\r" "\n" < "$RLOG" 2>/dev/null | grep -a "holdout @ step" | tail -1 | cut -c1-104)"
+    echo "GATE_PREV=$(tr "\r" "\n" < "$RLOG" 2>/dev/null | grep -a "holdout @ step" | tail -2 | head -1 | cut -c1-104)"
+    echo "GATE_N=$(tr "\r" "\n" < "$RLOG" 2>/dev/null | grep -ac "holdout @ step")"
+    echo "GATE_ZERO=$(grep -ac "RECALL IS ZERO" "$RLOG" 2>/dev/null)"
+  else
+    echo "RUN_BAR=—"; echo "RUN_LOSS="; echo "RUN_NLOSS=0"
+    echo "RUN_LOG="; echo "RUN_AGE=-1"; echo "GATE_LINE="; echo "GATE_PREV="; echo "GATE_N=0"; echo "GATE_ZERO=0"
+  fi
+  echo "RUN_PEAK=$(cat /tmp/peak_vram_run 2>/dev/null || echo -)"
+  # The epoch-1 pause watcher. Kept because "armed" is not visible anywhere
+  # else: it is a sleeping process whose whole job is to fire once, hours from
+  # now, and an unarmed one looks exactly like an armed one until the checkpoint
+  # sails past. Renders nothing when off.
+  if pgrep -f "[p]ause_after_epoch1" >/dev/null; then echo "PAUSE=ARMED"; else echo "PAUSE=OFF"; fi
+  echo "PAUSE_LOG=$(tail -1 ~/oracle/pause_ep1.log 2>/dev/null | cut -c1-72)"
   # keep this as its own line so the parser stays trivial
   nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader 2>/dev/null | tr -d "\n" | sed "s/^/GPU:/"
   echo ""
-  # Inference server: which checkpoint is being served, and how many generations
-  # it has completed. serve.py logs one "N chars in Xs" line per request, which
-  # is the only per-commit signal a control run has - see control_section().
-  SLOG=$(ls -t ~/oracle/serve*.log 2>/dev/null | head -1)
-  echo "SERVE_LOG=${SLOG:-none}"
-  if [ -n "$SLOG" ] && [ -f "$SLOG" ]; then
-    echo "SERVE_N=$(tr "\r" "\n" < "$SLOG" 2>/dev/null | grep -acE "chars in [0-9.]+s")"
-  else
-    echo "SERVE_N=0"
-  fi
-  echo "SERVE_MODEL=$(pgrep -af "[l]lm_explainer.serve" | sed -n "s/.*--model \([^ ]*\).*/\1/p" | head -1)"
-  # checkpoints — newest first, with ages
-  echo "CKPT_START"
-  cd ~/oracle/artifacts 2>/dev/null && stat -c "%Y %n" */adapter_model.safetensors */model.safetensors 2>/dev/null | sort -rn | head -6 | while read ts path; do
-    age=$(( ($(date +%s) - ts) / 3600 ))
-    printf "%s|%sh ago\n" "$path" "$age"
+  # newest checkpoint only — the run being watched is the one that wrote it
+  cd ~/oracle/artifacts 2>/dev/null && stat -c "%Y %n" */adapter_model.safetensors */model.safetensors 2>/dev/null | sort -rn | head -1 | while read ts path; do
+    printf "CKPT=%s|%sh ago\n" "$path" "$(( ($(date +%s) - ts) / 3600 ))"
   done
-  echo "CKPT_END"
 ')
 
+get() { echo "$RAW" | grep "^$1=" | cut -d= -f2-; }
+line_for() { echo "$RAW" | grep "^$1_PROG=" | cut -d= -f2-; }
+GPU=$(echo "$RAW" | grep "^GPU:" | sed 's/^GPU://')
+
+sec "training (on $H)"
 if [ -z "$RAW" ]; then
   job sft yellow "box unreachable — trying local pgrep"
   pgrep -f "fine_tuning.train_sft" >/dev/null && job sft green "running (local)" || job sft yellow "idle (local)"
@@ -249,10 +122,6 @@ if [ -z "$RAW" ]; then
   pgrep -f "ml_model.train_encoder" >/dev/null && job encoder green "running (local)" || job encoder yellow "idle (local)"
   pgrep -f "ml_model.train_gate" >/dev/null && job gate green "running (local)" || job gate yellow "idle (local)"
 else
-  # parse the single blob — no second SSH
-  get() { echo "$RAW" | grep "^$1=" | cut -d= -f2-; }
-  line_for() { echo "$RAW" | grep "^$1_PROG=" | cut -d= -f2-; }
-
   SFT_STATE=$(get SFT); SFT_LOG=$(get SFT_LOG); SFT_AGE=$(get SFT_AGE); SFT_PROG=$(line_for SFT)
   DPO_STATE=$(get DPO); DPO_LOG=$(get DPO_LOG); DPO_AGE=$(get DPO_AGE); DPO_PROG=$(line_for DPO)
   ENC_STATE=$(get ENC); ENC_LOG=$(get ENC_LOG); ENC_AGE=$(get ENC_AGE); ENC_PROG=$(line_for ENC)
@@ -281,28 +150,95 @@ else
     fi
   done
 
-  GPU=$(echo "$RAW" | grep "^GPU:" | sed 's/^GPU://')
   if [ -n "$GPU" ]; then
     printf '  %s%-14s %s%s\n' "$DIM" "gpu" "$GPU" "$OFF"
   else
     printf '  %s%-14s %s%s\n' "$DIM" "gpu" "unreachable / no nvidia-smi" "$OFF"
   fi
 
-  sec "checkpoints (on $H)"
-  CKPT=$(echo "$RAW" | sed -n '/CKPT_START/,/CKPT_END/p' | grep -v CKPT)
-  if [ -n "$CKPT" ]; then
-    echo "$CKPT" | while IFS='|' read path age; do printf '  %-48s %s\n' "$path" "$age"; done
-  else
-    printf '  %sno adapter/model.safetensors yet%s\n' "$DIM" "$OFF"
-    # hint what WOULD appear
-    printf '  %sartifacts/sft-adapter  artifacts/dpo-adapter  artifacts/oracle-merged%s\n' "$DIM" "$OFF"
+  CKPT=$(get CKPT)
+  [ -n "$CKPT" ] && printf '  %s%-14s %s  %s%s\n' "$DIM" "newest ckpt" "${CKPT%%|*}" "${CKPT#*|}" "$OFF"
+
+  # Live run detail: step bar, pace, ETA, loss trace. On a card with no tensor
+  # cores a step is ~110-400s depending on corpus, so the tqdm ETA is the number
+  # that matters — a run that looks stalled is usually just mid-step.
+  RUN_BAR=$(get RUN_BAR); RUN_LOSS=$(get RUN_LOSS)
+  RUN_NLOSS=$(get RUN_NLOSS); RUN_PEAK=$(get RUN_PEAK); RUN_LOG=$(get RUN_LOG)
+  RUN_AGE=$(get RUN_AGE)
+  if [ -n "$RUN_BAR" ] && [ "$RUN_BAR" != "—" ]; then
+    rh=""
+    if [ "${RUN_AGE:--1}" -ge 0 ] 2>/dev/null; then
+      if [ "$RUN_AGE" -lt 60 ]; then rh="${RUN_AGE}m ago"
+      elif [ "$RUN_AGE" -lt 1440 ]; then rh="$((RUN_AGE/60))h ago"
+      else rh="$((RUN_AGE/1440))d ago"; fi
+    fi
+    # Which log the bar and the holdout line below were read from. Only
+    # ~/oracle/run_*.log on the box is scanned, so a run launched with its
+    # output redirected somewhere else leaves a STALE completed bar here.
+    if [[ "$SFT_STATE" != *RUN* ]]; then
+      printf '  %s%-14s %s%s  — not a live run%s\n' "$DIM" "from" \
+             "$(basename "${RUN_LOG:-?}")" "${rh:+ ($rh)}" "$OFF"
+    fi
+    cur=${RUN_BAR%%/*}; rest=${RUN_BAR#*/}; tot=${rest%% *}
+    printf '  %-14s ' "steps"; bar "$cur" "$tot" 20; printf '  %s\n' "$RUN_BAR"
+    [ -n "$RUN_LOSS" ] && printf '  %s%-14s %s%s\n' "$DIM" "last log" "$RUN_LOSS" "$OFF"
+    # 0.2 is the memorisation line agreed for this corpus (1034 rows, r=16).
+    lastloss=$(echo "$RUN_LOSS" | grep -ao "loss.: .[0-9.]*" | grep -ao "[0-9.]*$")
+    if [ -n "$lastloss" ]; then
+      if awk -v l="$lastloss" 'BEGIN{exit !(l < 0.2)}'; then
+        job loss red "COLLAPSED — loss $lastloss < 0.2, suspect memorisation"
+      else
+        printf '  %s%-14s loss %s over %s logged points (>0.2 ok)%s\n' \
+               "$DIM" "guard" "$lastloss" "$RUN_NLOSS" "$OFF"
+      fi
+    fi
+  fi
+  [ "$RUN_PEAK" != "-" ] && [ -n "$RUN_PEAK" ] && \
+    printf '  %s%-14s %s MiB (card is 6144; >5900 risks OOM at 2048)%s\n' "$DIM" "peak vram" "$RUN_PEAK" "$OFF"
+
+  # ---- the kill gate -------------------------------------------------------
+  # Recall 0.000 on a non-zero positive count IS the 2 Sep failure repeating
+  # (--verdict-weight 0.5 was killed at step 20 on exactly this line: recall
+  # 0.000 / 14 positives, specificity 1.000, top1 0.767 = precisely the
+  # negatives). Kill it, do not spend the epoch.
+  GATE_LINE=$(get GATE_LINE); GATE_PREV=$(get GATE_PREV)
+  GATE_N=$(get GATE_N); GATE_ZERO=$(get GATE_ZERO); RUN_LOG=$(get RUN_LOG)
+  # `holdout`, not `gate` — `gate` is already the ml_model.train_gate job above.
+  if [ -n "$GATE_LINE" ]; then
+    rec=$(echo "$GATE_LINE" | grep -ao "recall [0-9.]*" | awk '{print $2}')
+    pos=$(echo "$GATE_LINE" | grep -ao "on [0-9]* positives" | awk '{print $2}')
+    zero=0
+    [ -n "$rec" ] && [ -n "$pos" ] && [ "$pos" -gt 0 ] 2>/dev/null \
+      && awk -v r="$rec" 'BEGIN{exit !(r == 0)}' && zero=1
+    if [[ "$SFT_STATE" != *RUN* ]]; then
+      # A dead run's last gate line is a postmortem, not an alarm: run_repair_w05
+      # sits at recall 0.000 forever because it was correctly killed there.
+      job holdout yellow "last run $(basename "${RUN_LOG:-?}")$([ "$zero" = 1 ] && echo "  (ended at recall 0.000 — killed)")"
+    elif [ "$zero" = 1 ]; then
+      job holdout red "RECALL 0.000 on $pos positives — KILL IT (pre-registered)"
+    else
+      job holdout green "held-out recall $rec on ${pos:-?} positives"
+    fi
+    printf '  %s%-14s %s%s\n' "$DIM" "" "${GATE_LINE#*] }" "$OFF"
+    [ -n "$GATE_PREV" ] && [ "$GATE_PREV" != "$GATE_LINE" ] && \
+      printf '  %s%-14s prev: %s%s\n' "$DIM" "" "${GATE_PREV#*] }" "$OFF"
+    printf '  %s%-14s %s check(s) so far%s%s\n' "$DIM" "" "$GATE_N" \
+           "$([ "${GATE_ZERO:-0}" -gt 0 ] 2>/dev/null && echo "  ($GATE_ZERO zero-recall warning(s) in log)")" "$OFF"
+  elif [[ "$SFT_STATE" == *RUN* ]]; then
+    printf '  %s%-14s no holdout line yet — launched without --eval-steps?%s\n' "$DIM" "holdout" "$OFF"
+    printf '  %s%-14s watch: grep -a "holdout @ step" %s%s\n' \
+           "$DIM" "" "${RUN_LOG:-~/oracle/run_exec.log}" "$OFF"
+  fi
+
+  PAUSE=$(get PAUSE); PAUSE_LOG=$(get PAUSE_LOG)
+  if [ "$PAUSE" = "ARMED" ]; then
+    printf '  %s%-14s stops at checkpoint-146, then epoch 2 waits for resume_repair.sh%s\n' \
+           "$DIM" "pause" "$OFF"
+    [ -n "$PAUSE_LOG" ] && printf '  %s%-14s %s%s\n' "$DIM" "" "$PAUSE_LOG" "$OFF"
   fi
 fi
 
-scoring_section
-control_section
-
-printf '\n%s tip: ./dashboard.sh for the full view (labelling/variance/bench) %s\n' "$DIM" "$OFF"
+printf '\n%s tip: ./dashboard.sh for scoring, control runs and the corpus table %s\n' "$DIM" "$OFF"
 }
 
 if [ "$WATCH" = 1 ]; then

@@ -49,3 +49,7 @@ data/deepjit/
 # it - so these have to survive a fresh clone alongside the runs that used them.
 !data/sft_v4_suggest.jsonl
 !data/sft_v6_suggest.jsonl
+
+# 11M of BugsInPy metadata plus the project clones and per-bug worktrees it
+# drives. Re-fetchable by bench/bugsinpy.py --fetch.
+data/bugsinpy/

@@ -7,10 +7,976 @@
 
 Continue ORACLE at ~/Documents/oracle.
 
-Read this head section ("Where things stand", 31 Aug 21:00). It is current.
-EVERYTHING BELOW IT IS SUPERSEDED — the 31 Aug 14:10 section holds the v4
-numbers, which still stand, but its action list is done. Then read
-`docs/PLAN_SUGGEST_CONTRACT.md` for the thresholds.
+Read the top section — "THE VALUE TIER WORKS" (3 Sep 07:38), then "THE ABLATION
+LANDED" (3 Sep 02:30) below it. It is the live
+state: it carries the base-vs-SFT ablation, the explanation of why FA 0/46 is
+not what it looks like, and five bugs fixed overnight. "EXECUTION-GROUNDED"
+(2 Sep 22:00) is the section it builds on; "Where things stand" (1 Sep 23:00) still
+describes the repair corpus and contract it builds on. EVERYTHING BELOW THOSE
+TWO IS SUPERSEDED — the
+31 Aug 14:10 section holds the v4 numbers, which still stand, but its action
+list is done. Then read `docs/PLAN_SUGGEST_CONTRACT.md` for the thresholds.
+Standing constraints are at "Standing constraints:" further down — no commits
+without asking is the one that bites first.
+
+## THE DEMO APP (3 Sep 08:30) — precision by refusing to speak
+
+`review.py` + `.github/workflows/oracle-review.yml`. Runs the project's own
+command at base and head, compares byte-for-byte, and says something only when
+execution already proved there is something to say.
+
+**Severity is read off the measurement, never off the model.** This is the
+design rule; everything else follows from it.
+
+| pre | post | what it says |
+|---|---|---|
+| ok | ERROR | :red_circle: high — "this commit makes the code fail", plus a ```suggestion reverting the hunk |
+| ERROR | ok | :white_check_mark: "this commit fixes a failing run" |
+| ok | ok, different | :information_source: "what this commit changes: X -> Y" -- explicitly NOT a defect claim |
+| identical | | nothing at all |
+
+Only the prose explanation can be wrong, and `verify()` drops it if it fails to
+quote the measured values or invents a number -- the bare before/after is shown
+instead. So the failure mode is SILENCE, not a false positive. That is where the
+"80% not false-positive" bar comes from: it is enforced by the tool, not hoped
+for from the model.
+
+Verified on a throwaway repo (`scratchpad/demorepo`), three commits:
+  * `refactor: rename accumulator` -> silent (correctly ignored)
+  * `perf: tighten the hot path` (actually an off-by-one) -> neutral, 32 -> 26
+  * `fix: correct total() bounds` (actually an IndexError) -> red, with revert
+    suggestion. **All three commit messages lie about what the commit does, and
+    all three were read from execution instead.**
+
+### What it is NOT, and must be said in the write-up
+
+Not a bug finder. It reports behaviour that CHANGED, which is not behaviour that
+is WRONG, and it is blind to a latent defect that never reaches the output. The
+unrestricted reviewer was wrong in 30 of 32 findings on real commits; this tool
+deliberately does not operate in that mode. Note also that a bug-inducing commit
+passes CI by definition -- so test-output diffing is a strong signal for
+"behaviour changed" and a WEAK one for "defect introduced", the same distinction
+that produced the FA 0/46 artifact.
+
+### Why this shape helps the thesis
+
+Severity comes from the exit status, the values from execution, the verdict from
+a byte comparison. The 3B model does exactly one thing: write the sentence
+explaining a difference it was HANDED. That is the narrowest defensible version
+of "a small task-specific model does the explaining", and it is precisely what
+the v2 corpus trains. Related: [[thesis-novelty-criterion]].
+
+### Wiring
+```
+./serve.sh start
+python review.py --run "pytest -q"                    # review HEAD
+python review.py --pr 42 --run "pytest -q" --post     # comment on a PR
+```
+The Action needs `secrets.ORACLE_HOST`; without it the job still reports the
+measured before/after, just with no prose.
+
+---
+
+## THE VALUE TIER WORKS (3 Sep 07:38) — 7% -> 72%, and the base cannot say "nothing happened"
+
+The smoke run finished (137 steps, 3h46m, final gate step 137 / epoch 1.00:
+recall 1.000, specificity 0.968, top1 0.983 — near the TOP of the specificity
+oscillation, so the single saved checkpoint is a good one).
+
+`bench/eval_exec_values.py` on the 60-row cross holdout (UNSEEN families),
+GENERATED not teacher-forced, both arms same rows:
+
+| | base-3b | trained | delta |
+|---|---|---|---|
+| parsed JSON | 60/60 (100%) | 60/60 (100%) | — |
+| verdict correct | 22/60 (37%) | **57/60 (95%)** | +58 |
+| **VALUES both right** | **4/60 (7%)** | **43/60 (72%)** | **+65** |
+
+Baselines computed BEFORE the eval: retrieval 0/60, most-common-constant 0/60,
+and *oracle-copy* (both values appear verbatim in the diff) 8/60 = **13%**, which
+is an upper bound on any retrieve-from-input strategy. **The base model at 7% is
+BELOW that ceiling; the trained model at 72% is far above it.** The capability is
+computation, and it is the fine-tune that produced it — essentially none of it
+pre-exists in Qwen2.5-Coder-3B.
+
+### The decomposition — what it computes well and what it does not
+
+| | base `before` | base `after` | trained `before` | trained `after` |
+|---|---|---|---|---|
+| `differs=false` (31) | 13 (42%) | **0 (0%)** | 30 (97%) | 27 (87%) |
+| `differs=true` (29) | 22 (76%) | 6 (21%) | 26 (90%) | 16 (55%) |
+
+Two things to carry into the write-up:
+
+1. **The base model got `after` right 0/31 times when the output was unchanged.**
+   It cannot represent "nothing happened" — it asserts a change and invents a
+   value, every time. Its verdict score of 37% is WORSE than always answering
+   `true` (48%). This is the same fabrication failure measured from the other
+   side earlier tonight (`direction` pinned to a constant `post-fixes`,
+   observable-right 11% across 44 held-out claims), and training removes it.
+2. **The trained model reads programs better than it predicts edits.** `before`
+   is 90-97% in both buckets; `after` is 87% when nothing changed but **55%**
+   when the change actually alters output. So: executes code reliably, predicts
+   the consequence of an edit moderately. 55% is still 4x the copy-ceiling, so
+   even the hard half is computation, not guessing. THIS is the number the next
+   corpus should target.
+
+Verdict 95% generated vs 96.8% teacher-forced at the final gate — the decoding
+path loses nothing.
+
+Raw per-row output: `data/exec_values_sft.json`, `data/exec_values_base.json`.
+Rerun either arm with `bench/eval_exec_values.py` (`--base-only` for the control).
+
+### What this does and does not license saying
+
+It licenses: *a 3B model trained on executed before/after pairs computes program
+values on unseen program families at 72%, where the untrained model scores 7% and
+no retrieval strategy exceeds 13%.*
+
+It does NOT yet license any claim about real commits. Everything above is the
+synthetic exec corpus. The `bench/basic` / held-out numbers in the section below
+are a DIFFERENT contract (v1 `summary`+`findings`) and a different model
+(oracle-merged); the two have not been joined. Joining them is the next
+experiment: serve `artifacts/sft-exec` and score it on `bench/basic` +
+`clean_heldout` to see whether the value capability survives contact with the
+review contract.
+
+---
+
+## THE ABLATION LANDED (3 Sep 02:30) — the SFT beats base by +12, and FA 0 is explained
+
+Everything below this section is history. The overnight chain ran all served-model
+work to completion; four bugs were found and fixed on the way, two of which would
+have silently corrupted a result rather than crashed.
+
+### The headline: the fine-tune is worth +12 points under matched grounding
+
+`bench/basic` (46 = 33 buggy / 13 clean), v1 contract, `ORACLE_INFERENCE_SAMPLES=1`,
+identical prompt and identical exec facts for both models:
+
+| arm | fully correct | false alarms | observable right |
+|---|---|---|---|
+| base-3b + facts | 28/46 (61%) | 0/46 | 23/36 (64%) |
+| base-3b + facts + filter | 28/46 (61%) | 0/46 | 23/36 (64%) |
+| oracle-merged + facts | 38/46 (83%) | 2/46 | 24/40 (60%) |
+| **oracle-merged + facts + filter** | **40/46 (87%)** | **0/46** | 24/40 (60%) |
+
+This is the ablation the thesis needs and it holds. 1 of 46 base calls errored and
+was scored "no finding", so 28/46 is a floor by at most one.
+
+**Variance is nil.** Five repeat runs of the winning arm: 40/46, FA 0/46, all five,
+zero spread. The headline is not sampling luck.
+
+### FA 0/46 does NOT mean the model stopped hallucinating
+
+The conflation probe (A3) settles this. `bench/clean_heldout` is 34 clean cases:
+21 `-fix` pairs whose behaviour legitimately DIFFERS, and 13 `-rename` pairs that
+are byte-identical. On `bench/basic` all 13 clean cases are byte-identical, so
+"buggy" and "differs" coincide there and nothing ever tested the distinction.
+
+| oracle-merged on clean_heldout | FA total | `-fix` (differs) | `-rename` (identical) |
+|---|---|---|---|
+| no facts | 13/34 (38%) | 12/21 | 1/13 |
+| + exec facts | 13/34 (38%) | 11/21 | 2/13 |
+| + facts + filter | 11/34 (32%) | **11/21 (52%)** | **0/13 (0%)** |
+
+The filter drives false alarms to exactly zero where execution proves the output
+byte-identical, and suppresses NOTHING where behaviour legitimately changed.
+`bench/basic`'s FA 0/46 is that mechanism clearing 13 no-op renames. Shown a clean
+case that actually changes behaviour, the model calls it a defect **52%** of the
+time. Report FA 0 with this attached or it is misleading.
+
+What the facts DO buy is the value tier: `observable_ok` 3/34 -> **27/34**.
+
+### The three claims separate cleanly now
+
+- **exec facts** fix the *value* tier (11% -> 79% on clean_heldout)
+- **exec filter** fixes false alarms *only* on byte-identical code
+- **neither** touches "changed, but correctly" — the 52% above
+
+That last gap is what the compute-then-explain corpus exists to close. It is now
+measured, not assumed.
+
+### Held-out: the SFT dominates on BOTH precision and recall
+
+Do not read the clean set alone — it says the base model is better (FA 26% vs 38%)
+and that conclusion reverses once the buggy set is included.
+
+| combined held-out (55 = 21 mech buggy + 34 clean) | precision | recall | F1 |
+|---|---|---|---|
+| base-3b | 9/18 = 50% | 9/21 = 43% | 0.46 |
+| oracle-merged | 16/29 = **55%** | 16/21 = **76%** | **0.64** |
+
+There is no specificity trade: the SFT's extra false alarms come with more than
+proportionally more true detections. Per-set: `mechanism_heldout` verdict correct
+base 9/21 (43%) vs SFT 16/21 (76%); `clean_heldout` FA base 9/34 vs SFT 13/34.
+
+### `direction` was never measuring the model
+
+`direction_ok` scored 91% (21/23) on clean_heldout and 0% (0/21) on
+mechanism_heldout. Both are the same artifact: unaided, oracle-merged emits
+`"post-fixes"` for **41 of 44** effect claims across the two sets. It is a constant.
+clean_heldout is all-`fix` and mechanism_heldout is all-`buggy`, so the constant
+reads as 91% skill on one and 0% on the other. **base-3b does it too** (19 of 20),
+so it is inherited from the base model under this prompt, not introduced by
+fine-tuning — no corpus work on the current contract will fix it.
+
+Handed exec facts on `bench/basic` the model is NOT constant (clean cases draw
+`unchanged` 11/13), which is the real finding: the facts supply a signal the model
+cannot produce itself, so 40/46 measures transcription of a computed fact rather
+than derivation of one. Moving that computation inside the model is the point of
+the exec corpus.
+
+**Rule going forward:** print the distribution of the raw predicted value beside any
+per-class accuracy. A single-label held-out set cannot separate a constant from a
+competence, and it fails silently and high.
+
+### Five bugs fixed tonight
+
+1. **`bench/exec_filter.py` loaded a hardcoded facts path** (`data/exec_diff_basic.json`).
+   Run against any other root, every id lookup missed, `v` was None, and it passed
+   all rows through while printing an empty suppression list — a silent no-op that
+   read as "nothing needed suppressing". It has never done anything outside
+   `bench/basic`. Now takes the facts file as an optional 3rd arg (defaults to the
+   old value) and exits if the ids do not intersect. This is what made A3f wrong
+   on first pass; rerun with
+   `python bench/exec_filter.py <in> <out> data/exec_diff_clean_heldout.json`.
+2. **`fine_tuning/train_sft.py` counted eval positives as `r.get("label") == 1`.**
+   The exec corpus has no `label` — its verdict is `differs`, inside the target — so
+   the count read 0 on a holdout that is 46% positive and the guard aborted the run
+   ("held-out slice has no defective examples"). Patched to read the first
+   `true`/`false` literal of the target, which is exactly what `verdict_eval`
+   scores; the `label` path is unchanged. Verified: `(27 defective)` of 60.
+   NOTE `--verdict-weight` was NOT affected — `_first_verdict_pos` locates the
+   verdict positionally, and checked over all 1404 exec rows, no field other than
+   `differs` carries a lowercase `true`/`false`.
+3. **The exec holdouts were label-ordered.** `--eval-max 60` took 56 positive /
+   4 negative — recall on 56, specificity on 4. Both holdouts shuffled at seed 42;
+   slices are now 27/33 (within) and 29/31 (cross).
+4. **22% of training rows were unanswerable** (244/1095): 3-line diff context hid
+   the driver call, so `before`/`after` were not derivable from the input and the
+   target taught guessing — the exact failure the direction exists to fix. Fixed
+   with an additive `--context` flag on `gen_exec_corpus.py`; rebuilt at the same
+   seed/size/balance, now 0% unanswerable. Also capped **115 memorizable rows**
+   (5 families whose output is constant regardless of input) at 4 per identical
+   target.
+
+5. **A stale background task from a DEAD session fired at 02:32** and launched a
+   SECOND `train_sft` on the OLD uncorrected corpus (`data/exec_sft.jsonl`),
+   pointed at the SAME `--output-dir artifacts/sft-exec`, redirecting with `>`
+   over the live run's `run_exec.log`. Two trainers on a 6GB card writing one
+   checkpoint dir. Caught because the task-completion notice arrived; killed at
+   02:34 with no checkpoints written by either (dir was still empty), and the
+   good run was restarted onto its own `run_exec_ctx.log`. Kept as
+   `run_exec_clobbered_0232.log`. **Before launching anything on the box, run
+   `pgrep -af fine_tuning[.]train_sft` — a queued job from a session that no
+   longer exists can still fire.**
+
+### THE VERDICT IS A SHORTCUT — the within-holdout gate measures nothing
+
+The first gate on `exec_sft_ctx_holdout_within.jsonl` read
+`recall 1.000 on 27 positives | specificity 0.939 | top1 0.967`. It looked like a
+pass. It is not a measurement. Two trivial baselines fit on the training corpus
+and scored on the same 60 rows:
+
+| baseline | within-60 | cross-60 (unseen families) |
+|---|---|---|
+| family-majority lookup | **1.000** | 0.517 |
+| tf-idf char 3-5gram + logreg | **1.000** (R 1.00 / S 1.00) | 0.567 |
+
+A bag of character n-grams beats the model on that holdout. The cause is corpus
+design: **34 of 38 families are single-label, covering 1008/1095 rows (92%)** —
+the family name alone gives `differs`. Only `f_early_return` (8 true / 13 false)
+is genuinely mixed; `f_dict_mutate` 21:2, `f_comparison_flip` 19:2 and
+`f_copy_reference` 20:2 are skew, not mixture. The within-holdout shares those
+families with training, so recognising the family answers the question.
+
+Consequences, in order of how much they cost:
+
+1. **`--verdict-weight 0.5` points ~34% of the loss at the shortcut.** The verdict
+   token is the one thing in this corpus that does NOT require computing.
+   Reconsider the weight for the real run — it was designed for `defect_found`
+   under a 71% negative base rate, which is a different problem.
+2. **Always evaluate on `exec_sft_ctx_holdout_cross.jsonl`**, where both baselines
+   sit at chance (0.52 / 0.57). The live run was restarted onto it at 03:10.
+3. **The value tier is NOT affected.** `before`/`after` vary with the randomised
+   inputs and cannot be recovered from family identity, so the corpus still
+   teaches computation where the thesis needs it. The verdict is the part that
+   rots.
+4. **Fix in the rebuild:** make each family emit both differing and identical
+   cases depending on its inputs, so `differs` stops being a family property.
+   `gen_exec_corpus.py` already knows the real values, so this is a generation
+   change, not a labelling one.
+
+Reproduce the baselines before trusting any future gate number — a per-class score
+on a holdout that shares families with training cannot separate computing from
+recognising.
+
+### FOR THE REAL RUN: `save_strategy="epoch"` keeps only the last checkpoint
+
+Held-out specificity OSCILLATES across the smoke run while recall stays pinned:
+
+| step | 20 | 40 | 60 | 80 | 100 |
+|---|---|---|---|---|---|
+| recall | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| specificity | 0.806 | 1.000 | 0.968 | 1.000 | 0.806 |
+
+A 0.806 <-> 1.000 swing (6 false positives of 31) means the verdict decision is not
+stably converged -- the model drifts toward over-calling `differs` and back. With
+`save_strategy="epoch"` (train_sft.py:452) only ONE checkpoint is written, at the
+end, so the saved weights are whichever phase of that swing step 137 happens to
+land in. There is no step-40 or step-80 to fall back on.
+
+**Change for the real run:** `save_strategy="steps"` with `save_steps` aligned to
+`--eval-steps`, plus `load_best_model_at_end` with a metric that is not recall
+(recall is 1.000 everywhere here and cannot discriminate — use specificity or
+balanced accuracy). Left alone for the smoke run: it is 50 minutes from done and
+the value tier is what it exists to measure.
+
+### The VALUE tier cannot be gamed — baselines, computed before the eval exists
+
+The verdict tier turned out to be a shortcut. The same check on the value tier
+says the opposite, which is why the value number is the one to trust. Baselines
+fit on train, scored on the first 60 rows of the cross holdout:
+
+| baseline | both values right |
+|---|---|
+| most-common constant from training | 0/60 (0%) |
+| nearest-neighbour retrieval (tf-idf char 3-5gram, copy that row's values) | 0/60 (0%) — `before` 7/60, `after` 0/60 |
+| **oracle-copy**: both values appear verbatim in the diff | **8/60 (13%)** |
+
+The last row is an UPPER BOUND on any retrieve-from-input strategy: 52 of 60 rows
+have at least one value that does not appear in the text at all, so a perfect
+copier still caps at 13%. **Any value score above ~13% is computation.** 34
+distinct (before, after) pairs across 60 rows, so there is no mode to guess.
+
+All three splits are 100% answerable (driver call visible in the diff: 1095/1095,
+121/121, 188/188), so the eval asks a question the input can answer.
+
+### The tool for it, staged and ready
+
+`bench/eval_exec_values.py` (new, synced to the box, parser unit-tested):
+
+```
+python bench/eval_exec_values.py --adapter artifacts/sft-exec \
+    --dataset data/exec_sft_ctx_holdout_cross.jsonl --limit 60
+python bench/eval_exec_values.py --base-only \
+    --dataset data/exec_sft_ctx_holdout_cross.jsonl --limit 60   # the control
+```
+
+It GENERATES rather than teacher-forcing -- `verdict_eval` scores one forced
+token and structurally cannot see whether the model computes. Reports parse rate,
+verdict accuracy and values-both-right, split by differs=true/false because a
+`false` row has equal values and a model that copies one field into the other
+would score without computing. Run both arms; the pair is the value-tier
+ablation, and the verdict number alone is not.
+
+### Running right now
+
+Smoke run on the corrected corpus, relaunched 03:10 on the box (pid 545871,
+log `run_exec_cross.log`) — eval switched to the CROSS holdout per the section
+above:
+
+```
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True .venv/bin/python -u \
+  -m fine_tuning.train_sft \
+  --dataset data/exec_sft_ctx.jsonl \
+  --eval-dataset data/exec_sft_ctx_holdout_cross.jsonl \
+  --output-dir artifacts/sft-exec \
+  --verdict-weight 0.5 --eval-steps 20 --eval-max 60 \
+  --epochs 1 --max-seq-length 512 --warmup-steps 15 --seed 42 \
+  > run_exec_cross.log 2>&1
+```
+
+Header confirmed healthy: 1095 examples, 60 held-out (29 defective), verdict
+tokens located, weight 0.5.
+
+**FIRST REAL GATE, step 20 / epoch 0.15, on UNSEEN families:**
+`recall 1.000 on 29 positives | specificity 0.806 | top1 0.900 | n=60`
+(29 TP / 25 TN / 6 FP / 0 FN)
+
+| cross-60, unseen families | accuracy |
+|---|---|
+| family-majority lookup | 0.517 |
+| tf-idf char 3-5gram + logreg | 0.567 |
+| constant "true" | 0.483 |
+| **model @ step 20** | **0.900** |
+
++33 points over the best trivial baseline on families absent from training, and
+specificity 0.806 rules out the degenerate all-`true` predictor that recall 1.000
+alone would be consistent with. This is generalisation, not recognition -- and it
+is the number to compare future gates against, NOT the 1.000 from the within
+holdout.
+
+137 steps total at ~88 s/step; started 03:10, ETA ~06:10. Gates every 20 steps.
+Step-20 trace: loss 1.167, mean_token_accuracy 0.951, entropy 0.192. **The standing gate applies: if held-out verdict
+recall is 0.000 at step 20, kill it.** Earlier attempts kept as `run_exec_failed_0227.log` (label bug),
+`run_exec_clobbered_0232.log` (stale-task collision) and
+`run_exec_ctx_withinholdout_0235.log` (the shortcut gate).
+
+`data/exec_explain.jsonl` (1075 / 121 / 150) is built, gated and synced but NOT
+trained — it is the compute-then-explain corpus, and it is the thing that targets
+the 52% and the value tier. Capping pushed its cross-holdout to 64% positive, so
+read its specificity, not just recall.
+
+### Uncommitted — NOTHING is committed, per the standing rule
+
+Modified tonight: `bench/exec_filter.py` (facts-path arg),
+`fine_tuning/train_sft.py` (eval positive count),
+`dataset_builder/gen_exec_corpus.py` (`--context`).
+New: `dataset_builder/build_exec_explain.py`.
+Backups of all three originals are in the session scratchpad.
+Rebuilt: `data/exec_sft_ctx*.jsonl` (shuffled holdouts).
+New result files: `data/heldout_{clean,mech}_{oracle,base}.jsonl`,
+`data/heldout_clean_oracle_exec{,_filtered}.jsonl`,
+`data/basic_bench_base46_exec{,_filtered}.jsonl`.
+
+
+## EXECUTION-GROUNDED (2 Sep 22:00) — the model line is capped, the executor is not
+
+Everything below this section is history. The W=0.5 run described in the next
+section was killed at its own gate; read this one and stop.
+
+### The day in one paragraph
+
+The repair epoch-1 checkpoint scored **0 findings on 40 real commits**. Three
+interventions were tried and measured: verdict loss-weighting (no effect),
+a prompt rule suppressing speculation (no effect), and feeding the model
+executed before/after (small effect). Mechanism-correctness sat at 13-14 of 33
+in **all four** arms. Meanwhile `bench/exec_diff.py` — which just runs the code —
+scored **45/46 with zero false positives**. The result now lives in the execution
+layer, and the new direction is training the model to PREDICT execution rather
+than to describe diffs.
+
+### Why epoch 1 produced nothing (settled, not guessed)
+
+Raw output explicitly carries `"defect_found": false`, `confidence` pinned at
+0.62, `repair_direction` null 40/40. Both post-filters were inert:
+`drop_ungrounded` is gated on `GROUNDING_FILTER` (default `off`) and
+`drop_refuted` needs a `_post_source` the bench never sets.
+
+**The decisive number is the train-set replay, not the real commits.** The 40
+real commits carry NO gold label — fields are date/diff/files/language/project/
+rev/subject — so a model emitting nothing cannot be scored wrong by them. 8 of
+40 are fix-shaped, 9 chore/refactor. Replaying 60 of its OWN training examples:
+
+    recall on trained positives : 0/40      (20/20 negatives correct)
+
+**Cause: loss dilution.** Targets average 100 tokens; `defect_found` is 1 of
+them, against a 71% negative base rate. The decision carries **1% of the token
+loss**, so "always false + a templated sentence" is nearly free. That is what
+loss 0.23 and `mean_token_accuracy` 0.93 were rewarding. Never read either as
+explanation quality.
+
+### Three interventions, all measured, two negative
+
+    arm                      correct  imprec  wrong  miss   strict  lenient
+    stored (30 Aug)               13       8      9     3      39%      64%
+    baseline v1 (2 Sep)           13       3     10     7      39%      48%
+    no-speculation rule           13       3     12     5      39%      48%
+    exec-grounded prompt          14       7      7     5      42%      64%
+
+Hand-graded, all 33 buggy cases, same rubric, per case in
+`data/mechanism_grade_ab.json`.
+
+1. **`--verdict-weight 0.5`** (auxiliary CE on the verdict token). Gate at step
+   20: **recall 0.000 on 14 positives**, specificity 1.000, top1 0.767 = exactly
+   the negatives. Killed per the pre-registered criterion. 2h05m, no checkpoint
+   (`save_strategy="epoch"`, 1 epoch). NOT a refutation of weighting in general —
+   step 20 of 131 is 15% of an epoch — but it is not a fast fix.
+2. **No-speculation prompt rule.** Cut hedged consequences, moved 7 misses to 5
+   by making the model commit — to wrong claims. `wrong` rose 10 -> 12.
+3. **Exec-grounded prompt** (measured before/after in the message). `wrong` fell
+   10 -> 7, scorer's FABRICATED fell 20% -> 5%, lenient 48% -> 64%. Strict moved
+   13 -> 14.
+
+**`correct` is 13-14 in every arm** while 15 of 33 individual grades churn
+between arms. That is a checkpoint ceiling, not a prompt problem.
+
+**And the finding that kills the "more context" hypothesis:** five cases
+CONTRADICTED facts placed in their own prompt. `py-pop-guard` shown
+`AttributeError`, still said "may receive None". `ts-nullish-default` shown
+`"" -> "anon"`, said "behavior remains identical". `rb-range-bound` shown
+`15 -> 10`, claimed 20. A 3B given ground truth ignores it ~15% of the time.
+
+### THE RESULT: execution as oracle and veto
+
+`bench/exec_diff.py` compiles and runs pre and post for all nine bench
+languages (python3, node incl. --experimental-strip-types for ts, ruby, php,
+go run, rustc, java single-file, gcc). On `bench/basic`:
+
+    buggy cases where execution DIFFERS : 32/33
+    clean cases where execution is SAME : 13/13
+    => verdict from execution alone     : 45/46  (98%), ZERO false positives
+
+`bench/exec_filter.py` suppresses findings execution disproves. Configurations,
+same scorer:
+
+    oracle-merged (stored 30 Aug)     41/46   FA 2
+    oracle-merged (2 Sep)             37/46   FA 1
+      + exec filter                   37/46   FA 0
+    exec-grounded prompt              38/46   FA 2
+      + exec filter                   40/46   FA 0     <- best
+    variance runs 1,2 (same config)   40/46   FA 0     (identical; greedy)
+
+**Known limits, state them:** `c-array-bound` is invisible — reading `a[5]`
+returned 0 so the sum is still 15, and the filter suppresses its correct
+finding. `rs-overflow` never compiles (`error: this arithmetic operation will
+overflow`), a correct detection but a different signal. And this works only
+because the 46 cases are self-contained runnable programs; real commits need a
+build and a test. Benchmark-scope result, say so.
+
+### CONTRACT: oracle-merged is v1. Do not "upgrade" it.
+
+Every answer in `data/basic_bench_oracle46.jsonl` (the 41/46 run) has exactly
+two keys, `summary` and `findings`. No `effect`. That is v1. Running the same
+checkpoint under v2 scores **31/46 with 9 false alarms** — a ten-point drop from
+the prompt alone. `ui/tui_app.py:35` setdefaults v3, so the TUI must be
+overridden; `try_tui.sh` does it.
+
+**UNRESOLVED, and it matters before anything is published:** under v1,
+`include_schema=true` still makes the model emit `effect`/`confidence`/
+`repair_direction` (39-43 of 46 non-null), which the stored 41/46 rows do not
+have. That is the likeliest explanation of 41 vs 37 and it is not yet run down.
+
+### NEW DIRECTION: train it to CALCULATE, not to describe
+
+The claim: *training on executed behaviour teaches a small model to predict
+behaviour rather than pattern-match on diff text.* At inference there is no
+runtime — `exec_diff` is the teacher, not a component. Control already measured:
+a model HANDED the facts scores 42%.
+
+`dataset_builder/gen_exec_corpus.py` generates runnable pre/post pairs and
+labels them BY EXECUTION. No prose target, no LLM in the loop:
+
+    target = {"differs": true, "before": "780", "after": "741"}
+
+    1404 pairs, 44 families
+      distinct diff FRAMES (slots stripped) : 717   (ratio 0.51)
+      distinct (before, after) value pairs  : 694/1404 (49%)
+      label balance                         : 47% positive
+      train 1095 / holdout_within 121 / holdout_cross 188
+
+`changed` (the construct that moved) is metadata and is deliberately NOT
+trained on: one templated string per family would teach diff-shape -> phrase,
+the recitation failure this corpus exists to avoid.
+
+**Two holdouts, because they answer different questions.** within-family =
+values unseen, families seen ("can it compute?"). cross-family = 6 families
+never trained on, drawn from BOTH pools 4 buggy / 2 clean ("does it
+generalise?"). A cross set of only buggy shapes would measure recall and call
+it generalisation.
+
+**Build gates that refuse to write:** frame ratio below `--min-frame-ratio`
+(fired twice at 0.497 and 0.50), an empty split, a single-label split.
+
+**Bugs the build caught before training:** `exec_diff` compared
+`stdout.strip()`, so a pair differing ONLY by `.strip()` compared equal and was
+labelled clean — fixed with an unstripped `raw` key. And the first corpus was
+74% positive, the exact mirror of the repair corpus's 71% negative; fixed by
+adding 8 clean families (which also bought the frame ratio back), not by
+oversampling the existing ones.
+
+### QUEUED RIGHT NOW (background task, 2 Sep 22:00)
+
+    1. BASE ABLATION — artifacts/base-3b under the identical exec-grounded +
+       filter config, against the SFT's 40/46. This is the evidence the
+       fine-tuned model matters. Prior, without execution: base 33/44 vs
+       oracle-merged 40/44.
+    2. SMOKE RUN — artifacts/sft-exec, data/exec_sft.jsonl, --verdict-weight 0.5
+       --eval-steps 20 --eval-max 60 --epochs 1 --max-seq-length 512.
+       ~250-token records, so ~90s/step not 380; 137 steps ~= 3-4h.
+       KILL IT if held-out recall is 0 at step 20, same as this morning.
+
+    watch   tr '\r' '\n' < ~/oracle/run_exec.log | grep -a "holdout @ step"
+
+### THE PLAN — 3 weeks to a publishable draft
+
+Week 1: corpus + smoke + full run. Write background, method, and the
+"JIT prediction is a probability; we make it a readable explanation" framing.
+Week 2: evaluate on `bench/basic` (untouched held-out set), the base ablation,
+the exec-grounded results. Week 3: new numbers, discussion, polish.
+Training is GPU wall-time, not the author's time — it runs overnight.
+
+**The honest headline available today:** locus ~85-89%, mechanism ~39-42%, both
+reproduced; execution verdict 45/46 with 0 false positives; a quantified
+boundary against 93% mechanism for gpt-oss-120b on identical cases. Two
+interventions measured and negative. Do not inflate this — the measured
+boundary IS the contribution.
+
+### Uncommitted — NOTHING is committed, per the standing rule
+
+    fine_tuning/train_sft.py       --verdict-weight/--verdict-check/--eval-dataset/
+                                   --eval-steps/--eval-max, counters, 4 memory fixes
+                                   (chunked_nll returns no logits -> hook the final
+                                   RMSNorm; output_hidden_states holds all 36 layers;
+                                   per_device_eval_batch_size defaults to 8 vs train 1;
+                                   PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True)
+    dataset_builder/gen_exec_corpus.py   NEW — 44 families, executed labels, splits
+    dataset_builder/build_repair_sft.py  --holdout/--holdout-by/--split-seed, shuffled
+    dataset_builder/schema.py      OBSERVED_TEMPLATE, opt-in _NO_SPECULATION
+    llm_explainer/client.py        analyze(observed=...) via instance attr
+    bench/exec_diff.py             NEW — differential executor, 9 languages
+    bench/exec_filter.py           NEW — suppress what execution disproves
+    bench/basic_bench.py           --exec-facts; FIX: .get(k,"") returns None on a
+                                   present-but-null key, crashed the whole run
+    ui/tui_app.py                  FIX: KeyError 'UNSCORED' on empty-diff/merge commits
+    serve.sh                       MODEL var; reuse a running server (was reloading
+                                   3B of weights on every launch)
+    try_tui.sh                     NEW — launcher, v1 contract, NO_GATE=1, --pick, LIMIT
+    data/  exec_diff_basic.json, exec_sft*.jsonl, mechanism_grade_oracle46.{json,md},
+           mechanism_grade_ab.json, basic_bench_oracle46_{repro,terse,exec}*.jsonl,
+           sft_repair_train{,_holdout}.jsonl, var_exec_*.jsonl
+
+The GPU box's `dataset_builder/schema.py` predates `_SYSTEM_PROMPT_REPAIR`, so
+corpus builders only run on the laptop. It affected nothing measured — benches
+build prompts locally, the box only serves — but it breaks a rebuild there.
+
+Epoch 2 of the repair run remains exactly resumable from
+`artifacts/sft-repair/checkpoint-146` (corpus still hashes `eeb318d39ad8`).
+**Do not resume it.** See the loss-dilution section above.
+
+## SUPERSEDED — W=0.5 run (2 Sep 17:00), killed at its gate
+
+The epoch-1 pause fired cleanly at 14:34 and everything below about it is now
+history. `artifacts/sft-repair/checkpoint-146` is complete (all seven files a
+resume reads), the corpus still hashes to `eeb318d39ad8`, and epoch 2 remains
+exactly resumable — but DO NOT resume it. The reason is the whole of this
+section.
+
+### What epoch 1 turned out to be
+
+Scored on the same 40 real commits as v6/v7: **0 findings, 0 flagged, over all
+40**. v7's number was 32 findings / 30 wrong / 0 correct, so both sit at **0
+confirmed correct** — ep1 just gets there by saying nothing, which also scores
+0 no-such-entity and 0 incoherent and therefore reads *cleaner* on the grading
+sheet than the model that at least tried.
+
+That zero is the model's own call, not harness attrition. Checked end to end:
+raw output is well-formed and explicitly carries `"defect_found": false` (the
+key is present, not omitted), `confidence` pinned at 0.62 on every commit,
+`repair_direction` null 40/40. Both post-filters were inert — `drop_ungrounded`
+is gated on `GROUNDING_FILTER` (config default `off`, and `score_repair.sh`
+never sets it) and `drop_refuted` needs a `_post_source` the real-commits bench
+never populates.
+
+**The decisive measurement is the train-set replay, not the real commits.** The
+40 real commits carry NO gold defect label — the fields are date/diff/files/
+language/project/rev/subject and nothing else — so the evaluation hand-grades
+whether findings are *correct*, and a model emitting none cannot be scored wrong
+by it. 8 of the 40 are fix-shaped and 9 chore/refactor, so `false` may even be
+right for a good number of them. Replaying 60 of its OWN TRAINING EXAMPLES
+verbatim is what settles it:
+
+    recall on trained positives : 0/40      (20/20 negatives correct)
+
+It answers `false` to examples it was explicitly optimised to call `true`. Not
+out-of-distribution. It never learned the positive class.
+
+### Why — loss dilution, measured
+
+The supervised target averages **100 tokens** and `defect_found` tokenizes to
+exactly **1** of them, against a **71% negative base rate** (340 true / 824
+false). The only decision the task is about carries **1% of the token loss**, so
+"always answer `false` plus a fluent templated explanation" is very nearly free.
+That is what loss 0.23 and `mean_token_accuracy` 0.93 were rewarding for sixteen
+hours. Never read either as explanation quality.
+
+The explanation collapsed accordingly: **6 sentence frames over 40 commits**,
+top frame 16/40 ("Refines the guard on <ID> in <FILE> without changing what the
+branches do"), and often false about the diff — axios `6b3c305fc4` adds a single
+`import` line and no conditional, described as "Reworks conditional handling".
+MEASURE THIS STRIPPED: a probe on the same checkpoint reported "60/60 distinct
+explanation stems" on raw first-45-characters. Raw distinctness is the trap
+already recorded under the v4 `effect.check` defect, and it caught this session
+too.
+
+One thing that is NOT wrong: the corpus positives are **100% grounded** — every
+identifier cited in a positive target appears in the diff the model is shown.
+The 94%-ungrounded poisoning recorded on 1 Sep is fixed. The collapse happened
+on a clean corpus.
+
+### What was built in response
+
+`fine_tuning/train_sft.py`
+
+    --verdict-weight W   auxiliary CE on the defect_found token alone, so it is
+                         priced apart from the 99 around it. Coefficient, not a
+                         multiplier, because it gathers ONE logit row instead of
+                         upcasting (batch x seq x 151k), which does not fit here.
+                         share ~= (W + 1/N)/(1 + W); W=0.5, N=100 -> ~34%.
+    --verdict-check N    locate the verdict token over N batches and exit. A 14h
+                         run must never be what discovers the token was missed.
+    --eval-dataset       held-out set; verdict recall reported per epoch
+    --eval-steps N       ...and every N steps. One epoch is 131 steps at ~6min,
+                         so an epoch-end-only metric reports at hour 14.
+    --eval-max N         cap examples per eval (~15s each; all 116 is ~30min)
+
+`dataset_builder/build_repair_sft.py` — `--holdout FRAC` (default 0.1),
+`--holdout-by {label,project}`, `--split-seed`. Writes 1048 train / 116 holdout,
+29% positive in both, rebuild verified identical to the original 1164 with zero
+overlap. The holdout is SHUFFLED before writing: it is built class-by-class, so
+unshuffled every capped prefix is all-negative and recall reads `nan` — a metric
+measuring nothing, which is the exact failure this split exists to prevent.
+`label` shares 20 projects with train (a training-health gate); `project` leaks
+nothing but landed 84% defective from 29 skewed projects — use it for the number
+you report, not for tuning.
+
+### Four bugs the smoke tests caught, all of which would have died mid-run
+
+    outputs.logits is None            TRL defaults to loss_type="chunked_nll",
+                                      which never materialises logits (that is
+                                      how seq 2048 fits). Take one hidden state
+                                      via a hook on the final RMSNorm instead.
+    output_hidden_states=True         returns ALL 36 layers, ~300MB/forward on a
+                                      card whose training peak was 5318/6144.
+    per_device_eval_batch_size=8      defaults independent of the train batch
+                                      size, so eval forwarded 8x2048 vs train's
+                                      1x2048. OOM. Pinned to args.batch_size.
+    allocator fragmentation           OOM in loss.backward() with 821MB reserved
+                                      -but-unallocated. Launch with
+                                      PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+                                      -> VRAM 5427 -> 4822 MiB.
+
+### The live run
+
+    on the box, launched 16:40 2 Sep, ~387s/step, 131 steps, ETA ~07:00 3 Sep
+
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True .venv/bin/python -u \
+      -m fine_tuning.train_sft \
+      --dataset data/sft_repair_train.jsonl \
+      --eval-dataset data/sft_repair_train_holdout.jsonl \
+      --output-dir artifacts/sft-repair-w05 \
+      --verdict-weight 0.5 --eval-steps 20 --eval-max 60 \
+      --epochs 1 --max-seq-length 2048 --warmup-steps 15 --seed 42 \
+      > run_repair_w05.log 2>&1 &
+
+Same seed, warmup and sequence length as ep1, so the weighting is the variable.
+Trains on 1048 where ep1 had 1164 (the holdout is carved from the same pool), so
+it is not a perfectly clean A/B. New output dir; `artifacts/sft-repair/` and the
+corpus hash are untouched.
+
+**THE GATE: first eval at step 20 (~18:40), then every 20 steps.** Recall above
+zero means the weighting bit and the remaining ~11h are worth spending. Recall
+at exactly zero means it did not, and the run should be killed there — the log
+says so explicitly when it happens. 60 examples with 14 positives, so
+granularity is ~7 points: enough to tell zero from non-zero, too coarse to tune
+W on.
+
+    watch it   tr '\r' '\n' < ~/oracle/run_repair_w05.log | grep -a "holdout @ step"
+
+### When it finishes
+
+    1. score it    ADAPTER=artifacts/sft-repair-w05 TAG=repair_w05 ./score_repair.sh
+    2. hand-grade  data/real_commits_repair_w05.md -> ..._grades.json
+                   v7 is still the number to beat: 32 findings, 30 wrong, 0 correct
+    3. if recall moved but findings are still wrong, the next lever is SPLITTING
+       detection from explanation (a classifier for the verdict, generation only
+       for positives) rather than pushing W up. Rebalancing alone is not the fix:
+       it moves the base rate 71% -> 50% while the verdict still carries 1% of
+       the loss.
+
+### Uncommitted work — NOTHING is committed, per the standing rule
+
+Added 2 Sep afternoon, on top of the list further down (which still stands):
+
+    fine_tuning/train_sft.py          verdict weighting, holdout eval, the four
+                                      memory fixes above (synced to the box)
+    dataset_builder/build_repair_sft.py   holdout split (LAPTOP ONLY — see below)
+    data/sft_repair_train.jsonl       1048 train  (synced to the box)
+    data/sft_repair_train_holdout.jsonl   116 holdout (synced to the box)
+
+The GPU box's `dataset_builder/schema.py` predates `_SYSTEM_PROMPT_REPAIR`, so
+the corpus builder only runs on the laptop. It affected nothing measured here —
+the benches build prompts locally and the box only serves — but it will bite a
+rebuild attempted on the box.
+
+## SUPERSEDED — PAUSE/RESUME (2 Sep 10:07), the pause it describes has fired
+
+The run does NOT roll into epoch 2 by itself any more. `pause_after_epoch1.sh`
+is armed on the box under setsid/nohup, watching trainer pid 206034. It waits
+for the first `artifacts/sft-repair/checkpoint-*` to hold every file a resume
+needs AND to stop growing, then SIGTERMs the trainer and stages a scoring copy.
+
+    on the box     bash pause_after_epoch1.sh --check     # state, changes nothing
+                   tail ~/oracle/pause_ep1.log
+    from here      ./dashboard_train.sh --once            # "pause" line under peak vram
+
+WHEN IT FIRES (~2 Sep 15:00, step 146):
+
+    1. score epoch 1   ADAPTER=artifacts/sft-repair-ep1 TAG=repair_ep1 ./score_repair.sh
+    2. hand-grade      data/real_commits_repair_ep1.md -> data/real_commits_repair_ep1_grades.json
+                       v7 is the number to beat: 32 findings, 30 wrong (93%), 0 correct
+    3. resume epoch 2  on the box: nohup bash resume_repair.sh > resume_repair.log 2>&1 &
+       or DON'T. The v4 evidence below says epoch 2 was 3-6 points worse. Decide
+       from the epoch-1 grade, which is the whole point of stopping here.
+
+Resuming is exact, not approximate: optimiser moments, cosine LR position, RNG
+and dataloader position all come out of the checkpoint, so epoch 2 runs the same
+batches in the same order at the same LR as if it had never stopped. Two guards
+protect that claim, because it holds only while the schedule is unchanged —
+`resume_repair.sh` refuses to start if `data/sft_repair_msgs.jsonl` no longer
+hashes to eeb318d39ad8, and `resolve_resume()` in `fine_tuning/train_sft.py`
+refuses if the step total the arguments imply differs from the checkpoint's.
+Do not "fix" the epoch count to 1 in resume_repair.sh: --epochs 2 describes the
+SCHEDULE the checkpoint was written under, not the work remaining.
+
+`--resume` is new (2 Sep) in `fine_tuning/train_sft.py`; bare, it takes the
+latest checkpoint under --output-dir. Local and box copies are in sync.
+
+### Uncommitted work — NOTHING is committed, per the standing rule
+
+Written 2 Sep, all of it dirty in the working tree. A fresh session sees these
+as modifications with no commit explaining them, so this is the explanation:
+
+    fine_tuning/train_sft.py    --resume flag + resolve_resume() step-total guard
+                                (synced to the box; the running trainer already
+                                has its code in memory and is unaffected)
+    dashboard_train.sh          "pause" line under peak vram; PAUSE/PAUSE_LOG
+                                added to the single SSH fetch
+                                backups: /tmp/claude-1000/dashboard_train.sh.bak,
+                                .bak2 (train-at-bottom reorder), .bak3 (pre-pause)
+    next-session.md             this section
+
+Box-only, following the existing run_*.sh convention (they have never lived in
+the local repo — run_v4/v6/v7/repair.sh are all box-side):
+
+    ~/oracle/pause_after_epoch1.sh    the watcher
+    ~/oracle/resume_repair.sh         epoch 2, corpus-hash guarded
+
+State at 2 Sep 10:09 — PIDs go stale, re-read them rather than trusting these:
+
+    trainer 206034   watcher 388032   step 104/292 [11:22:03<20:50:50, 399.21s/it]
+
+### Loss trace — the step-25/50 memorisation guard did NOT trip
+
+    step   5    25    50    75   100
+    loss 1.392 0.711 0.420 0.287 0.229      threshold was <0.2 by step 50
+
+0.229 at step 100 and still falling; it may cross 0.2 before step 146. That is
+not itself evidence of memorisation: the assistant turn is a fixed-key JSON
+object, so much of the 93% token accuracy is braces and key names. The 40-commit
+grade is what separates format from content.
+
+## Where things stand (1 Sep 23:00) — REPAIR-SUPERVISED RUN IS TRAINING
+
+Everything below this section is SUPERSEDED except for its recorded numbers.
+The v6/v7 action lists are done. Read `docs/RESULTS.md` top three sections for
+the measurements; this section is the state and the next commands.
+
+### The run
+
+    artifacts/sft-repair    292 steps (2 epochs), started 1 Sep 22:46
+    driver ~/oracle/run_repair.sh, log ~/oracle/run_repair.log
+    corpus data/sft_repair_msgs.jsonl — 1164 records, 340 defective (29%)
+    max_seq_length 2048, LoRA r=16 a=32, lr 1e-4 cosine, warmup 15, seed 42
+    ORACLE_OUTPUT_CONTRACT=repair
+
+**First command of the session** — the run outlives its session:
+
+    ./dashboard_train.sh --once        # reads run_repair.log, shows step/ETA/loss
+
+TIMING: the box is a GTX 1660 SUPER (TU116 — NO tensor cores), so a step is
+~400s and the full 2 epochs is ~33 h. Epoch 1 finishes at step 146, ~16 h in,
+and `save_strategy="epoch"` writes a complete adapter there.
+
+TAKE THE EPOCH-1 CHECKPOINT — now enforced by the watcher above, not by
+remembering to look. The v4 run was scored at both, and epoch 2 improved
+nothing while being 3-6 points WORSE on `basic` verdict on both seeds:
+
+    seed42  1ep 89% / 2ep 86%      seed7  1ep 95% / 2ep 89%
+
+### What this contract is
+
+NOT v1/v2/v3. Different keys, different user template, targets derived from the
+diff that REPAIRED each defect rather than written from the buggy code alone.
+
+    defect_found  confidence  target_file  affected_identifiers
+    explanation   repair_direction
+
+Wired in `dataset_builder/schema.py` (`_SYSTEM_PROMPT_REPAIR`,
+`_USER_TEMPLATE_REPAIR`, `repair_to_analysis`) and `llm_explainer/client.py`
+(parse routed, chunking disabled). `build_repair_sft.py` IMPORTS the two
+literals rather than keeping copies, so corpus and inference cannot drift.
+
+Serving MUST set ORACLE_OUTPUT_CONTRACT=repair. Without it,
+`_PROMPTS.get(OUTPUT_CONTRACT, _SYSTEM_PROMPT_V1)` silently serves the V1 prompt
+— the shape the checkpoint never trained on.
+
+### Next commands, in order
+
+    # 1. score the new checkpoint on the SAME 40 real commits
+    ./score_repair.sh              # serves the adapter, runs the 40, writes
+                                   # the sheet, then runs grade_real.py
+
+    # 2. machine-decidable half of the taxonomy
+    .venv/bin/python bench/grade_real.py --tags v7 repair --show
+
+    # 3. hand-grade the rest against data/real_commits_repair.md
+    #    classes: contradicted | inverted | no-such-entity | incoherent
+    #             | partial | confirmed correct
+    #    record in data/real_commits_repair_grades.json (mirror the v7 file)
+
+### The number to beat
+
+v7 on those 40 commits: 27/40 flagged, 32 findings, **30 wrong (93%)**,
+0 confirmed correct. Breakdown in `data/real_commits_v7_grades.json`:
+
+    contradicted 10 | inverted 8 | no-such-entity 8 | incoherent 4 | partial 2
+
+The one real defect in the set — `gin 34b1d0262e`, an `http.Flusher` type
+assertion losing its `ok` guard — was missed by base 3B, both v6 seeds and v7.
+gpt-oss-120b found it. That commit is the single best signal in the benchmark.
+
+### Why the corpus is what it is (do not undo these)
+
+Four defects were found and fixed on 1 Sep, all BEFORE any training used them:
+
+  94% ungrounded  defective targets took identifiers from the REPAIR diff, which
+                  the model never sees — typically the fix's TEST names bound to
+                  a source file. Now the intersection of repair and reviewed
+                  diff. `build_repair_targets.py`, and enforced again after
+                  token-budget elision in `build_repair_sft.py`.
+
+  hindsight       every defective frame said "a later commit repaired X". At
+                  inference there is no later commit. 531 -> 0.
+
+  templating      1178 clean targets were 41 skeletons (3%) while raw
+                  distinctness read 99% — the filename slot made each unique.
+                  Same shape as the v4 `check` failure. Frames 24 -> 56 clean,
+                  3 -> 36 defective. ALWAYS measure distinctness with the
+                  `<FILE>` and `` `id` `` slots stripped.
+
+  CHANGES.txt     predicted CLEAN with 98% precision over 15% of the corpus
+                  (159 clean / 2 defective, hbase+hadoop release notes).
+                  `build_repair_targets.strip_non_source()` now removes every
+                  non-source hunk before anything derives from the diff.
+
+`dataset_builder/filter_repair_targets.py` exists because the sanitisation step
+was ad-hoc and unrecorded; it also carries the 30:70 rebalance.
+
+### Known limitations, for threats to validity
+
+  project confound   hadoop-mapreduce + hbase are 42% of the clean class.
+                     Capping was offered and declined; it stands.
+  still frame-based  113 clean skeletons / 824, 81 defective / 340. Better than
+                     41/1178 but the explanation is slot-filling, not reasoning.
+  SZZ noise          labels are B-SZZ derived; literature puts precision at
+                     50-70%. "Clean" means "not known to be defect-inducing".
+  small              1164 records; 340 defective is thin.
+
+### Rebuild chain, if the corpus must be regenerated
+
+    python -m dataset_builder.build_repair_targets --out data/sft_repair.jsonl
+    python -m dataset_builder.filter_repair_targets --out data/sft_repair_clean.jsonl
+    python -m dataset_builder.build_repair_sft --out data/sft_repair_msgs.jsonl
+
+Standing constraints: no commits without asking; commits carry NO attribution
+trailers; do not delete `data/sft_v4_suggest.jsonl`; do not change the v3 prompt
+in `dataset_builder/schema.py`; the GPU box login shell is fish, so every remote
+command goes through `bash -lc`.
+
+---
 
 ## Where things stand (31 Aug 21:00) — v6 IS TRAINING, corpus rebuilt
 

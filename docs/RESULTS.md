@@ -3,11 +3,1070 @@
 Every measurement taken, with the command that reproduces it. Numbers only —
 interpretation lives in `ROADMAP.md`, corpus provenance in `DATASETS.md`.
 
-Status as of 2026-09-01.
+Status as of 2026-09-06.
 
 ---
 
-## The first measurement on real code: 88-91% of findings are wrong, and most of them describe code that is not in the diff (2026-09-01, latest)
+## Retraining on a pytest-shaped corpus: 40% -> 86% deployed (2026-09-06, latest)
+
+The section below this one ends on a null: the deployed reviewer scored 183/458
+(40%) and was statistically indistinguishable from the un-fine-tuned base model,
+67 discordant rows against 67, p = 1.00. This section is what changed that, and
+the headline is that **the deployed path now scores 392/458 (86%)**.
+
+Two things were wrong, and only one of them was the model.
+
+**1. The training corpus taught the wrong shape.** `exec_sft_v2.jsonl` was built
+from mutated ten-line programs whose `before` was a printed scalar -- median
+signature length 3 characters against BugsInPy's 55, diffs of 310 characters
+against 942, no imports, no decorators. The model learned to copy short scalars
+and met 55-character pytest tracebacks it had never seen.
+
+**2. The grounding filter had inverted the corpus.** `teach_exec_explain.grounded`
+demanded both measured values verbatim. On a fix, `after` is the sentinel *"the
+test passes"*, which the teacher legitimately rephrases -- so 412 rows were
+dropped and the surviving corpus was **93% no-change**. Training on it taught the
+model to assert that nothing happened, which is precisely the deployed failure.
+`SENTINELS` and `FIXDIR` fixed it: survival 53/498 -> 461/498, balance 39%
+positive. The same bug was duplicated in `build_exec_sft_v2.py`'s audit, which
+had therefore been passing 459 broken rows as correct.
+
+### The v3 corpus
+
+`dataset_builder/gen_exec_pytest.py` generates programs whose measured `before`
+is a real pytest failure signature, produced by running the program under pytest
+rather than by printing a value.
+
+    python -m dataset_builder.gen_exec_pytest --out data/exec_v3.jsonl
+    python -m dataset_builder.teach_exec_explain --in data/exec_v3.jsonl \
+        --out data/exec_explain_v3.jsonl
+    python -m dataset_builder.build_exec_sft_v2 --src data/exec_explain_v3.jsonl \
+        --out data/exec_sft_v3.jsonl --audit
+
+| | v2 | v3 |
+|---|---|---|
+| training rows | 1103 | **1170** |
+| positive (behaviour differs) | 7% | **39%** |
+| distinct mutation families | 22 | **36** |
+| single-label families | 34% | **11%** |
+| distinct explanation frames | 0.97 | **0.99** |
+| rows failing the grounding audit | 459 (undetected) | **0** |
+
+> One generator bug is worth recording because it would have produced wrong
+> labels silently. Reusing a single directory for `test_prog.py` made CPython
+> serve a stale `__pycache__` entry whenever two writes landed in the same mtime
+> second, so ~15% of samples asserted a *previous* sample's expected value --
+> observed as `assert '3' == '7'` where the program had printed 3. Fixed with a
+> per-call `mkdtemp` plus `PYTHONDONTWRITEBYTECODE=1`; verified 0/34, was 5/34.
+> `-p no:cacheprovider` disables pytest's cache, not the interpreter's.
+
+### Training
+
+Deliberately identical to `oracle-reviewer-3b` -- seed 42, verdict-weight 0.5,
+1 epoch, 4-bit, LoRA r=64 alpha=128 -- so the **corpus is the only variable**.
+
+    python fine_tuning/train_sft.py --dataset data/exec_sft_v3.jsonl \
+      --output-dir artifacts/sft-exec-v3 --epochs 1 --seed 42 --verdict-weight 0.5 \
+      --eval-dataset data/exec_sft_v3_holdout_cross.jsonl --eval-steps 20 --eval-max 40
+
+147 steps, 4h56m on the 1660 SUPER. `train_loss` 1.744, final step loss 0.390,
+mean token accuracy 0.896. Held-out verdict recall was **1.000 on 21 positives at
+every reading** (the standing kill condition is 0.000 at step 20); specificity
+0.842, top-1 0.925 at step 147.
+
+### The bench arms
+
+Same frozen 458 rows, same rubric, same decode as every arm in the section below.
+
+    python bench/eval_bugsinpy_arms.py --arm exec --adapter artifacts/sft-exec-v3 \
+        --prompt plain --out data/bip_arm_v3plain_v2.json
+    python bench/eval_bugsinpy_arms.py --arm exec --adapter artifacts/sft-exec-v3 \
+        --prompt strong --batch 2 --out data/bip_arm_v3strong_v2.json
+
+| | v3 plain | v3 + strong prompt | base + strong | sft-v2 plain | base plain |
+|---|---|---|---|---|---|
+| produced an explanation | 440 (96%) | 422 (92%) | — | 448 (98%) | 456 (99%) |
+| names the real exception | 331 (72%) | 313 (68%) | — | 218 (48%) | 163 (36%) |
+| quotes the real message | 390 (85%) | 373 (81%) | — | 198 (43%) | 43 (9%) |
+| names a changed identifier | 414 (90%) | 384 (84%) | — | 421 (92%) | 399 (87%) |
+| **INVENTS a different failure** | **9 (2%)** | 31 (7%) | 11 (2%) | 12 (3%) | 11 (2%) |
+| **GROUNDED** | **400 (87%)** | 356 (78%) | 279 (61%) | 255 (56%) | 183 (40%) |
+
+McNemar over discordant pairs, all n=458, v3 plain as A:
+
+| comparison | only A | only B | p |
+|---|---|---|---|
+| **v3 plain vs base + strong prompt** | **139** | **18** | **2.4e-24** |
+| v3 plain vs sft-v2 + strong prompt | 147 | 21 | 1.8e-24 |
+| v3 plain vs sft-v2 plain | 158 | 13 | 7.8e-33 |
+| v3 plain vs base plain | 224 | 7 | 3.8e-57 |
+| v3 plain vs v3 + strong prompt | 71 | 27 | 1.0e-05 |
+| v3 plain vs v3 + strong, *invented* | 4 | 26 | 6.0e-05 |
+
+**This is the answer to "it is just prompt engineering".** The adapter on a bare
+40-word prompt beats the un-fine-tuned base carrying a hand-written 1566-character
+system prompt and three few-shot examples, by 121 rows, while fabricating less
+(9 against 11). Under the *same* plain prompt the base scores 183, so the corpus
+is worth +217 rows on its own.
+
+It also **reverses the v2 finding**. With `sft-exec-v2`, prompting and fine-tuning
+were substitutes and the adapter's effect vanished under a good prompt (93/98,
+p = 0.77). With v3 they are antagonistic: the strong prompt costs 44 rows of
+grounding (p = 1.0e-05) and **triples fabrication, 9 -> 31** (p = 6.0e-05). The
+three hand-written examples carry failure signatures that are not the measured
+one, and the model pattern-matches to them instead of to its own measurement.
+The best configuration is the simplest one.
+
+### The rubric is saturable by copying, so here is the subset where it is not
+
+`grounded = (names_exception or quotes_signature) and not invented`, and the
+`exec` prompt *hands the model the measured failure string* -- so a one-line
+`print(before)` would score 458/458. **87% is a faithfulness number, not a
+bug-finding number**, and must be reported as one.
+
+Three checks that it is not a degenerate paste, on the 400 grounded rows:
+
+- **400/400 distinct explanation frames** -- zero recitation;
+- median explanation 226 characters, of which the signature is 24% (p90 43%);
+  only **2** rows are >=90% signature;
+- **94%** also name a changed identifier.
+- groundedness is earned by quoting alone on 69 rows, by naming alone on 15,
+  and by both on 316.
+
+The stronger defence is to split the corpus by whether an exception *class*
+exists to name at all. On the 250 rows with none -- `AssertionError` or bare --
+groundedness cannot be earned by emitting a familiar name, because there is no
+name:
+
+| subset | n | v3 plain | base + strong | only A | only B | p |
+|---|---|---|---|---|---|---|
+| **no class to name** (`AssertionError`/bare) | 250 | **196 (78%)** | 117 (47%) | 95 | 16 | 7.5e-15 |
+| named exception present | 208 | **204 (98%)** | 162 (78%) | 44 | 2 | 3.1e-11 |
+
+The hard subset is the **majority** of the corpus, and the discordant count is
+larger there than on the easy one. The gain is not the model learning to say
+"TypeError" more often; it is learning to lift the measured text on exactly the
+rows where the measured text is all there is. **This is the claim to lead with,
+because it is the one immune to the copy ceiling.**
+
+### The deployed path, re-measured
+
+    MODEL=artifacts/oracle-reviewer-3b ./serve.sh start   # -> sft-exec-v3
+    python bench/bugsinpy_guarded.py --dataset data/bugsinpy_rows_v2.jsonl \
+        --out data/bip_guarded_v3_v2.json
+
+| | guarded v3 | guarded v2 | v3 plain, unguarded |
+|---|---|---|---|
+| said anything at all | 436 (95%) | 439 (96%) | 440 (96%) |
+| something was withheld | 18 (4%), whole 14 (3%) | 36 (8%), whole 11 (2%) | — |
+| names the real exception | 329 (72%) | 140 (31%) | 331 (72%) |
+| quotes the real message | 381 (83%) | 162 (35%) | 390 (85%) |
+| names a changed identifier | 379 (83%) | 398 (87%) | 414 (90%) |
+| **INVENTS a different failure** | **2 (0%)** | 8 (2%) | 9 (2%) |
+| **GROUNDED** | **392 (86%)** | **183 (40%)** | 400 (87%) |
+
+| comparison | metric | only A | only B | p |
+|---|---|---|---|---|
+| **guarded v3 vs guarded v2** | grounded | **217** | **8** | **5.5e-54** |
+| guarded v3 vs base + strong | grounded | 139 | 26 | 7.3e-20 |
+| guarded v3 vs v3 plain unguarded | grounded | 31 | 39 | **0.403** |
+
+**The guard chain is now neutral on correctness and still earning its place on
+safety.** Guarded 392 against raw 400 is 31/39, p = 0.403 -- a wash -- while
+fabrications fall **9 -> 2**. The guards have stopped rescuing a weak model's
+mistakes and are trimming the last inventions off a strong one, which is a
+cleaner claim than the v2 story and one with a p-value attached. Withholding
+halved (36 -> 18 rows touched). What still gets dropped is what the chain was
+built for: 5 invented scalars and 4 phantom removals.
+
+### Decomposing the jump: 89% of it is the corpus
+
+The 40% -> 86% jump changed two things at once. `data/bip_guarded_v2.json` is
+stamped 05 Sep 06:07; `oracle_reviewer/core.py` gained the missing fix-direction
+case (case 2 of four) at 05 Sep 07:57. So guarded v2 was `sft-exec-v2` + the
+three-case prompt, and guarded v3 is `sft-exec-v3` + the four-case prompt.
+
+The missing cell was measured on 6 September -- the **v2 adapter served against
+the current four-case prompt**, through the same guard chain, on the same rows:
+
+    MODEL=artifacts/sft-exec-v2 RESTART=1 ./serve.sh start
+    python bench/bugsinpy_guarded.py --dataset data/bugsinpy_rows_v2.jsonl \
+        --model sft-exec-v2 --out data/bip_guarded_v2adapter_4case_v2.json
+
+| deployed, guarded | three-case prompt | four-case prompt |
+|---|---|---|
+| `sft-exec-v2` | 183/458 (40%) | **207/458 (45%)** |
+| `sft-exec-v3` | — | **392/458 (86%)** |
+
+| effect | net rows | only A | only B | p |
+|---|---|---|---|---|
+| prompt fix alone (v2 adapter, 3 -> 4 cases) | **+24** | 63 | 39 | 0.022 |
+| **corpus alone** (v2 -> v3 adapter, prompt held) | **+185** | 196 | 11 | 5.9e-45 |
+| both together | +209 | 217 | 8 | 5.5e-54 |
+
+**The retrain accounts for 89% of the deployed gain.** The prompt fix is real
+but small, and the pilots that estimated it were underpowered rather than wrong:
+their stratified interval was -49 to +15 rows, point estimate -10, and the true
+effect (+24) sits just above the top of it. A 98-row pilot cannot resolve a
+5-point effect.
+
+**The prompt and the corpus fix different things, and only the corpus fixes
+both.** Adding case 2 *raised* fabrication, 8 -> 15: it buys grounding by making
+the model commit to a failure instead of asserting "no change", and some of
+those commitments are wrong. The v3 corpus then takes fabrication to 2. The
+prompt trades timidity for overreach; the corpus removes both.
+
+The unguarded arms never touch `core.SYSTEM` and carry no version of this
+confound, so the +139/-18 against base+strong and the 78%-vs-47% hard-subset
+result were never affected by it.
+
+Two further caveats carried forward: the two teacher holdout splits are thin
+(within 60 rows, cross 99, 7 families, 49% single-label) because the Groq budget
+ran out mid-generation, so the cross split works as a collapse detector but is
+**not publishable as a generalisation number**; and the 120B scale comparison
+below is still a v1-corpus measurement with no v3 counterpart.
+
+### Where v3 still fails
+
+58 rows are not grounded: 18 silent, 9 invented, 31 said something ungrounded.
+The residue is concentrated exactly where it was before, now dominant:
+
+- **by signature class** -- 34 of 58 are `AssertionError`, 20 more have no class
+  at all. Together that is 93% of the misses.
+- **by project** -- black 9/23, fastapi 5/16, thefuck 6/32, keras 5/24,
+  matplotlib 5/29, youtube-dl 6/43, against pandas 7/161 and scrapy 4/38.
+  black's failures are whole-file formatting diffs, which is the same reason it
+  was worst in v2.
+
+---
+
+## The same ablation on somebody else's bugs: BugsInPy (2026-09-05)
+
+Every explanation number below the BugsInPy sections was measured on a benchmark
+ORACLE built, out of mutations ORACLE chose, and nobody else has a number on it.
+Three of the five standing objections were really that one objection. This
+section is the same ablation run on **BugsInPy** (Widyasari et al., ESEC/FSE
+2020): 501 real bugs from 17 maintained Python projects, each with the commit
+that introduced the fix and a test that fails before it and passes after.
+
+Provenance, reproduction procedure and the harness's failure modes are in
+`DATASETS.md`. In short: **501 bugs attempted, 452 reproduced (90%)** by running
+the project's own failing test at the parent commit and again with the fix
+applied — the same worktree-plus-one-checkout mechanism `oracle_reviewer/core.py`
+uses to review a commit, except the command is named by the corpus instead of
+guessed.
+
+    python bench/bugsinpy.py --fetch && python bench/bugsinpy.py --manifest
+    python bench/bugsinpy_run.py --projects luigi,thefuck,scrapy --jobs 3
+    python bench/bugsinpy_rows.py --census
+
+The arms below ran on a frozen snapshot, `data/bugsinpy_rows_v2.jsonl` — **458
+rows**, 452 reproduced bugs plus 6 where the measured behaviour did not change,
+across 17 projects. 398 of the 452 carry a named exception class; the rest fail
+on a bare assertion.
+
+> The earlier 264-row measurement (`data/bugsinpy_rows_v1.jsonl`, arms preserved
+> as `data/bip_arm_*_v1.json`) was taken while the pandas sweep was still
+> running. Every conclusion below held there too. The two corpora are never
+> mixed in one table.
+
+### First: the gate is no longer scoring noise
+
+The 519-row result carried a caveat that made it half a result. On synthetic
+rows the gate has no repository behind it, all 14 Kamei metrics are zero-filled,
+and it reached **AUC 0.557** — so "a defect probability tells the explainer
+nothing" could only honestly be read as "a near-chance number tells it nothing".
+
+These are real commits in real repositories.
+
+| | synthetic 519 | BugsInPy 458 |
+|---|---|---|
+| non-zero Kamei metrics per commit | 0 of 14 | **14 of 14** (median), 13.2 mean |
+| gate AUC, defect-introducing vs ordinary | 0.557 | **0.628** |
+| score range handed to the model | — | 0.034 – 0.995, median 0.95 |
+| above the 0.0469 gate threshold | — | 456 of 458 |
+
+Positives are bug-introducing commits found by B-SZZ (Śliwerski, Zimmermann &
+Zeller 2005) — blame the lines the fix deleted as they stood at the fix's
+parent — giving 213 distinct commits; negatives are 644 commits sampled at a
+fixed seed from the same repositories, excluding anything SZZ named. No issue
+dates are available, so this is B-SZZ without the date filter and it
+over-collects. The AUC is a property of those 857 commits, not of the 458 rows,
+so it is unchanged from the v1 measurement.
+
+    .venv/bin/python bench/bugsinpy_gate.py --scores --auc
+
+0.628 is not a good predictor. It is an *informative* one, which is all the
+score arm needed to stop being a straw man.
+
+### Four arms
+
+Same 458 rows, same decode, differing only in what is appended to an identical
+prompt — and, for `base`, in whether the LoRA adapter is loaded at all.
+
+| arm | conditioned on | adapter |
+|---|---|---|
+| `base` | the measured before/after | **no** — `Qwen2.5-Coder-3B-Instruct` as shipped |
+| `exec` | the measured before/after | yes |
+| `score` | a JIT defect probability | yes |
+| `diff` | nothing but the diff | yes |
+
+    .venv/bin/python bench/eval_bugsinpy_arms.py --arm exec --no-adapter --out data/bip_arm_base_v2.json
+    .venv/bin/python bench/eval_bugsinpy_arms.py --arm exec  --out data/bip_arm_exec_v2.json
+    .venv/bin/python bench/eval_bugsinpy_arms.py --arm score --out data/bip_arm_score_v2.json
+    .venv/bin/python bench/eval_bugsinpy_arms.py --arm diff  --out data/bip_arm_diff_v2.json
+    .venv/bin/python bench/bugsinpy_compare.py
+
+**What is scored changes with the corpus, and it has to.** A real bug's `after`
+is "the test passes" and carries no information, so "quotes both values" would
+be measuring nothing. What separates a grounded explanation from a fluent one
+here is whether it gets the *observed failure* right.
+
+| | base | exec | score | diff |
+|---|---|---|---|---|
+| produced an explanation | 456 (99%) | 448 (98%) | 448 (98%) | 447 (98%) |
+| names the real exception | 163 (36%) | 218 (48%) | 40 (9%) | 38 (8%) |
+| quotes the real message | 43 (9%) | **198 (43%)** | 14 (3%) | 18 (4%) |
+| names a changed identifier | 399 (87%) | 421 (92%) | 428 (93%) | 427 (93%) |
+| **INVENTS a different failure** | **11 (2%)** | **12 (3%)** | **47 (10%)** | **52 (11%)** |
+| **GROUNDED** (right, and not invented) | **183 (40%)** | **255 (56%)** | **48 (10%)** | **48 (10%)** |
+
+McNemar over the discordant pairs, same rows:
+
+| comparison | metric | only A | only B | p |
+|---|---|---|---|---|
+| exec vs base | grounded | 93 | 21 | 5.3e-12 |
+| exec vs score | grounded | 213 | 6 | 3.5e-55 |
+| exec vs diff | grounded | 212 | 5 | 3.7e-56 |
+| **score vs diff** | **grounded** | **16** | **16** | **1.00** |
+| base vs score | grounded | 144 | 9 | 1.9e-32 |
+| base vs diff | grounded | 142 | 7 | 8.3e-34 |
+| score vs exec | invented | 38 | 3 | 1.1e-08 |
+| diff vs exec | invented | 43 | 3 | 4.6e-10 |
+| score vs diff | invented | 17 | 22 | 0.522 |
+| **base vs exec** | **invented** | **7** | **8** | **1.00** |
+
+**The synthetic result replicates, and the caveat that weakened it is gone.**
+`score` and `diff` are not merely close — 16 discordant pairs against 16, an
+exactly balanced split, p = 1.00 — and this time the number being narrated is one
+a real model computed from real history at AUC 0.628, not a zero-filled
+artifact. On 458 real bugs from 17 real projects, handing the explainer a
+just-in-time defect probability is worth nothing over handing it the bare diff.
+
+### Three things the synthetic corpus could not have told us
+
+**1. The fine-tune transfers to real code, and the mechanism is value-copying.**
+This is what the `base` arm exists to settle, and it had no evidence behind it
+before this run. Same conditioning, same decode, adapter on or off: **40% → 56%
+grounded, 93 discordant rows against 21, p = 5.3e-12.**
+
+The interesting part is *where* the 16 points come from. Naming the right
+exception class moves 36% → 48%. Quoting the measured message moves **9% → 43%,
+a 4.6x** — and that is the whole story. The adapter did not teach the model more
+about bugs; it taught it to copy a value that was already in its prompt. That is
+exactly the deficit diagnosed against gpt-oss-120b, where 107 of the 113 rows
+only the larger model got were fluent prose with the failure quoted verbatim in
+the context, and it is the one the v2 training data was reshaped to fix.
+
+Base is not a weak baseline: an off-the-shelf 3B Instruct model, given the
+measured failure, is already grounded 40% of the time. Any claim that ORACLE's
+explanations require this fine-tune has to be stated against that number, not
+against zero.
+
+**2. Grounding comes from the fine-tune; *not fabricating* comes from the
+measurement.** These are separate effects with separate causes, and the four
+arms separate them cleanly. Inventions go 3% → 10–11% when execution is removed
+(`score` vs `exec`, 38/3, p = 1.1e-08). But the adapter moves them not at all:
+`base` vs `exec` is 7 against 8, p = 1.00. The model does not merely go quiet
+when it cannot measure — it starts naming exceptions the program never raised —
+and no amount of fine-tuning on this data changed that. Only running the code
+did.
+
+*"Invents" is precise:* the explanation names an exception class, and names
+none of the classes the measured failure contains. A signature can name two —
+scrapy-5's is `AssertionError: ValueError not raised by follow`, a test
+asserting that a ValueError *should* have been raised — and an explanation
+saying the commit now raises a ValueError is right, not fabricating. The first
+version of this rubric counted those as inventions; `bugsinpy_compare.py`
+re-scores from the stored explanations, so the rubric in the tree is always the
+one that produced the table.
+
+**3. The 93% does not transfer, and localisation never needed execution.** On
+mutants, `exec` quoted both values 93% of the time. On real bugs it is grounded
+56% of the time *with the measured failure in its prompt*. Being handed the
+answer is necessary and nowhere near sufficient, and any claim resting on the
+93% should be read as a claim about ten-line programs.
+
+Meanwhile **all four arms name a changed identifier 87–93% of the time**, and
+the arm with the least information (`diff`) is not the worst at it. Reading the
+diff is enough to say *where*. It is saying *what happened* that requires
+running the code.
+
+### Where `exec` fails, and what this does not show
+
+- **`exec` is GIVEN the values.** Quoting them is not a feat; it is the
+  architectural advantage being claimed, and the number to read is how far the
+  other two fall short. Its ability to *derive* them unaided is the 22% value
+  tier measured further down.
+- **A bare assertion is where it collapses.** With an exception class present,
+  `exec` is grounded 240/398 (60%); on a bare `assert False` or a long
+  dict-vs-dict comparison, 15/60 (25%).
+- **By project, 0% to 100%.** black 4/23 (17%) — its failures are whole-file
+  formatting diffs — and matplotlib 9/29 (31%), against scrapy 27/38 (71%) and
+  pandas 104/161 (65%). cookiecutter is 0/3.
+- **The rubric measures grounding, not usefulness.** httpie-5's explanation
+  ("adds escape handling for long separators, which prevents the test case from
+  failing") is a defensible review that never states the measured
+  `{'bob:': '=foo'} != {'bob:=': 'foo'}`, and scores zero here. That is the
+  intended reading, but it is not the same as being wrong.
+- **The rubric measures grounding, not direction.** pandas-83's `exec`
+  explanation quotes the measured `AssertionError` but describes the change as
+  *causing* the failure rather than fixing it. Direction is the guard chain's
+  job, not this rubric's; what it withholds is measured in the guarded run.
+- **90% reproduction is not 100%.** 43 bugs do not reproduce in this
+  environment — the test still fails after the fix is applied — concentrated in
+  keras (21), pandas (8) and spacy (5). A further 6 pass before the fix on
+  Linux; cookiecutter-1 is *"wrong encoding on Windows"*. Those 6 are kept as
+  the negative class rather than discarded.
+- **The 2x2 has a missing cell.** There is no `base + score` arm, so
+  "conditioning beats the fine-tune" can be stated *within* the adapted model
+  (`exec` vs `score`) but not independently of it. `base` vs `score` is 144/9,
+  p = 1.9e-32, but it varies conditioning and adapter at once and is not
+  reported as an effect.
+- **One corpus, one language.** BugsInPy is Python. The 519-row bench was
+  cross-family; this is not.
+
+---
+
+### The deployed path is not the bench arm, and it scores like the base model — superseded 2026-09-06
+
+> **Superseded.** Every number in this subsection was measured with the
+> `sft-exec-v2` adapter and the pre-fix three-case `core.SYSTEM`. The
+> deployed path now scores **392/458 (86%)** — see the v3 section at the
+> top. This subsection is kept because it is the diagnosis that motivated
+> the retrain, and because the 67/67 p = 1.00 null is a real measurement
+> of a real configuration; it is no longer a description of the tool.
+
+Every number above measures the MODEL through a bare one-key prompt with no
+guards. That is the right instrument for an ablation and it is not what anybody
+reads. What the TUI prints goes through `oracle_reviewer.core.explain`: core's
+own prompt, then the guard chain — `swapped`, `contradiction`, sentence-level
+`filter_prose`, `verify`, `unmeasured_claim`, `phantom_removal`,
+`direction_reversed` — and the measured before/after printed underneath
+regardless.
+
+    .venv/bin/python bench/bugsinpy_guarded.py --dataset data/bugsinpy_rows_v2.jsonl \
+        --out data/bip_guarded_v2.json
+
+Same 458 rows, same served adapter, same rubric:
+
+| | `exec` arm | deployed (`guarded`) |
+|---|---|---|
+| said anything at all | 448 (98%) | 439 (96%) |
+| something was withheld | — | 36 (8%), whole answer 11 (2%) |
+| names the real exception | 218 (48%) | 140 (31%) |
+| quotes the real message | 198 (43%) | 162 (35%) |
+| names a changed identifier | 421 (92%) | 398 (87%) |
+| **INVENTS a different failure** | 12 (3%) | **8 (2%)** |
+| **GROUNDED** | **255 (56%)** | **183 (40%)** |
+
+| comparison | metric | only A | only B | p |
+|---|---|---|---|---|
+| exec vs guarded | grounded | 101 | 29 | 1.6e-10 |
+| **guarded vs base** | **grounded** | **67** | **67** | **1.00** |
+| exec vs guarded | invented | 8 | 4 | 0.388 |
+
+**The deployed reviewer is statistically indistinguishable from the
+un-fine-tuned base model: 67 discordant rows against 67, p = 1.00.** The 16
+points the adapter buys in the bench arm do not reach the tool. This is the
+single most important number in this document for anyone deciding what ORACLE
+currently *is*, and no bench figure predicted it.
+
+**The guards are not the cause.** Of the 101 rows the bench arm grounds and the
+deployed path does not:
+
+- 29 had something withheld, 13 of them said nothing at all;
+- **70 passed the guard chain untouched and simply are not grounded.**
+
+So the loss is roughly 30% guard, 70% prompt. And the guards are doing their
+job — inventions fall 12 → 8, and what they drop is exactly what they were
+built to drop, led by 14 phantom removals (*"says `TypeError` was removed, but
+no removed line in the diff mentions it"*) and 7 invented scalars.
+
+**What the prompt does instead is assert that nothing happened.** Prose matching
+*"does not affect / no observable change / behaviour unchanged"* appears in **71
+of 458 deployed answers against 11 in the bench arm** — a 6.5x rise on a corpus
+where 452 of 458 rows have a test that demonstrably fails before the fix and
+passes after. Only 9 of those 71 are grounded. Three examples, bench arm first:
+
+    ansible-11  AttributeError: <module 'ansible...ios_banner' ...>
+      bench     "...This change resolves the AttributeError observed..."
+      deployed  "...This change does not affect the program's behavior..."
+
+`core.explain` offers "No Observable Change" as a verdict because on a
+behaviour-preserving refactor that is the correct answer. On BugsInPy it is
+almost never the correct answer, and the model reaches for it anyway.
+
+**The prompt has since been changed; this 40% was measured before it.** The
+missing case was added to `core.SYSTEM` on 5 September (case 2, the fix
+direction), 1h50m after this run was written. The post-fix deployed number is
+now measured — 392/458 with the v3 adapter — but it changes the adapter at the
+same time, so this pilot remains the only isolated reading of the prompt fix. Two 98-row pilots measured it, enriched with the 70 lost-prose rows
+so the target class could be read exhaustively:
+
+| group | n | pre-fix | with case 2 | wordier case 2 |
+|---|---|---|---|---|
+| lost prose (target) | 70 | 0 | **28** | 20 |
+| already grounded | 24 | 24 | 19 | 19 |
+| no-change | 6 | 2 | 2 | 1 |
+
+Contradictory "no change" prose halved, 20 -> 9. But the gain on the 70-row
+target class is bought against a 5/24 regression on the 183-row class that
+already worked, and a stratified estimate over the whole corpus is **-49 to +15
+rows, point estimate -10**. The full 458 was therefore NOT re-run: the expected
+effect is indistinguishable from zero and the measurement would cost 2h10m.
+
+The case was kept anyway, because the defect it fixes is structural rather than
+statistical -- `explain()` is called with four outcomes and the prompt
+enumerated three, so BugsInPy rows matched no case at all. **The 40% in the
+table above is the pre-fix measurement.** The prompt fix was subsequently
+measured alone at full scale, on this same v2 adapter: **207/458, +24 rows,
+p = 0.022** -- real, but a twentieth of what the retrain was worth, and it
+raised fabrication 8 -> 15. The stratified estimate below (-49 to +15) bracketed
+it from the wrong side; 98 rows could not resolve a 5-point effect.
+
+Making case 2 *wordier* cost 8 rows on the class it targets (28 -> 20), which is
+evidence against "the prompt is missing an instruction" and for "the prompt is
+too long". The untested alternative is the deployed guard chain driven by the
+bench arm's 40-word prompt instead of core's 450-word one, which would separate
+prompt length from the guards; nothing here measures that.
+
+**What this does and does not say.** It does not say the guard layer is
+worthless — it costs 29 rows of grounding and buys a third fewer fabrications,
+which is the trade it was designed to make. It says the *prompt* around the
+guards is throwing away the fine-tune, and that the honest headline for the
+deployed tool *as measured on 5 September* was 40%, not 56%.
+
+That gap is now closed from the other side: with `sft-exec-v3` the model can do
+87% and the product does 86%, and the guard chain costs nothing measurable
+(p = 0.403) while cutting fabrications 9 -> 2. The lesson that survives is the
+methodological one — **the bench arm was not the product, and no bench figure
+predicted the deployed number in either direction.**
+
+---
+
+### Does any of this survive a bigger model? (2026-09-04)
+
+Every number above uses one 3B checkpoint, so none of it distinguishes "execution
+grounding matters" from "execution grounding matters *to a small model*". The
+same three arms were therefore run against **gpt-oss-120b** over the Groq API —
+the same prompts, the same scoring, roughly 40x the parameters.
+
+> **This comparison is on the v1 corpus, 264 rows**, both halves of it. The 3B
+> columns below are `data/bip_arm_*_v1.json`, not the 458-row v2 arms in the
+> table above, and the two are never mixed: read the 3B numbers here only
+> against the 120B numbers beside them. The v2 corpus has no 120B measurement.
+
+    for a in exec score diff; do
+      .venv/bin/python bench/eval_bugsinpy_arms.py --arm $a --backend api \
+        --out data/bip120b_arm_${a}_v1.json
+    done
+
+| | 3B exec | 3B score | 3B diff | 120B exec | 120B score | 120B diff |
+|---|---|---|---|---|---|---|
+| produced an explanation | 258 (98%) | 260 (98%) | 257 (97%) | 261 (99%) | 263 (100%) | 263 (100%) |
+| names the real exception | 104 (39%) | 13 (5%) | 8 (3%) | 197 (75%) | 91 (34%) | 100 (38%) |
+| quotes the real message | 107 (41%) | 8 (3%) | 11 (4%) | 213 (81%) | 45 (17%) | 51 (19%) |
+| names a changed identifier | 236 (89%) | 244 (92%) | 241 (91%) | 250 (95%) | 250 (95%) | 249 (94%) |
+| **INVENTS a failure** | 6 (2%) | 29 (11%) | 25 (9%) | 10 (4%) | **75 (28%)** | **79 (30%)** |
+| **GROUNDED** | 132 (50%) | 17 (6%) | 16 (6%) | **239 (91%)** | 97 (37%) | 109 (41%) |
+
+Paired McNemar, same rows:
+
+| comparison | metric | only A | only B | p | |
+|---|---|---|---|---|---|
+| 3B exec vs 120B exec | grounded | 6 | 113 | 1.1e-26 | distinguishable |
+| 3B exec vs 3B score | grounded | 116 | 1 | 1.4e-33 | distinguishable |
+| 120B exec vs 120B score | grounded | 144 | 2 | 2.4e-40 | distinguishable |
+| 120B exec vs 120B diff | grounded | 132 | 2 | 8.3e-37 | distinguishable |
+| **3B score vs 3B diff** | **grounded** | **8** | **7** | **1.00** | **NOT distinguishable** |
+| **120B score vs 120B diff** | **grounded** | **20** | **32** | **0.126** | **NOT distinguishable** |
+| 3B score vs 120B score | invented | 12 | 58 | 2.3e-08 | distinguishable |
+
+**0. The central claim replicates at both scales.** A defect probability adds
+nothing over the diff alone — for the 3B, 8 discordant pairs against 7, p=1.00;
+for the 120B, 20 against 32, p=0.126, and if anything the score arm is the
+*worse* of the two (37% against 41%). Whatever a 40x larger model can do with a
+risk score, it is not enough to distinguish from having no score at all. This is
+the claim the project exists to make, and it now holds at both ends of a 40x
+range of model size.
+
+**1. The size claim in `POSITIONING.md` was false and has been retracted.** The
+document asserted that a 3B given measured values is *enough*, and that a large
+model doing the same job demonstrates nothing. Given identical inputs the 120B
+is grounded in 91% of its explanations against the 3B's 50%. Verbosity is not
+the cause — median explanation length is 39 words against 40, and only 5 of the
+3B's 264 outputs came near its 128-token ceiling.
+
+**2. The ablation survives the scale change, and gets stronger.** Removing
+execution costs the 120B **54 points** (91% → 37%) against the 3B's 44
+(50% → 6%), at p=2.4e-40. The large model does not need the measurement less; on
+this corpus it needs it more.
+
+**3. Ungrounded fabrication gets worse with scale, not better.** Given a risk
+score instead of a measurement, the 120B invents a failure that never happened
+in **28%** of its explanations, against the 3B's 11% — more than double, on the
+same rows, p=2.3e-08. It writes more confident, more specific and more fluent
+wrong answers. This is the strongest single argument in the project for why
+grounding is not optional, and it exists only because the large model was run.
+
+**4. Localisation is flat at every scale.** 89–95% across all four
+configurations. Naming *where* the change is needs neither execution nor
+parameters; only saying *what happened* does.
+
+#### What this costs the deployed system, stated plainly
+
+The 3B is not competitive on grounding and the paper should not pretend
+otherwise. What it offers is a deployment position with a measurable price:
+
+| | self-hosted 3B | hosted 120B |
+|---|---|---|
+| grounded (execution arm) | 50% | 91% |
+| VRAM at inference | ~3 GB, fits a 6 GB card | n/a |
+| code leaves the machine | never | every request |
+
+41 points of grounding is the price of zero data egress. For reviewing
+proprietary code that is a defensible trade; it is not a claim that small is
+enough.
+
+**A caveat that points somewhere.** Of the 113 rows the 120B gets and the 3B
+does not, the 3B produced *nothing* on 6 and *fluent but ungrounded prose* on
+**107** — on rows where the measured failure was quoted verbatim in its own
+prompt. That is a copying failure, not a capacity ceiling: `exec_sft_v2.jsonl`
+taught it to quote short scalars like `[27] [9] [16]`, and BugsInPy hands it
+`TypeError: 'GalaxyAPI' object is not iterable`. The gap may be substantially
+reducible with targeted training data, which is the lever that moved explanation
+correctness before when prompting never did.
+
+---
+
+## The missing baseline: conditioning on execution vs on the risk score (2026-09-04)
+
+`POSITIONING.md` claims the explanation is conditioned on measured execution and
+never on the predictor's probability, so it cannot inherit the predictor's
+errors. That comparison had never been run. It has now.
+
+Three arms, the same 519 cross-family held-out rows, the same checkpoint
+(`artifacts/oracle-reviewer-3b`), the same decode (4-bit nf4, greedy, 320 new
+tokens). The arms differ only in what is appended to an otherwise identical
+prompt.
+
+    exec    the diff, plus the MEASURED before/after
+    score   the diff, plus a JIT defect probability
+    diff    the diff alone
+
+    .venv/bin/python bench/eval_explain_arms.py --arm exec  --out data/arm_exec.json
+    .venv/bin/python bench/eval_explain_arms.py --arm score --out data/arm_score.json
+    .venv/bin/python bench/eval_explain_arms.py --arm diff  --out data/arm_diff.json
+
+Scored identically against gold: does the explanation the developer reads
+contain the true before AND after values.
+
+| | exec | score | diff |
+|---|---|---|---|
+| produced an explanation | 518/519 | 519/519 | 519/519 |
+| quotes the true BEFORE | 492 (95%) | 265 (51%) | 270 (52%) |
+| quotes the true AFTER | 487 (94%) | 213 (41%) | 217 (42%) |
+| **quotes BOTH** | **483 (93%)** | **205 (39%)** | **201 (39%)** |
+| states it backwards | 0 | 0 | 1 |
+| invents a removal | 0 | 0 | 0 |
+
+The arms are paired — the same rows, so McNemar on the discordant pairs:
+
+| comparison | only A | only B | p |
+|---|---|---|---|
+| exec vs score | 281 | 3 | 2.5e-79 |
+| exec vs diff | 286 | 4 | 2.9e-79 |
+| **score vs diff** | **32** | **28** | **0.699** |
+
+**The risk score contributes nothing.** `score` and `diff` are statistically
+indistinguishable: handing the model a defect probability leaves it exactly
+where it was with the diff alone. Execution is worth 54 points and the score is
+worth zero, which is the claim the design rests on, measured rather than argued.
+
+Split by whether behaviour actually changed — the half where the values must be
+derived rather than restated:
+
+| | differs=true | differs=false |
+|---|---|---|
+| exec | 219/252 (87%) | 264/267 (99%) |
+| score | 66/252 (26%) | 139/267 (52%) |
+| diff | 48/252 (19%) | 153/267 (57%) |
+
+### What this does not show
+
+**`exec` is GIVEN the values.** Quoting them is not a feat. That is the point --
+it is the architectural advantage being claimed -- but the honest reading is
+"the other two, which must derive them, cannot", not "this model is good at
+computing values". Its own ability to derive them is the 42% measured on 3 Sep.
+
+**The scorer is weak on this corpus, and knowably so.** These rows are
+synthetic, so the gate has no git history and its 14 Kamei metrics are
+zero-filled; only the GraphCodeBERT channel is live. That scorer reaches **AUC
+0.557** on these 519 rows (mean 0.0200 on `differs=true` against 0.0173 on
+`differs=false`, 16/519 above the 0.047 threshold). So `score` narrates a
+near-chance number. Two things follow, and both belong in any write-up: the
+result is not evidence that a *good* predictor's score would also be worthless,
+and it is evidence about what a predictor can say about a change whose history
+it does not have. A stronger version of this experiment needs real commits,
+where the gate has its full feature set.
+
+**Two of the columns do not discriminate.** `backwards` and `phantom` are 0 or 1
+across all three arms. Those failures were observed on real repositories, not
+here, so on this corpus they measure nothing and only the first row is
+load-bearing.
+
+**`exec` still fails 13% of the time on changed behaviour** (219/252) even with
+the values in front of it. Being handed the answer is not sufficient; it is only
+necessary.
+
+---
+
+## The v2 value tier: 8% -> 42%, and the copy shortcut is not what carries it (2026-09-03)
+
+The first result where the model computes rather than classifies. `differs` is a
+one-bit answer a family-recognition shortcut can produce; `before` and `after`
+are the program's actual output, and no shortcut in the corpus supplies them.
+
+Generated, not teacher-forced: the values only exist after decoding, so
+`verdict_eval` in `train_sft` cannot measure this at any weight.
+
+### Both arms, 519 cross-family held-out rows
+
+Same base model, same decode settings, same rows. The only difference is the
+adapter. 4-bit nf4, greedy, 320 new tokens.
+
+    .venv/bin/python bench/eval_exec_values.py --adapter artifacts/oracle-reviewer-3b \
+        --four-bit --dataset data/exec_sft_v2_holdout_cross.jsonl --limit 519 \
+        --out data/v2_values_sft.json
+    .venv/bin/python bench/eval_exec_values.py --base-only \
+        --four-bit --dataset data/exec_sft_v2_holdout_cross.jsonl --limit 519 \
+        --out data/v2_values_base.json
+
+                                      base        trained
+    parsed JSON                  506/519 97%   514/519 99%
+    verdict correct              245/519 47%   411/519 79%
+    VALUES both right             42/519  8%   219/519 42%
+      differs=true                 9/252  4%    56/252 22%
+      differs=false               33/267 12%   163/267 61%
+    self-contradictory           143/506 28%    27/514  5%
+
+All denominators above are ALL rows in the bucket, including ones that failed to
+parse — an unparsed row is a wrong answer, not an excluded one. The tables below
+divide by PARSED rows instead, because they compare strategies the model can only
+apply once it has emitted something; both denominators are stated where used.
+
+### The shortcut check, and why it does not explain the result
+
+On a `differs=false` row the two values are equal, so a model that computes
+`before` and copies it into `after` scores both. Measured directly: the trained
+model emits `after == before` on 94% of `differs=false` rows.
+
+The right control is not "how many rows are copyable" but "what does the copy
+strategy actually score for THIS model" — emit your own `before` twice, and
+collect the rows where the gold values happen to be equal:
+
+  (of parsed rows)            always-copy ceiling      actual   margin
+    base                          70/506  14%    42/506  8%   -28 rows
+    trained                      175/514  34%   219/514 43%   +44 rows
+
+The base model has the same shortcut available and scores BELOW its own ceiling.
+Copying is not free: collecting it still requires getting `before` right, which
+is the skill being measured. The trained model clears its ceiling by 44 rows;
+the base cannot reach its own.
+
+The cleanest computation number is the `differs=true` half, where the two values
+must differ and copying scores zero by construction: 4% -> 22%. The base emits a
+distinct `after` MORE often than the trained model (187/245 = 76% of parsed
+`differs=true` rows, against 147/248 = 59%) and is right 27/187 = 14% of the time
+against 60/147 = 41%. It guesses more and knows less.
+
+### The field-order slip
+
+`differs` and `before != after` are the same claim stated twice, so an emission
+where they disagree is invalid without consulting any gold. That check is
+`exec_contract.contradiction`.
+
+    self-contradictory      base 143/506 (28%)     trained 27/514 (5%)
+
+Training removes five-sixths of it. The residue is one-directional:
+
+    said differs=true, then emitted one value for both sides    27/27  (100%)
+    said differs=false, then emitted two different values        0/27    (0%)
+
+Of the 21 such rows whose gold values genuinely differ, the single value emitted
+is the gold AFTER in 20 (95%). The model computed the post-state and back-filled
+it into the pre-state slot. It is not wrong about whether behaviour changed — on
+those rows the verdict is correct — it loses which side a value belongs to.
+
+Rows the check flags are both-right 22% of the time against 44% for rows it
+clears, so it is a usable reliability signal on its own.
+
+A caller that ran the code can repair it, pinning the pre-state to its own
+measurement and keeping the model's value as the post-state:
+
+  (of parsed rows)            as emitted    repaired    net
+    base                      42/506  8%    47/506  9%   +5
+    trained                  219/514 43%   240/514 47%  +21
+
+This is NOT a model score — it consumes a measurement the model did not produce.
+It is what `oracle_reviewer` recovers, because it has already run the code.
+
+    python test_exec_contract.py
+
+### What this does not show
+
+The `differs=true` half is 22%. That is 5.5x the base and it is the honest
+weak point: on the rows that require computing a new value, the model is wrong
+about three times in four. The reviewer does not rest on it — risk there comes
+from exit status, not from the model — but any use of the VALUES on a
+behaviour-changing diff is at 22%.
+
+---
+
+## The repair corpus named identifiers the model cannot see, in 94% of its defective targets (2026-09-01)
+
+Found while widening the target frames, before any training run used it. Nothing
+here is a model result: it is a defect in the supervision, caught by an assertion
+that had not been written until now.
+
+### What was wrong
+
+`dataset_builder/build_repair_targets.py` derived the defective targets from the
+REPAIR diff:
+
+    fdiff = git(repo, "show", "--unified=3", link["fix"])   # the fix
+    rem, add = sides(fdiff)
+    ids = symbols(add + "\n" + rem)                         # its symbols
+
+The model is shown the INDUCING commit. So `affected_identifiers` and the
+explanation were drawn from a diff the model never sees. Measured over
+`data/sft_repair.jsonl`:
+
+    class        targets   names a symbol absent from the reviewed diff
+    defective        532        502   (94%)
+    clean           1185          0   ( 0%)
+
+The clean class reads 0 because its identifiers come from `row["diff"]` — the
+diff actually shown. Only the defective path crossed.
+
+A representative target:
+
+    src/attr/_make.py dereferences `TestCloudpickleCompat`, `test_repr`,
+    `test_infinite_recursion_long_cycle` on a path where it can be absent.
+
+Those are TEST names from the fix, attributed to a source file. The sentence is
+false in every respect, and 94% of the defective class was shaped like it.
+
+### Why it matters more than the templating it was found beside
+
+`no-such-entity` — naming an identifier absent from the diff — was 8 of the 32
+wrong findings in the v7 grade, 25%. This corpus would have trained that class
+directly, while its own system prompt says the opposite:
+
+    Name no identifier that is absent from the diff.
+
+The corpus contradicted its own instruction, and the build script could not see
+it: the audit checked schema validity (`assistant turns failing schema: 0`) and
+raw distinctness, neither of which reads whether a named symbol exists.
+
+### The fix
+
+Identifiers are now the intersection — the repair says which symbols mattered,
+the reviewed diff decides which the model can see:
+
+    seen = set(symbols(row["diff"], limit=200))
+    ids = [i for i in symbols(add + "\n" + rem, limit=200)
+           if i in seen and i in row["diff"]][:5]
+
+`target_file` must also be a file the reviewed commit touches; the old fallback
+took `files[0]` from the repair, which could point at a file the diff never
+mentions. The invariant is enforced again after token-budget elision, because
+eliding the middle of a diff can remove a symbol the target names.
+
+### Three other defects fixed in the same pass
+
+  hindsight       all three defective frames spoke from the future — "A later
+                  commit repaired {f}", "{f} was repaired afterwards". At
+                  inference there is no later commit; this trains the model to
+                  assert what it can never ground. 531 targets -> 0.
+
+  templating      1178 clean targets were 41 distinct skeletons (3%) while raw
+                  distinctness read 99%, because the filename slot made every
+                  string unique. This is the v4 `check` failure exactly — "100
+                  distinct in 366" with one frame in 357 — at three times the
+                  scale. Frames widened 24 -> 56 clean and 3 -> 36 defective.
+
+  unrecorded step the identifier sanitisation applied on 1 Sep existed only as
+                  an ad-hoc command, so the corpus could not be rebuilt. It is
+                  `dataset_builder/filter_repair_targets.py` now, and it carries
+                  the 30:70 rebalance, since grounding shifts the ratio.
+
+### Before and after
+
+    metric                                    before      after
+    identifiers absent from reviewed diff        85%         0%
+    hindsight phrasing                      531/1709     0/1034
+    clean skeleton distinctness            41 (  3%)   113 ( 13%)
+    defective skeleton distinctness        72 ( 13%)    80 ( 22%)
+    largest single frame share                   13%         3%
+    records                                     1709        1034
+    defective share                              31%         29%
+
+The corpus lost 40% of its records: 144 defective commits whose repair touched
+nothing the commit itself touched — undescribable from the diff the model sees —
+and 149 whose named identifier fell inside the elided middle.
+
+### The measurement that was missing, added
+
+`bench/grade_real.py` decides the two taxonomy classes that do not need a human,
+and both were large in the v7 grade. Validated against that hand-grade it fires
+4 true positives and no false ones (`ParseError`, `FieldInfo.__new__`,
+`Optional`, `responseWriter.status`), catching the backticked subset of the 8
+graded by eye. It narrows the hand-grade rather than replacing it: the model is
+now measured against the same grounding rule its corpus is filtered by.
+
+---
+
+## v7 on the 40 real commits: 93% of findings are wrong, and the language corpus bought nothing (2026-09-01)
+
+v7 was the three-language corpus — 366 -> 474 records, python/javascript/java
+raised 51% -> 62%, nine new execute-verified cases, and a rewritten `check`
+field. On the synthetic bench it looks like the best checkpoint the project has
+produced. On the 40 real commits it is indistinguishable from v6.
+
+### The apparatus
+
+    ./score_v7.sh          # generates data/real_commits_v7.jsonl + .md
+    # hand-grade -> data/real_commits_v7_grades.json
+
+Same 40 commits as the v6 grade, same grader, same classes. Nothing is executed:
+every grade is decided against the diff the model was shown, which is the only
+evidence the model had.
+
+### The synthetic bench says v7 is the best checkpoint so far
+
+    set              verdict   fully correct   false alarms   FABRICATED
+    basic            39/46 85%    39/46 85%      5/46 11%      6/45 13%
+    mech_heldout     18/21 86%    17/21 81%      0/21  0%      0/21  0%
+    clean_heldout    34/34 100%   34/34 100%     0/34  0%      0/34  0%
+
+`clean_heldout` at 34/34 with zero false alarms is the strongest clean-class
+result recorded. The `check` field is composed rather than recited for the first
+time: 45/45 distinct against the corpus (v4 was 9/44), and the "old behaviour
+the edit" 4-gram that appeared in 36 of 44 v4 answers is gone.
+
+### The 40 real commits say it is the same model
+
+    run          flagged   findings   distinct claims
+    v6            29/40       35            -
+    v6_seed7      22/40       24            -
+    v7            27/40       32           27
+
+    v7 hand-grade, 32 findings
+      contradicted      10   31%   the diff visibly shows the opposite
+      inverted           8   25%   the commit IS the fix; read as the defect
+      no-such-entity     8   25%   names an identifier or value absent from the diff
+      incoherent         4   12%   a defect claimed against a pure addition
+      partial            2    6%   locus right, mechanism imprecise or unproven
+      ---------------------------------------------------------------
+      WRONG             30   93%
+      confirmed correct  0    0%
+
+v6 graded 88-91% wrong. v7 grades 93% wrong. The corpus change that moved
+`clean_heldout` to 100% and killed the template moved nothing here.
+
+### What the wrong findings actually say
+
+Four of the five verbatim quotes below can be refuted without leaving the diff:
+
+  `80f691159f` "main() no longer calls r.Run(...), so the server is never
+  started" — the diff shows `func main() { r := setupRouter(); r.Run(":8080") }`
+  four lines below the hunk it cites.
+
+  `4194adce4c` "`Form` is now nil (the `formBinding` variable is gone)" — the
+  diff shows `Form = formBinding{}` still present, realigned by one column.
+
+  `6cc24416e2` "Using `==` makes HTTPBearer compare against the empty string" —
+  there is no `==` in the diff. It is a docstring typo fix, "token not provided"
+  -> "token is not provided".
+
+  `926347315405` "`&s=18` sets the avatar size to 18px, which is one pixel
+  smaller than before and cuts off the bottom edge" — the diff is `&s=16` ->
+  `&s=18`. Two larger, not one smaller.
+
+  `ce2201c392` "breaks existing clients that expect the old :5150 address" —
+  `:5150` occurs nowhere in the commit, the repository, or the corpus.
+
+That last one is the `effect.before`/`effect.after` fabrication that v3 retired
+from the schema, reappearing in prose. Removing the field did not remove the
+behaviour; it removed the metric that could see it.
+
+### The one real defect is still missed
+
+`gin 34b1d0262e` drops the `ok` guard from a type assertion:
+
+    -    flusher, ok := w.ResponseWriter.(http.Flusher)
+    -    if ok { flusher.Flush() }
+    +    w.ResponseWriter.(http.Flusher).Flush()
+
+A writer that does not implement `http.Flusher` now panics instead of no-oping.
+v7 flagged this commit — and said `reset()` had been removed and response status
+was no longer preserved. `reset()` is in the diff, unchanged but for field
+order. So the model spent its one correct verdict on a fabricated mechanism.
+
+gpt-oss-120b found this defect. Base 3B, both v6 seeds and v7 all missed it.
+
+### Five duplicate findings, one claim
+
+`d11f820ac3` produced five findings with byte-identical explanations, one per
+file, and `ffc0237a175b` produced two. 32 findings are 27 distinct claims. The
+fan-out is per-file, so a commit touching more files scores more findings for
+the same single thought.
+
+### The automated detector is blind here
+
+`bench/claim_audit.py` and `check_against_diff` read `f(args) -> value` claims.
+Across all three runs, ONE answer in 40 carries an extractable claim:
+
+    run          n   flagged   w/claim   DEGEN  INCOH  NOCALL  CONTRA
+    v6          40      29         1        0      0       0       0
+    v6_seed7    40      22         1        0      0       0       0
+    v7          40      27         1        0      0       0       0
+
+On the synthetic bench the model states concrete values, so the replay has
+purchase. On real commits it writes prose about identifiers instead, and the
+detector reads zero. Every one of the 30 wrong findings above was found by hand.
+
+This is the fifth instance of the same shape: `template_audit` could not see
+`effect.check`, the leakage metric matched Python's own `math.floor`, the
+consensus path dropped `effect`, the TUI sent a prompt shape never trained on —
+and now the fabrication detector cannot see the fabrications on real code.
+**A field no metric reads is the field that will template, and a claim no metric
+parses is the claim that will be invented.**
+
+### What this rules out
+
+Three corpus interventions have now been measured against the real-commit
+grade — v6 (template removal), v7 (language coverage + composed `check`) — and
+neither moved it. The remaining hypothesis is that all of them share a defect
+the corpus itself has: every target is written from the buggy code alone, so
+nothing in training ever forced a claim to survive contact with the repair. That
+is what `data/sft_repair_msgs.jsonl` changes, and it is the next run.
+
+---
+
+## The first measurement on real code: 88-91% of findings are wrong, and most of them describe code that is not in the diff (2026-09-01)
 
 The 40 real commits have been sitting sampled-but-never-graded since 26 Aug.
 They are now generated (both v6 seeds) and hand-graded. This is the first

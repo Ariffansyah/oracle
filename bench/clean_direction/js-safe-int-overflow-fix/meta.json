@@ -1,0 +1,9 @@
+{
+  "id": "js-safe-int-overflow-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-safe-int-overflow",
+  "category": "logic-error",
+  "note": "reverses js-safe-int-overflow"
+}

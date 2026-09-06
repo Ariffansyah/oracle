@@ -1,0 +1,9 @@
+{
+  "id": "js-concat-coerce-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-concat-coerce",
+  "category": "logic-error",
+  "note": "reverses js-concat-coerce"
+}

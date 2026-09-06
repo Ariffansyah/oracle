@@ -70,20 +70,26 @@ def _claim_check_text(analysis, diff: str) -> str:
 
     rep = check_against_diff(analysis.model_dump(), diff)
     bad = [c for c in rep.claims if c.status not in (UNVERIFIABLE, VERIFIED)]
-    if not bad:
+    badcalls = [c for c in rep.calls if c.status == "no-such-call"]
+    if not bad and not badcalls:
         return ""
-    lines = [f"\nclaim check: {len(bad)} of {len(rep.claims)} concrete claim(s) "
-             f"do not hold"]
+    n, tot = len(bad) + len(badcalls), len(rep.claims) + len(rep.calls)
+    lines = [f"\nclaim check: {n} of {tot} checkable claim(s) do not hold"]
     for c in bad:
         actual = f"  (actually {c.actual})" if c.actual is not None else ""
         lines.append(f"  {c.status:<13}{c.call} -> {c.claimed}{actual}")
+        if c.note:
+            lines.append(f"      {c.note}")
+    for c in badcalls:
+        lines.append(f"  {c.status:<13}{c.caller} calls {c.callee}")
         if c.note:
             lines.append(f"      {c.note}")
     return "\n".join(lines)
 
 
 _CLAIM_STYLE = {"contradicted": "bold red", "degenerate": "bold red",
-                "incoherent": "bold red", "verified": "green"}
+                "incoherent": "bold red", "no-such-call": "bold red",
+                "verified": "green"}
 
 
 def _append_claim_check(body: Text, analysis: Analysis, diff: str) -> None:
@@ -105,10 +111,17 @@ def _append_claim_check(body: Text, analysis: Analysis, diff: str) -> None:
 
     rep = check_against_diff(analysis.model_dump(), diff)
     bad = [c for c in rep.claims if c.status not in (UNVERIFIABLE, "verified")]
-    if not bad:
+    badcalls = [c for c in rep.calls if c.status == "no-such-call"]
+    if not bad and not badcalls:
         return
-    body.append(f"claim check · {len(bad)} of {len(rep.claims)} "
-                f"concrete claim(s) do not hold\n", style="bold red")
+    n, tot = len(bad) + len(badcalls), len(rep.claims) + len(rep.calls)
+    body.append(f"claim check · {n} of {tot} checkable claim(s) do not hold\n",
+                style="bold red")
+    for c in badcalls:
+        body.append("   no-such-call", style="bold red")
+        body.append(f"  {c.caller} calls {c.callee}\n")
+        if c.note:
+            body.append(f"      {c.note}\n", style="dim")
     for c in bad:
         body.append(f"   {c.status}", style=_CLAIM_STYLE.get(c.status, "red"))
         body.append(f"  {c.call} -> {c.claimed}")
@@ -385,10 +398,18 @@ class OracleTUI(App):
             target.update(body)
             return
 
-        style = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "green"}[d.band]
+        # A merge or otherwise empty diff scores NaN, which `GateDecision.band`
+        # reports as "UNSCORED" (ml_model/gate.py:45). Indexing the style map on
+        # that raised KeyError, and it is not an edge case: a repo whose HEAD is
+        # a merge commit crashes on the first row of the commit list.
+        style = {"HIGH": "red", "MEDIUM": "yellow",
+                 "LOW": "green", "UNSCORED": "dim"}.get(d.band, "dim")
         body = Text()
         body.append("stage 1 · gatekeeper\n", style="bold")
-        body.append(f"{d.score:.1%} {d.band}", style=f"bold {style}")
+        if d.score == d.score:                    # NaN fails this
+            body.append(f"{d.score:.1%} {d.band}", style=f"bold {style}")
+        else:
+            body.append(d.band, style=f"bold {style}")
         body.append(f"   gate {d.threshold:.1%}\n", style="dim")
         body.append(d.reason + "\n", style="italic dim")
         for name, value in d.top_metrics:

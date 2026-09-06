@@ -1,0 +1,1058 @@
+{
+ "tqdm-1": {
+  "score": 0.9481264321295586,
+  "metrics_nonzero": 14
+ },
+ "httpie-2": {
+  "score": 0.9496647751575161,
+  "metrics_nonzero": 14
+ },
+ "httpie-3": {
+  "score": 0.49751362869720694,
+  "metrics_nonzero": 13
+ },
+ "httpie-1": {
+  "score": 0.9947182409261438,
+  "metrics_nonzero": 14
+ },
+ "httpie-5": {
+  "score": 0.9780794395569837,
+  "metrics_nonzero": 14
+ },
+ "ansible-2": {
+  "score": 0.9831598395567527,
+  "metrics_nonzero": 14
+ },
+ "ansible-1": {
+  "score": 0.405012553313179,
+  "metrics_nonzero": 13
+ },
+ "ansible-4": {
+  "score": 0.2464897120128532,
+  "metrics_nonzero": 13
+ },
+ "ansible-5": {
+  "score": 0.9403873136334329,
+  "metrics_nonzero": 14
+ },
+ "ansible-6": {
+  "score": 0.9858364621319861,
+  "metrics_nonzero": 14
+ },
+ "luigi-1": {
+  "score": 0.9187362000706545,
+  "metrics_nonzero": 14
+ },
+ "ansible-8": {
+  "score": 0.9714489717279038,
+  "metrics_nonzero": 14
+ },
+ "ansible-7": {
+  "score": 0.9252346549891063,
+  "metrics_nonzero": 14
+ },
+ "luigi-2": {
+  "score": 0.9197114316083561,
+  "metrics_nonzero": 14
+ },
+ "luigi-3": {
+  "score": 0.9317328954754708,
+  "metrics_nonzero": 11
+ },
+ "ansible-10": {
+  "score": 0.9488618911733343,
+  "metrics_nonzero": 11
+ },
+ "ansible-11": {
+  "score": 0.12878443823817937,
+  "metrics_nonzero": 13
+ },
+ "ansible-12": {
+  "score": 0.924380231367247,
+  "metrics_nonzero": 11
+ },
+ "ansible-13": {
+  "score": 0.9911100258815391,
+  "metrics_nonzero": 14
+ },
+ "ansible-14": {
+  "score": 0.9744113722322006,
+  "metrics_nonzero": 14
+ },
+ "ansible-15": {
+  "score": 0.9161557307869839,
+  "metrics_nonzero": 14
+ },
+ "ansible-17": {
+  "score": 0.12263897040515973,
+  "metrics_nonzero": 13
+ },
+ "ansible-18": {
+  "score": 0.9702604321883168,
+  "metrics_nonzero": 14
+ },
+ "black-2": {
+  "score": 0.98826053301168,
+  "metrics_nonzero": 11
+ },
+ "black-1": {
+  "score": 0.23338514675359837,
+  "metrics_nonzero": 10
+ },
+ "black-3": {
+  "score": 0.39916879238205755,
+  "metrics_nonzero": 10
+ },
+ "black-5": {
+  "score": 0.9670342294393188,
+  "metrics_nonzero": 11
+ },
+ "black-4": {
+  "score": 0.9171979389381324,
+  "metrics_nonzero": 14
+ },
+ "black-6": {
+  "score": 0.6436808945946221,
+  "metrics_nonzero": 10
+ },
+ "luigi-4": {
+  "score": 0.4615330141409933,
+  "metrics_nonzero": 13
+ },
+ "black-7": {
+  "score": 0.3869779247209513,
+  "metrics_nonzero": 13
+ },
+ "black-8": {
+  "score": 0.953581492221164,
+  "metrics_nonzero": 14
+ },
+ "luigi-5": {
+  "score": 0.9791841021692833,
+  "metrics_nonzero": 11
+ },
+ "luigi-6": {
+  "score": 0.9549479578158042,
+  "metrics_nonzero": 14
+ },
+ "black-9": {
+  "score": 0.9661003376188974,
+  "metrics_nonzero": 11
+ },
+ "black-10": {
+  "score": 0.9540334015285852,
+  "metrics_nonzero": 11
+ },
+ "black-11": {
+  "score": 0.6570976110374723,
+  "metrics_nonzero": 10
+ },
+ "black-12": {
+  "score": 0.9838385055203216,
+  "metrics_nonzero": 14
+ },
+ "black-13": {
+  "score": 0.3387691423348218,
+  "metrics_nonzero": 13
+ },
+ "black-14": {
+  "score": 0.37934519401020045,
+  "metrics_nonzero": 13
+ },
+ "black-15": {
+  "score": 0.21170891331185665,
+  "metrics_nonzero": 13
+ },
+ "PySnooper-1": {
+  "score": 0.973789864383668,
+  "metrics_nonzero": 14
+ },
+ "PySnooper-3": {
+  "score": 0.9844651089232972,
+  "metrics_nonzero": 14
+ },
+ "cookiecutter-1": {
+  "score": 0.8753229212825172,
+  "metrics_nonzero": 11
+ },
+ "cookiecutter-2": {
+  "score": 0.3715381849469133,
+  "metrics_nonzero": 10
+ },
+ "cookiecutter-4": {
+  "score": 0.24316229791886276,
+  "metrics_nonzero": 13
+ },
+ "luigi-7": {
+  "score": 0.9834697534927939,
+  "metrics_nonzero": 11
+ },
+ "luigi-8": {
+  "score": 0.10379001362867912,
+  "metrics_nonzero": 13
+ },
+ "black-17": {
+  "score": 0.9582180486055957,
+  "metrics_nonzero": 14
+ },
+ "luigi-9": {
+  "score": 0.4292303679689248,
+  "metrics_nonzero": 10
+ },
+ "black-16": {
+  "score": 0.22926167107994203,
+  "metrics_nonzero": 10
+ },
+ "black-18": {
+  "score": 0.4575813393238272,
+  "metrics_nonzero": 13
+ },
+ "black-19": {
+  "score": 0.1412866128503425,
+  "metrics_nonzero": 12
+ },
+ "black-20": {
+  "score": 0.21712240185006462,
+  "metrics_nonzero": 13
+ },
+ "black-23": {
+  "score": 0.29867441325242405,
+  "metrics_nonzero": 13
+ },
+ "black-21": {
+  "score": 0.07324087477414579,
+  "metrics_nonzero": 13
+ },
+ "black-22": {
+  "score": 0.5307805831747908,
+  "metrics_nonzero": 13
+ },
+ "fastapi-1": {
+  "score": 0.28222731892534486,
+  "metrics_nonzero": 13
+ },
+ "fastapi-2": {
+  "score": 0.9567513436806685,
+  "metrics_nonzero": 11
+ },
+ "fastapi-3": {
+  "score": 0.966383332656833,
+  "metrics_nonzero": 11
+ },
+ "luigi-10": {
+  "score": 0.3000433443337203,
+  "metrics_nonzero": 13
+ },
+ "luigi-11": {
+  "score": 0.3834551397271835,
+  "metrics_nonzero": 13
+ },
+ "fastapi-4": {
+  "score": 0.9747736383483372,
+  "metrics_nonzero": 11
+ },
+ "fastapi-5": {
+  "score": 0.9415852107505225,
+  "metrics_nonzero": 14
+ },
+ "luigi-12": {
+  "score": 0.38295637995265486,
+  "metrics_nonzero": 13
+ },
+ "fastapi-6": {
+  "score": 0.9852242202753936,
+  "metrics_nonzero": 11
+ },
+ "fastapi-7": {
+  "score": 0.9801377583198458,
+  "metrics_nonzero": 14
+ },
+ "fastapi-8": {
+  "score": 0.9776979137306262,
+  "metrics_nonzero": 14
+ },
+ "fastapi-9": {
+  "score": 0.884791242357736,
+  "metrics_nonzero": 14
+ },
+ "fastapi-10": {
+  "score": 0.3151406445186122,
+  "metrics_nonzero": 13
+ },
+ "fastapi-11": {
+  "score": 0.988282652423016,
+  "metrics_nonzero": 11
+ },
+ "fastapi-12": {
+  "score": 0.9845960845104516,
+  "metrics_nonzero": 14
+ },
+ "fastapi-13": {
+  "score": 0.9938620188231159,
+  "metrics_nonzero": 14
+ },
+ "fastapi-14": {
+  "score": 0.9782703866230374,
+  "metrics_nonzero": 14
+ },
+ "fastapi-15": {
+  "score": 0.5055648644548252,
+  "metrics_nonzero": 12
+ },
+ "luigi-13": {
+  "score": 0.9210608323543201,
+  "metrics_nonzero": 14
+ },
+ "luigi-14": {
+  "score": 0.9626335073654921,
+  "metrics_nonzero": 14
+ },
+ "scrapy-1": {
+  "score": 0.9927089876413961,
+  "metrics_nonzero": 13
+ },
+ "scrapy-2": {
+  "score": 0.9910043906351311,
+  "metrics_nonzero": 14
+ },
+ "fastapi-16": {
+  "score": 0.9765367754833867,
+  "metrics_nonzero": 14
+ },
+ "luigi-16": {
+  "score": 0.9614100619120198,
+  "metrics_nonzero": 11
+ },
+ "luigi-15": {
+  "score": 0.9888504072670373,
+  "metrics_nonzero": 14
+ },
+ "luigi-17": {
+  "score": 0.8669180759364782,
+  "metrics_nonzero": 14
+ },
+ "sanic-2": {
+  "score": 0.9199102558850168,
+  "metrics_nonzero": 14
+ },
+ "sanic-3": {
+  "score": 0.878077048993688,
+  "metrics_nonzero": 14
+ },
+ "luigi-18": {
+  "score": 0.33174913988768817,
+  "metrics_nonzero": 13
+ },
+ "luigi-19": {
+  "score": 0.9669764085318345,
+  "metrics_nonzero": 14
+ },
+ "sanic-1": {
+  "score": 0.9628477288017748,
+  "metrics_nonzero": 14
+ },
+ "sanic-5": {
+  "score": 0.9834697229424373,
+  "metrics_nonzero": 11
+ },
+ "luigi-20": {
+  "score": 0.8476220426451382,
+  "metrics_nonzero": 14
+ },
+ "luigi-21": {
+  "score": 0.9234061665390807,
+  "metrics_nonzero": 14
+ },
+ "luigi-22": {
+  "score": 0.9484879548411759,
+  "metrics_nonzero": 11
+ },
+ "spacy-1": {
+  "score": 0.9602084094021501,
+  "metrics_nonzero": 11
+ },
+ "spacy-2": {
+  "score": 0.9431854041365039,
+  "metrics_nonzero": 14
+ },
+ "luigi-23": {
+  "score": 0.9808625584645599,
+  "metrics_nonzero": 14
+ },
+ "spacy-3": {
+  "score": 0.8668442267120706,
+  "metrics_nonzero": 11
+ },
+ "luigi-24": {
+  "score": 0.038920671306635415,
+  "metrics_nonzero": 13
+ },
+ "luigi-25": {
+  "score": 0.9026536363727019,
+  "metrics_nonzero": 14
+ },
+ "spacy-4": {
+  "score": 0.8610191671612482,
+  "metrics_nonzero": 11
+ },
+ "spacy-5": {
+  "score": 0.8370278941639665,
+  "metrics_nonzero": 14
+ },
+ "luigi-26": {
+  "score": 0.4106057627162279,
+  "metrics_nonzero": 13
+ },
+ "pandas-1": {
+  "score": 0.5900760974570866,
+  "metrics_nonzero": 14
+ },
+ "pandas-2": {
+  "score": 0.955136304351674,
+  "metrics_nonzero": 14
+ },
+ "luigi-27": {
+  "score": 0.9493799304714395,
+  "metrics_nonzero": 14
+ },
+ "luigi-28": {
+  "score": 0.9169462550550168,
+  "metrics_nonzero": 14
+ },
+ "thefuck-1": {
+  "score": 0.8565494741896716,
+  "metrics_nonzero": 11
+ },
+ "luigi-29": {
+  "score": 0.9798617248649,
+  "metrics_nonzero": 14
+ },
+ "thefuck-2": {
+  "score": 0.16944807915206261,
+  "metrics_nonzero": 13
+ },
+ "thefuck-3": {
+  "score": 0.050592540424736605,
+  "metrics_nonzero": 13
+ },
+ "thefuck-4": {
+  "score": 0.36922311421682,
+  "metrics_nonzero": 12
+ },
+ "thefuck-5": {
+  "score": 0.2111095699384604,
+  "metrics_nonzero": 13
+ },
+ "thefuck-6": {
+  "score": 0.08834179490356237,
+  "metrics_nonzero": 13
+ },
+ "thefuck-7": {
+  "score": 0.9495217162591193,
+  "metrics_nonzero": 14
+ },
+ "thefuck-8": {
+  "score": 0.9944207534545939,
+  "metrics_nonzero": 14
+ },
+ "thefuck-9": {
+  "score": 0.8347060983637791,
+  "metrics_nonzero": 14
+ },
+ "pandas-3": {
+  "score": 0.9355680553858357,
+  "metrics_nonzero": 14
+ },
+ "pandas-4": {
+  "score": 0.9755674124452067,
+  "metrics_nonzero": 11
+ },
+ "thefuck-10": {
+  "score": 0.2629531172879082,
+  "metrics_nonzero": 13
+ },
+ "thefuck-11": {
+  "score": 0.12947302813916686,
+  "metrics_nonzero": 13
+ },
+ "thefuck-13": {
+  "score": 0.21666001755656736,
+  "metrics_nonzero": 13
+ },
+ "thefuck-12": {
+  "score": 0.14031980107310335,
+  "metrics_nonzero": 13
+ },
+ "thefuck-14": {
+  "score": 0.14974614202744596,
+  "metrics_nonzero": 13
+ },
+ "thefuck-15": {
+  "score": 0.9588485317471165,
+  "metrics_nonzero": 14
+ },
+ "thefuck-16": {
+  "score": 0.15378278262217193,
+  "metrics_nonzero": 13
+ },
+ "thefuck-17": {
+  "score": 0.18102335960177865,
+  "metrics_nonzero": 13
+ },
+ "luigi-30": {
+  "score": 0.9790117041479686,
+  "metrics_nonzero": 14
+ },
+ "luigi-31": {
+  "score": 0.19978269192447082,
+  "metrics_nonzero": 13
+ },
+ "thefuck-22": {
+  "score": 0.9776310408892761,
+  "metrics_nonzero": 14
+ },
+ "thefuck-23": {
+  "score": 0.9604581709200327,
+  "metrics_nonzero": 14
+ },
+ "scrapy-3": {
+  "score": 0.9703761238264061,
+  "metrics_nonzero": 11
+ },
+ "thefuck-24": {
+  "score": 0.19007375029923984,
+  "metrics_nonzero": 13
+ },
+ "thefuck-25": {
+  "score": 0.09599539537975339,
+  "metrics_nonzero": 13
+ },
+ "thefuck-26": {
+  "score": 0.08826916983634515,
+  "metrics_nonzero": 13
+ },
+ "scrapy-4": {
+  "score": 0.9554878742967415,
+  "metrics_nonzero": 11
+ },
+ "thefuck-27": {
+  "score": 0.9474767816043098,
+  "metrics_nonzero": 14
+ },
+ "thefuck-28": {
+  "score": 0.9856669818028712,
+  "metrics_nonzero": 14
+ },
+ "thefuck-29": {
+  "score": 0.937820176852829,
+  "metrics_nonzero": 14
+ },
+ "scrapy-5": {
+  "score": 0.2349944591556282,
+  "metrics_nonzero": 10
+ },
+ "matplotlib-1": {
+  "score": 0.9862534474389512,
+  "metrics_nonzero": 14
+ },
+ "luigi-32": {
+  "score": 0.33342366013194175,
+  "metrics_nonzero": 13
+ },
+ "scrapy-6": {
+  "score": 0.27744822618802634,
+  "metrics_nonzero": 13
+ },
+ "scrapy-7": {
+  "score": 0.2132462315054912,
+  "metrics_nonzero": 13
+ },
+ "scrapy-8": {
+  "score": 0.908965684216745,
+  "metrics_nonzero": 14
+ },
+ "scrapy-9": {
+  "score": 0.9006187150145094,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-2": {
+  "score": 0.8913435515992545,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-3": {
+  "score": 0.08485274352098904,
+  "metrics_nonzero": 13
+ },
+ "scrapy-10": {
+  "score": 0.1194105631317186,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-4": {
+  "score": 0.9082777778753061,
+  "metrics_nonzero": 11
+ },
+ "scrapy-12": {
+  "score": 0.08276370719285042,
+  "metrics_nonzero": 12
+ },
+ "scrapy-13": {
+  "score": 0.03391516575021056,
+  "metrics_nonzero": 13
+ },
+ "pandas-6": {
+  "score": 0.9278469001943062,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-6": {
+  "score": 0.9540721915918442,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-5": {
+  "score": 0.09453452510091648,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-7": {
+  "score": 0.922757846879913,
+  "metrics_nonzero": 14
+ },
+ "scrapy-14": {
+  "score": 0.90622404974335,
+  "metrics_nonzero": 14
+ },
+ "luigi-33": {
+  "score": 0.3528194515860163,
+  "metrics_nonzero": 13
+ },
+ "scrapy-15": {
+  "score": 0.08605252308150943,
+  "metrics_nonzero": 13
+ },
+ "scrapy-17": {
+  "score": 0.10738205053373759,
+  "metrics_nonzero": 13
+ },
+ "scrapy-16": {
+  "score": 0.9932705577221654,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-8": {
+  "score": 0.3885859088598636,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-9": {
+  "score": 0.12107940293679131,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-10": {
+  "score": 0.2536402361171962,
+  "metrics_nonzero": 13
+ },
+ "scrapy-18": {
+  "score": 0.46886429754603876,
+  "metrics_nonzero": 13
+ },
+ "scrapy-19": {
+  "score": 0.08127014269899192,
+  "metrics_nonzero": 12
+ },
+ "scrapy-20": {
+  "score": 0.9081690840817299,
+  "metrics_nonzero": 13
+ },
+ "scrapy-21": {
+  "score": 0.12479061267549026,
+  "metrics_nonzero": 13
+ },
+ "scrapy-22": {
+  "score": 0.9348367996008897,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-11": {
+  "score": 0.9238060072161205,
+  "metrics_nonzero": 14
+ },
+ "scrapy-23": {
+  "score": 0.9778681753625528,
+  "metrics_nonzero": 11
+ },
+ "matplotlib-12": {
+  "score": 0.9631596641961571,
+  "metrics_nonzero": 11
+ },
+ "matplotlib-13": {
+  "score": 0.3497955004736141,
+  "metrics_nonzero": 13
+ },
+ "scrapy-24": {
+  "score": 0.9878249182933238,
+  "metrics_nonzero": 14
+ },
+ "scrapy-25": {
+  "score": 0.15715366663211483,
+  "metrics_nonzero": 13
+ },
+ "scrapy-26": {
+  "score": 0.9582041780895911,
+  "metrics_nonzero": 14
+ },
+ "scrapy-27": {
+  "score": 0.9758118292366779,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-16": {
+  "score": 0.1173959828496208,
+  "metrics_nonzero": 12
+ },
+ "matplotlib-14": {
+  "score": 0.04995912783693493,
+  "metrics_nonzero": 10
+ },
+ "matplotlib-15": {
+  "score": 0.9645130997371288,
+  "metrics_nonzero": 14
+ },
+ "scrapy-28": {
+  "score": 0.16465580301190355,
+  "metrics_nonzero": 12
+ },
+ "scrapy-29": {
+  "score": 0.07147220419102752,
+  "metrics_nonzero": 13
+ },
+ "scrapy-30": {
+  "score": 0.9799705534299104,
+  "metrics_nonzero": 14
+ },
+ "scrapy-31": {
+  "score": 0.421578892105565,
+  "metrics_nonzero": 13
+ },
+ "scrapy-32": {
+  "score": 0.9901085673367426,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-17": {
+  "score": 0.10356698306809271,
+  "metrics_nonzero": 12
+ },
+ "matplotlib-19": {
+  "score": 0.13914335895080882,
+  "metrics_nonzero": 12
+ },
+ "scrapy-34": {
+  "score": 0.9467464117270135,
+  "metrics_nonzero": 14
+ },
+ "scrapy-35": {
+  "score": 0.9936717464980845,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-20": {
+  "score": 0.9698616270796012,
+  "metrics_nonzero": 14
+ },
+ "scrapy-36": {
+  "score": 0.10331817546020845,
+  "metrics_nonzero": 10
+ },
+ "matplotlib-22": {
+  "score": 0.2153725780858956,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-21": {
+  "score": 0.9866823369522186,
+  "metrics_nonzero": 14
+ },
+ "scrapy-37": {
+  "score": 0.7965592981036537,
+  "metrics_nonzero": 14
+ },
+ "scrapy-38": {
+  "score": 0.8804788139386488,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-1": {
+  "score": 0.9737993072830284,
+  "metrics_nonzero": 14
+ },
+ "scrapy-39": {
+  "score": 0.9686414909871222,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-2": {
+  "score": 0.9890307583449838,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-23": {
+  "score": 0.9558474543493605,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-3": {
+  "score": 0.9669712578191756,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-4": {
+  "score": 0.9588399039352805,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-5": {
+  "score": 0.944143517501801,
+  "metrics_nonzero": 14
+ },
+ "scrapy-40": {
+  "score": 0.9797404720383985,
+  "metrics_nonzero": 11
+ },
+ "youtube-dl-6": {
+  "score": 0.9858952755682393,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-24": {
+  "score": 0.09247325751503165,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-25": {
+  "score": 0.09580344098155184,
+  "metrics_nonzero": 13
+ },
+ "pandas-7": {
+  "score": 0.9209748908314599,
+  "metrics_nonzero": 11
+ },
+ "youtube-dl-7": {
+  "score": 0.9538014538633536,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-8": {
+  "score": 0.9672480189885531,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-9": {
+  "score": 0.9786286926000642,
+  "metrics_nonzero": 14
+ },
+ "pandas-8": {
+  "score": 0.916256303744744,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-11": {
+  "score": 0.06290519611670405,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-12": {
+  "score": 0.9682046593660332,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-13": {
+  "score": 0.8294818889767944,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-14": {
+  "score": 0.24146565535279307,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-10": {
+  "score": 0.9612481413593491,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-15": {
+  "score": 0.07333925886209616,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-16": {
+  "score": 0.6169643814628708,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-26": {
+  "score": 0.10930403453537152,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-17": {
+  "score": 0.11960663197476883,
+  "metrics_nonzero": 12
+ },
+ "youtube-dl-18": {
+  "score": 0.976610874322927,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-19": {
+  "score": 0.15980199852546723,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-20": {
+  "score": 0.24608082789644198,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-27": {
+  "score": 0.1099545388165559,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-21": {
+  "score": 0.06380101843413309,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-22": {
+  "score": 0.2544693728363353,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-23": {
+  "score": 0.11735075314799094,
+  "metrics_nonzero": 10
+ },
+ "matplotlib-28": {
+  "score": 0.9017845271415799,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-24": {
+  "score": 0.9790404729322839,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-25": {
+  "score": 0.2486855401073783,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-26": {
+  "score": 0.10985910260871014,
+  "metrics_nonzero": 13
+ },
+ "matplotlib-29": {
+  "score": 0.9659844803557346,
+  "metrics_nonzero": 14
+ },
+ "matplotlib-30": {
+  "score": 0.9825907239418693,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-29": {
+  "score": 0.9505694064624329,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-27": {
+  "score": 0.11355936499200113,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-28": {
+  "score": 0.15628270594002533,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-32": {
+  "score": 0.9572560567439174,
+  "metrics_nonzero": 14
+ },
+ "keras-1": {
+  "score": 0.931608757445474,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-33": {
+  "score": 0.9733205201221464,
+  "metrics_nonzero": 14
+ },
+ "keras-2": {
+  "score": 0.924292796466117,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-34": {
+  "score": 0.9314122489265568,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-35": {
+  "score": 0.9698297347821937,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-36": {
+  "score": 0.9124903734177144,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-37": {
+  "score": 0.910348750659494,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-38": {
+  "score": 0.957362770713283,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-39": {
+  "score": 0.966339437005724,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-30": {
+  "score": 0.2441048315124257,
+  "metrics_nonzero": 13
+ },
+ "youtube-dl-31": {
+  "score": 0.9826734586776658,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-40": {
+  "score": 0.9914466669941563,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-41": {
+  "score": 0.9512278510546229,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-42": {
+  "score": 0.9597255966129016,
+  "metrics_nonzero": 14
+ },
+ "youtube-dl-43": {
+  "score": 0.8523565285789186,
+  "metrics_nonzero": 14
+ },
+ "keras-3": {
+  "score": 0.9877513879721883,
+  "metrics_nonzero": 11
+ },
+ "keras-4": {
+  "score": 0.15999048259757442,
+  "metrics_nonzero": 10
+ },
+ "pandas-9": {
+  "score": 0.9434949128876016,
+  "metrics_nonzero": 14
+ },
+ "pandas-10": {
+  "score": 0.8674756131684276,
+  "metrics_nonzero": 14
+ },
+ "keras-5": {
+  "score": 0.9789475715267772,
+  "metrics_nonzero": 11
+ },
+ "keras-6": {
+  "score": 0.9634174014110859,
+  "metrics_nonzero": 11
+ },
+ "keras-7": {
+  "score": 0.8691653296342413,
+  "metrics_nonzero": 11
+ },
+ "keras-8": {
+  "score": 0.9333303134769746,
+  "metrics_nonzero": 11
+ },
+ "keras-9": {
+  "score": 0.984822226231099,
+  "metrics_nonzero": 14
+ },
+ "pandas-11": {
+  "score": 0.9655300124000749,
+  "metrics_nonzero": 14
+ },
+ "keras-10": {
+  "score": 0.16883779885875666,
+  "metrics_nonzero": 10
+ },
+ "pandas-12": {
+  "score": 0.9737984496236323,
+  "metrics_nonzero": 14
+ },
+ "tornado-1": {
+  "score": 0.9713690064869294,
+  "metrics_nonzero": 14
+ },
+ "tqdm-2": {
+  "score": 0.95944552841907,
+  "metrics_nonzero": 14
+ }
+}

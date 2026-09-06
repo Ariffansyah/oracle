@@ -216,6 +216,147 @@ Model outputs on `labelled_heldout.jsonl`: `eval_sft110`, `eval_sft220`,
 `eval_stock`. Inputs to `evaluate.py --compare` and to
 `build_dpo_data.py --from-eval`.
 
+### BugsInPy — 501 real Python bugs, each with a test that proves it
+
+**Widyasari et al., "BugsInPy: A Database of Existing Bugs in Python Programs
+to Enable Controlled Testing and Debugging Studies", ESEC/FSE 2020 (tool
+demonstration).** Fetched by `bench/bugsinpy.py --fetch` from `soarsmu/BugsInPy`
+into `data/bugsinpy/` (gitignored, 11 MB of metadata plus the project clones it
+drives).
+
+This is the corpus that answers the three standing objections to every
+explanation number in `RESULTS.md` at once: that the bugs are ours, the
+benchmark is ours, and nobody else has a number on it. 501 bugs from 17
+maintained Python projects, and for each one:
+
+- the buggy commit and the fixed commit, in a clonable repository with full
+  history — so the gate's 14 Kamei metrics compute, which they cannot on a
+  synthetic file with no git behind it
+- `bug_patch.txt`, the fix diff with test files already stripped out
+- the triggering test, and the command that runs it
+- pinned requirements and the Python version the authors used
+
+**The shape fits ORACLE's per-file execution model almost exactly.** 410 of the
+501 patches touch a single file and the median patch changes 6 lines, so the
+attribution question ORACLE's reviewer asks — *which file did this?* — is
+already answered by the corpus, and the differential oracle is the project's own
+test rather than a command `suggest_run` had to guess.
+
+| | |
+|---|---|
+| bugs | 501 (500 with complete metadata; 1 has an empty patch) |
+| projects | 17 — pandas 169, keras 45, youtube-dl 43, scrapy 40, luigi 33, thefuck 32, matplotlib 30, black 23, ansible 18, fastapi 16, tornado 16, spacy 10, tqdm 9, httpie 5, sanic 5, cookiecutter 4, PySnooper 3 |
+| single-file patches | 410 / 501 |
+| median patch | 6 changed lines (p90 = 30) |
+| Python versions | 3.6, 3.7, 3.8 |
+
+#### Derived: `data/bugsinpy_exec.jsonl` — reproduction by execution
+
+`bench/bugsinpy_run.py` runs each bug the way `oracle_reviewer/core.py` reviews
+a commit: a worktree at the parent, then one checkout from the child, then the
+same command again.
+
+1. worktree at `buggy_commit`
+2. `git checkout <fixed> -- <test side>` — the triggering test is usually **added
+   by the fix**, so at the buggy commit it does not exist. BugsInPy's own
+   checkout script does the same. Fixtures count as test side: black keeps its
+   expected outputs in `tests/data/`, and checking out only the test module
+   leaves them at the wrong revision.
+3. install, run the test → **before**
+4. `git checkout <fixed> -- <source files>` — the fix, and nothing else
+5. run the test again → **after**
+
+A bug counts as **reproduced** only if the test fails at (3) and passes at (5).
+Environments are containers, one image per Python minor version, so nothing is
+installed on the host and the 2020 pins are resolved by a 2020 toolchain.
+
+    python bench/bugsinpy.py --fetch
+    python bench/bugsinpy.py --manifest
+    python bench/bugsinpy_run.py --projects luigi,thefuck --jobs 3
+    python bench/bugsinpy_rows.py --census
+
+**What the harness had to learn.** The first pass reproduced 9 of 17 projects.
+Every one of the remaining failures was the rig and not the corpus, and each is
+recorded in the code beside the line that fixes it:
+
+| cause | cost | fix |
+|---|---|---|
+| current `setuptools` vendors a typeguard whose pytest plugin the pinned pytest rejects | pandas + luigi entirely | pin the 2020 toolchain, do not upgrade setuptools |
+| 42 `bug.info` files are CRLF, and some write `fixed_commit_id =` with a space | 42 bugs silently dropped | tolerant parsing |
+| scrapy's and black's `requirements.txt` are UTF-16 | one pin lost per file, first line only | detect the encoding |
+| a pinned requirement ships a top-level `tests` package | all 23 black bugs, as `No module named 'tests.test_black'` | remove a site-packages `tests` that shadows the project's own |
+| PEP 517 build isolation fetches Cython 3 whatever the venv pins | pandas, spacy | `--no-build-isolation` for projects with C extensions |
+| installing `pytest` unconditionally upgrades past the pin | 18 of thefuck's 32, via `request.node.get_marker` | install pytest only if the pins did not |
+| later installs drag pinned packages forward | keras, spacy | re-assert the pinned set last — the pins win |
+
+Reproduction after those fixes, over the projects swept so far:
+
+| | |
+|---|---|
+| attempted | 333 |
+| **reproduced** | **297 (89%)** |
+| unchanged here | 6 |
+| not runnable | 30 |
+
+**What stays unreproducible, and why.** The residue is not random; it is two
+projects with named causes, recorded rather than absorbed into a rate:
+
+- **keras, 21 of 45.** TensorFlow 1.15 bundles `tensorflow.python.keras`, which
+  imports `keras_applications`, which raises `ImportError: You need to first
+  import keras` — because `keras` here *is* the checked-out source tree under
+  test, so the import is circular. Two other keras causes were fixed and are in
+  the table above (`markupsafe` 2.1 deleting `soft_unicode`, worth 14 of them;
+  release-candidate pins needing `--pre`). This one is project-specific plumbing
+  and was left alone deliberately.
+- **keras pins a version that no longer exists.** `numpy==1.19.0rc2` and
+  `scipy==1.5.0rc1` are release candidates that have since been removed from
+  PyPI, so no resolver can satisfy them and the run proceeds on whatever numpy
+  TensorFlow drags in. Recorded in each row's `pip_failed`.
+- **spacy, 5 of 10.** Cython-era build failures beyond the `Cython<3` pin.
+
+**"Unchanged here" is a finding, not a failure.** cookiecutter-1 is *"Fix default
+values being loaded with wrong encoding on Windows"* and PySnooper-1 is a
+unicode fix: on Linux under the pinned CPython there is nothing to observe, and
+the test passes on both sides. Those rows become the negative class the corpus
+would otherwise lack — real commits, measured, where the honest answer is that
+observed behaviour did not change.
+
+#### Derived: `data/bugsinpy_rows.jsonl` — the evaluation rows
+
+`bench/bugsinpy_rows.py` turns reproduced runs into rows. The measured pair is
+not the synthetic bench's tidy before/after, because a real bug does not have
+one:
+
+    before   the exception the triggering test actually raised
+    after    the test passing
+
+`after` therefore carries almost no information, and what is scored changes to
+suit — see `RESULTS.md`. The `before` side is extracted from pytest's FAILURES
+section specifically: pytest prints its ERRORS section *first*, so "the first
+`E` line" read tqdm-1 as a teardown `OSError` when the defect was a
+`TypeError: 'int' object is not subscriptable`.
+
+Exception classes across the reproduced rows are varied enough that naming one
+is a real claim: AssertionError 119, TypeError 30, AttributeError 23,
+ValueError 10, IndexError 8, KeyError 7, and a long tail including project-
+specific classes like youtube-dl's `ExtractorError`. 43 rows fail with no
+exception class at all (a bare `assert False`), and those are scored on the
+message alone.
+
+#### Licensing
+
+`soarsmu/BugsInPy` declares **no licence** — the same position as ApacheJIT and
+JIT-Defects4J in section 7. It is a research artifact published alongside a
+peer-reviewed tool demonstration, and the metadata is redistributed here only as
+a gitignored working copy; the code that is actually executed is each upstream
+project's own, fetched from its own repository under its own licence. Cite:
+
+> Ratnadira Widyasari, Sheng Qin Sim, Camellia Lok, Haodi Qi, Jack Phan,
+> Qijin Tay, Constance Tan, Fiona Wee, Jodie Ethelda Tan, Yuheng Yieh,
+> Brian Goh, Ferdian Thung, Hong Jin Kang, Thong Hoang, David Lo and
+> Eng Lieh Ouh. "BugsInPy: A Database of Existing Bugs in Python Programs to
+> Enable Controlled Testing and Debugging Studies." ESEC/FSE 2020.
+
 ---
 
 ## 4. Training sets
@@ -259,6 +400,11 @@ show it generalises.
 
 **Zeng et al., ISSTA 2021.** 21 Java projects; the dataset against which DeepJIT,
 CC2Vec and JITLine are compared.
+
+Not to be confused with **Defects4J** (Just et al., ISSTA 2014) or with
+**BugsInPy** (section 3, integrated). JIT-Defects4J is commit-level defect
+*labels* with no executable tests; the other two are runnable bugs with a
+triggering test each. The names collide and the corpora do not overlap.
 
 ### ManySStuBs4J — external taxonomy validation
 
@@ -341,6 +487,7 @@ submission — do not cite a licence from this table without re-checking it.
 | **BigVul** (`ZeoVan/MSR_20_Code_vulnerability_CSV_Dataset`) | **MIT** | GitHub API | ✅ verified |
 | **ApacheJIT** (`hosseinkshvrz/apachejit`) | **none declared** | GitHub API | ⚠️ see below |
 | **JIT-Defects4J** (`soarsmu/JIT-Defects4J`) | **none declared** | GitHub API | ⚠️ see below |
+| **BugsInPy** (`soarsmu/BugsInPy`) | **none declared** | GitHub API | ⚠️ see below |
 | CVEfixes collection code (`secureIT-project/CVEfixes`) | NOASSERTION | GitHub API | ⚠️ inspect repo |
 | DeepJIT QT / OPENSTACK | unverified | — | ⚠️ to check |
 | ManySStuBs4J | unverified | — | ⚠️ to check |

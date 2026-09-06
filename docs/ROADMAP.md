@@ -1,7 +1,9 @@
 # ORACLE — Roadmap to a Draft Paper
 
 **Every measurement, with its reproduction command, lives in `RESULTS.md`.**
-This file carries the plan and the interpretation.
+This file carries the plan and the interpretation. `POSITIONING.md` carries the
+related-work framing and, in particular, the one misreading worth pre-empting:
+the explanation is conditioned on execution, never on Stage 1's probability.
 
 **Window:** 2026-08-14 → 2026-10-14 (8 working weeks + buffer)
 **Deliverable:** a submittable draft with defensible results on established

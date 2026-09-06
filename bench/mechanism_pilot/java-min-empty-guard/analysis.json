@@ -1,0 +1,10 @@
+{
+  "summary": "The commit removes the empty-list guard in smallest, so Collections.min throws NoSuchElementException on an empty list instead of returning the -1 sentinel.",
+  "findings": [
+    {
+      "category": "logic-error",
+      "explanation": "Without the `nums.isEmpty()` check, Collections.min(nums) has nothing to compare and throws NoSuchElementException, so callers that relied on the -1 sentinel for empty input now see the exception propagate.",
+      "file": "java-min-empty-guard.java"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "js-safe-int-overflow",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "safe",
+      "precision",
+      "2",
+      "integer",
+      "silent"
+    ]
+  ],
+  "note": "the Number.isSafeInteger check is dropped, so sums past 2^53-1 lose precision silently. JavaScript has no integer type and never throws here, so the failure is a wrong number rather than a wrap or an exception. Same family as java-int-wrap, different observable. Verified: 'unsafe' -> 9007199254740992",
+  "check": {
+    "probe": "call `safeAdd(Number.MAX_SAFE_INTEGER, 2)`, a sum that lands past 2^53-1",
+    "watch": "the `Number.isSafeInteger(sum)` check is gone, so check what the returned number actually is once the sum passes the safe-integer range",
+    "restored": "`Number.isSafeInteger(sum)` is back before the return, so check that an unsafe sum reports itself instead of coming back as a rounded number"
+  }
+}

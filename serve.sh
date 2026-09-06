@@ -12,6 +12,20 @@
 #   ORACLE_BACKEND=ollama ORACLE_OLLAMA_HOST=http://localhost:8111
 H=${H:-oracle-gpu}
 PORT=${PORT:-8111}
+# serve.py's own default is config.MERGED_MODEL_DIR (artifacts/oracle-merged),
+# a merged checkpoint from a DIFFERENT output contract that scores like the
+# untrained base on BugsInPy. Inheriting it here meant `./serve.sh start` with no
+# MODEL served the wrong model, which is how the deployed path came to measure
+# 183/458 -- exactly the base model's score. The default is now the alias:
+#   artifacts/oracle-reviewer-3b -> sft-exec-v3
+# Promote a new checkpoint by repointing that symlink on the box; nothing here
+# changes. An explicit override still wins:
+#   MODEL=artifacts/sft-repair-w05 ./serve.sh start
+# serve.py has no --name: it reports the BASENAME as the model name, which is
+# what the TUI and the benches must ask for. It does not resolve the path, so a
+# symlink reports the LINK name -- `oracle-reviewer-3b` stays the served name
+# however the symlink is repointed, and the `WANT` check below keeps working.
+MODEL=${MODEL:-artifacts/oracle-reviewer-3b}
 TUI_ARGS=${TUI_ARGS:---repo .}
 HERE=$(cd "$(dirname "$0")" && pwd)
 
@@ -22,20 +36,42 @@ SSHOPTS="-o BatchMode=yes -o ConnectTimeout=8 -o ControlMaster=auto
 remote() { ssh $SSHOPTS "$H" "bash -lc '$1'" 2>/dev/null; }
 
 start() {
-  # Kill and launch must be separate ssh calls: the launch command itself
-  # contains "llm_explainer.serve", which pkill's pattern matches — running
-  # both in one shell makes pkill kill the shell that is about to start it.
-  remote 'pkill -f "llm_explainer[.]serve" 2>/dev/null; sleep 1'
-  remote "cd ~/oracle && nohup .venv/bin/python -m llm_explainer.serve --port $PORT \
-       > ~/oracle/serve.log 2>&1 &"
-  # Wait for the server to answer on the box before tunnelling; a tunnel to
-  # nothing "works" until the first request and misreports as down.
-  for i in $(seq 1 60); do
-    remote "curl -s -m 2 http://localhost:$PORT/api/tags >/dev/null" && break
-    sleep 2
-  done
-  ssh -f -N -L "${PORT}:localhost:${PORT}" $SSHOPTS "$H"
-  sleep 1
+  WANT=$(basename "$MODEL")
+  # Reuse a server already serving the model we want. A restart reloads 3B of
+  # weights in 4-bit, which is a minute-plus on this card, and `start` used to
+  # pay it on EVERY launch — including when the right server was already up.
+  # serve.py reports the adapter directory's basename, so the name is the check.
+  HAVE=$(remote "curl -s -m 3 http://localhost:$PORT/api/tags" \
+         | grep -o '"name"[^"]*"[^"]*"' | head -1 | sed 's/.*"\(.*\)"$/\1/')
+  if [ "$HAVE" = "$WANT" ]; then
+    echo "reusing the running server ($HAVE) — pass RESTART=1 to reload it"
+  fi
+  if [ "$HAVE" != "$WANT" ] || [ -n "${RESTART:-}" ]; then
+    remote "test -d ~/oracle/$MODEL" || {
+      echo "!! $MODEL does not exist on $H"; exit 1; }
+    # Kill and launch must be separate ssh calls: the launch command itself
+    # contains "llm_explainer.serve", which pkill's pattern matches — running
+    # both in one shell makes pkill kill the shell that is about to start it.
+    remote 'pkill -f "llm_explainer[.]serve" 2>/dev/null; sleep 1'
+    echo "serving $MODEL (reported as \"$WANT\") — loading weights, ~1min"
+    # </dev/null is load-bearing: nohup redirects stdout and stderr, but the
+    # detached server keeps ssh's stdin open, so ssh never sees EOF and blocks
+    # forever on a process it has already successfully launched. This wedged a
+    # batch run for eleven minutes with the server up and answering.
+    remote "cd ~/oracle && nohup .venv/bin/python -m llm_explainer.serve --port $PORT \
+         --model $MODEL > ~/oracle/serve.log 2>&1 < /dev/null &"
+    # Wait for the server to answer on the box before tunnelling; a tunnel to
+    # nothing "works" until the first request and misreports as down.
+    for i in $(seq 1 60); do
+      remote "curl -s -m 2 http://localhost:$PORT/api/tags >/dev/null" && break
+      sleep 2
+    done
+  fi
+  # Likewise the tunnel: a second -L on a live port just fails noisily.
+  if ! curl -s -m 3 "http://localhost:${PORT}/api/tags" >/dev/null 2>&1; then
+    ssh -f -N -L "${PORT}:localhost:${PORT}" $SSHOPTS "$H"
+    sleep 1
+  fi
   curl -s -m 3 "http://localhost:${PORT}/api/tags" >/dev/null \
     && echo "server + tunnel up on localhost:${PORT}" \
     || echo "server started but the tunnel is not answering"

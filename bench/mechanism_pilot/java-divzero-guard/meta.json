@@ -1,0 +1,22 @@
+{
+  "id": "java-divzero-guard",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "zero",
+      "arithmeticexception",
+      "guard",
+      "divide",
+      "integer"
+    ]
+  ],
+  "note": "the b == 0 guard is removed; integer division by zero in Java throws ArithmeticException rather than producing Infinity, so the same removal fails loudly here and silently in JavaScript. Same family as py-zerodiv-guard and js-divzero-guard, three different observables. Verified: -1 -> ArithmeticException",
+  "check": {
+    "probe": "call `safeDivide(10, 0)` with a zero divisor",
+    "watch": "the `b == 0` guard is gone before `a / b` \u2014 check what integer division by zero does in Java rather than assuming it yields a value",
+    "restored": "the `b == 0` guard is back before `a / b`, so check that a zero divisor returns the sentinel instead of throwing"
+  }
+}

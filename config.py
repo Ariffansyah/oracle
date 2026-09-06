@@ -236,6 +236,60 @@ DIFF_RENDERING = _env("DIFF_RENDERING", "auto")  # auto | word | unified
 # assuming it helps: with_context=True and False produced the IDENTICAL answer
 # on TestJIT/pyalgo 9227c63, so context volume is not always the lever.
 DIFF_CONTEXT_LINES = _env("DIFF_CONTEXT_LINES", "full")   # "full" | e.g. "3"
+
+# Drop findings whose explanation cites nothing in the code under review, and
+# fall back to `direction: unchanged` when that empties the list.
+#   "off"   (default) return what the model said
+#   "drop"  remove ungrounded findings and downgrade direction if none survive
+#
+# `evaluate.grounded(..., scope="context")` is the test. Measured 1 Sep against
+# the hand-graded 40 real commits, per seed:
+#
+#   scope      true positives kept   false alarms dropped
+#   changed          0 / 1                8 / 32  and  2 / 21
+#   context          1 / 1                7 / 32  and  2 / 21
+#
+# So "context" is the only scope this may use: the changed-lines rule discards
+# every true positive to remove a quarter of the noise. Even so this defaults
+# OFF, because it is a model-visible change and every number in
+# docs/RESULTS.md was scored without it - and because "keeps the true positive"
+# currently rests on ONE true positive, which is not enough to switch on for
+# everyone.
+GROUNDING_FILTER = _env("GROUNDING_FILTER", "off")        # "off" | "drop"
+
+# Skip the LLM when a commit is STRUCTURALLY provably safe: every declaration
+# that existed before survives byte-identical after normalising away comments,
+# docstrings and type annotations, and nothing else moved. See
+# `llm_explainer/ast_guardrails.py`.
+#
+# On by default, which the other new switches are not, for one reason: it only
+# runs in `analyze_commit`, and no bench or eval path calls that - basic_bench,
+# real_commits and evaluate all use `analyze()`. So it cannot move a number in
+# docs/RESULTS.md, whereas GROUNDING_FILTER and DIFF_CONTEXT_LINES would.
+#
+# Measured 1 Sep on the 40 hand-graded real commits: bypassed 4, suppressed 2
+# false-alarm findings, and did NOT bypass the one true positive. The low rate
+# is real - 16 of the 40 are Rust and Go, which it refuses outright, and most of
+# the rest genuinely alter an existing declaration. A false bypass is a defect
+# nobody reviews, so it refuses whenever it cannot prove safety.
+AST_GUARDRAIL = _env("AST_GUARDRAIL", "on")               # "on" | "off"
+
+# Drop a finding when every checkable claim it makes is REFUTED, and fall back
+# to `direction: unchanged` when that empties the list.
+#
+# On by default, unlike GROUNDING_FILTER, because the evidence is different in
+# kind. Grounding measures vocabulary overlap and is a heuristic - it discarded
+# the only true positive in 40 real commits. A refutation here is a proof:
+#   contradicted  the call was executed and returned something else
+#   degenerate    "N instead of N" asserts a change between identical values
+#   incoherent    "X instead of Y" about a function the diff itself adds
+#   no-such-call  the callee does not appear in the caller's parsed body
+# A finding survives if any of its claims verifies, or if it makes no checkable
+# claim at all - prose is never evidence against itself.
+#
+# Only runs where post-image source is available, i.e. `analyze_commit`, so it
+# cannot move a number in docs/RESULTS.md: every bench path uses `analyze()`.
+CLAIM_FILTER = _env("CLAIM_FILTER", "on")                 # "on" | "off"
 # Sent explicitly on every request. Ollama otherwise falls back to whatever the
 # Modelfile baked in, or its own 4096 default - and a prompt carrying file
 # context silently overflows that without any error.

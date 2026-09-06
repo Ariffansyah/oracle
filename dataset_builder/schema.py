@@ -8,6 +8,7 @@ runtime expectations cannot drift apart.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Literal
@@ -192,6 +193,18 @@ class Analysis(BaseModel):
         default_factory=list,
         description="Real defects introduced by this diff. Empty when the code is safe.",
     )
+    # repair contract only, and optional for the same reason `Effect.before` is:
+    # `to_json` excludes None, so a v1/v2/v3 target serialises to exactly the
+    # bytes it did before these existed. Declared last so key order is unchanged.
+    confidence: float | None = Field(
+        default=None,
+        description="repair only. 0.0-1.0 support for the verdict.")
+    affected_identifiers: list[str] | None = Field(
+        default=None,
+        description="repair only. Symbols the change touches, as they appear in the diff.")
+    repair_direction: str | None = Field(
+        default=None,
+        description="repair only. The shape of the repair the code needs.")
 
     def to_json(self) -> str:
         # exclude_none keeps v1 targets byte-identical: no `"effect": null` in
@@ -239,11 +252,25 @@ the caller, the disabled control, or the second check.
 ```
 """
 
+# Measured, not predicted. The 2 Sep hand-grade found the model's two worst
+# failures were an INVERTED before/after and a FABRICATED exception — both of
+# which are guesses about behaviour it was never shown. bench/exec_diff.py runs
+# both versions, so the guess can be replaced by the fact.
+OBSERVED_TEMPLATE = """
+## Observed behaviour (both versions were executed)
+These two outputs were MEASURED by running the code, not predicted. They are
+ground truth. Your explanation must account for this exact difference, and must
+not assert any behaviour that contradicts it.
+
+before (pre-commit):  {before}
+after  (post-commit): {after}
+"""
+
 USER_TEMPLATE = """Review this commit for defects.
 
 subject: {subject}
 files: {files}
-{context}
+{context}{observed}
 ## Changes
 ```diff
 {diff}
@@ -421,16 +448,92 @@ Answer with one JSON object, keys in this order:
 # One switch moves prompt, hint and expected keys together. A checkpoint scored
 # under a contract it was not trained on lost six cases in forty-six to that
 # alone (RESULTS.md, 27 Aug), so these must never be selected independently.
-_PROMPTS = {"v1": _SYSTEM_PROMPT_V1, "v2": _SYSTEM_PROMPT_V2, "v3": _SYSTEM_PROMPT_V3}
+
+# --- repair contract -------------------------------------------------------
+# The repair-supervised contract (1 Sep). NOT a variant of v1/v2/v3: different
+# keys, different user template, and its targets are derived from the diff that
+# REPAIRED each defect rather than written from the buggy code alone.
+#
+# This literal is byte-identical to the system turn in data/sft_repair_msgs.jsonl
+# and `dataset_builder/build_repair_sft.py` imports it from here rather than
+# keeping its own copy. That is deliberate. `_PROMPTS.get(OUTPUT_CONTRACT, ...)`
+# falls back to the V1 prompt for any unknown name, so setting
+# ORACLE_OUTPUT_CONTRACT=repair without this entry would have served the new
+# checkpoint the one prompt shape it never trained on - the same failure that
+# cost the project two days through the TUI, arriving by a different door.
+_SYSTEM_PROMPT_REPAIR = 'You are ORACLE, a Just-In-Time defect reviewer.\n\nYou are given one commit diff. Decide whether it introduces a defect, and answer with one JSON object and nothing else.\n\nYou CANNOT run the code. Report only what the diff shows.\n\n  "defect_found"          true if this change introduces a defect, else false\n  "confidence"            0.0-1.0, how strongly the evidence supports that call\n  "target_file"           the file the defect is in, or the file the change centres on\n  "affected_identifiers"  the symbols the change touches, as they appear in the diff\n  "explanation"           one sentence, naming only identifiers present in the diff\n  "repair_direction"      if defect_found, the shape of the repair the code needs; otherwise null\n\nName no identifier that is absent from the diff. If the change adds a definition that did not exist before, it has no prior behaviour to contradict.'
+
+# Also byte-identical to training. No schema block and no context block: the
+# repair corpus carries neither, so `build_user_message` must not add them.
+_USER_TEMPLATE_REPAIR = """Review this commit.
+
+subject: {subject}
+files: {files}
+
+```diff
+{diff}
+```"""
+
+
+def repair_to_analysis(obj: dict) -> "Analysis":
+    """Map a repair-contract answer onto `Analysis`.
+
+    Everything downstream - the benches, the grading sheet, the TUI - reads
+    `summary` and `findings`. Rather than teach each of them a second shape,
+    the repair answer is adapted here.
+
+    `category` is "other" because the repair contract does not ask for one, and
+    inventing a taxonomy label the model never emitted would put a value into a
+    field no metric could then trust.
+    """
+    expl = (obj.get("explanation") or "").strip()
+    found = bool(obj.get("defect_found"))
+    ids = obj.get("affected_identifiers") or None
+    if isinstance(ids, str):
+        ids = [ids]
+    return Analysis(
+        summary=expl,
+        findings=([Finding(category="other", explanation=expl,
+                           file=obj.get("target_file") or "")] if found else []),
+        confidence=obj.get("confidence"),
+        affected_identifiers=ids,
+        repair_direction=obj.get("repair_direction") or None,
+    )
+
+
+_PROMPTS = {"v1": _SYSTEM_PROMPT_V1, "v2": _SYSTEM_PROMPT_V2, "v3": _SYSTEM_PROMPT_V3,
+            "repair": _SYSTEM_PROMPT_REPAIR}
 _HINTS = {"v1": _SHORT_HINT_V1, "v2": _SHORT_HINT_V2, "v3": _SHORT_HINT_V3}
 
+# Opt-in, off by default: suppress speculative consequence clauses.
+#
+# Measured by hand-grade on 2 Sep (data/mechanism_grade_oracle46.json): 8 of 33
+# findings had a CORRECT mechanism with one false consequence bolted on — an
+# `ArrayIndexOutOfBounds` case that also offers NullPointerException, a Rust
+# bounds check predicted as "segfault or corrupt data", an integer result called
+# "non-numeric". Those 8 are the entire difference between 39% and 64%
+# mechanism-correct, and none of them is a reasoning failure: the model is
+# answering a question it was not asked and cannot check.
+#
+# Off unless ORACLE_NO_SPECULATION is set, because it changes the prompt the
+# checkpoints were trained under and every stored number was measured without it.
+_NO_SPECULATION = """
+- State the mechanism the diff shows and its immediate result, then stop. Do \
+not add alternative outcomes, downstream consequences, or hedged predictions. \
+If an index goes out of bounds, say that; do not also guess whether the runtime \
+panics, segfaults, throws, or corrupts memory. One consequence, the one the \
+code forces."""
+
 SYSTEM_PROMPT = _PROMPTS.get(OUTPUT_CONTRACT, _SYSTEM_PROMPT_V1)
+if os.getenv("ORACLE_NO_SPECULATION", "") not in ("", "0", "false", "False"):
+    SYSTEM_PROMPT = SYSTEM_PROMPT.rstrip() + "\n" + _NO_SPECULATION + "\n"
 SHORT_FORMAT_HINT = _HINTS.get(OUTPUT_CONTRACT, _SHORT_HINT_V1)
 
 
 def build_user_message(diff: str, subject: str = "", files: str = "",
                        max_diff_chars: int | None = None,
-                       context: str = "", include_schema: bool = True) -> str:
+                       context: str = "", include_schema: bool = True,
+                       observed: tuple[str, str] | None = None) -> str:
     """Assemble the user turn.
 
     `context` is the surrounding-code block - expanded hunks or whole post-commit
@@ -445,6 +548,13 @@ def build_user_message(diff: str, subject: str = "", files: str = "",
     """
     if max_diff_chars and len(diff) > max_diff_chars:
         diff = diff[:max_diff_chars] + "\n... [diff truncated] ...\n"
+    if OUTPUT_CONTRACT == "repair":
+        # Byte-identical to training: no schema, no context, no "## Changes".
+        # `include_schema` and `context` are accepted and ignored rather than
+        # rejected, so a caller that passes them gets the trained shape instead
+        # of a prompt the checkpoint has never seen.
+        return _USER_TEMPLATE_REPAIR.format(
+            subject=subject or "(none)", files=files or "(unknown)", diff=diff)
     schema_part = (
         SCHEMA_BLOCK.format(schema=json.dumps(Analysis.model_json_schema(), indent=2))
         if include_schema else SHORT_FORMAT_HINT
@@ -453,6 +563,8 @@ def build_user_message(diff: str, subject: str = "", files: str = "",
         subject=subject or "(none)",
         files=files or "(unknown)",
         context=CONTEXT_TEMPLATE.format(context=context) if context else "",
+        observed=(OBSERVED_TEMPLATE.format(before=observed[0], after=observed[1])
+                  if observed else ""),
         diff=diff,
         schema=schema_part,
     )

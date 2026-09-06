@@ -1,0 +1,13 @@
+{
+  "id": "java-min-empty-guard-rename",
+  "language": "java",
+  "ext": "java",
+  "label": "refactor",
+  "parent": "java-min-empty-guard",
+  "category": "logic-error",
+  "note": "renames `nums` to `nums_x`; behaviour is unchanged",
+  "renamed": [
+    "nums",
+    "nums_x"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "js-divzero-guard-fix",
+  "language": "javascript",
+  "ext": "js",
+  "label": "fix",
+  "parent": "js-divzero-guard",
+  "category": "logic-error",
+  "note": "reverses js-divzero-guard"
+}

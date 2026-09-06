@@ -1,0 +1,22 @@
+{
+  "id": "java-min-empty-guard",
+  "language": "java",
+  "ext": "java",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "empty",
+      "isempty",
+      "guard",
+      "nosuchelement",
+      "collections.min"
+    ]
+  ],
+  "note": "the isEmpty() guard is removed; Collections.min on an empty list throws NoSuchElementException rather than returning the sentinel. Same family as py-min-empty-guard and js-math-min-empty, third observable: an exception, not a silent value. Verified: -1 -> NoSuchElementException",
+  "check": {
+    "probe": "call `smallest(new ArrayList<>())` with an empty list",
+    "watch": "the `nums.isEmpty()` guard is gone before `Collections.min(nums)` \u2014 check what that call does when there is nothing to compare",
+    "restored": "the `nums.isEmpty()` guard is back before `Collections.min(nums)`, so check that an empty list returns the sentinel instead of throwing"
+  }
+}

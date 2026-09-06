@@ -1,0 +1,13 @@
+{
+  "id": "js-safe-int-overflow-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-safe-int-overflow",
+  "category": "logic-error",
+  "note": "renames `sum` to `sum_x`; behaviour is unchanged",
+  "renamed": [
+    "sum",
+    "sum_x"
+  ]
+}

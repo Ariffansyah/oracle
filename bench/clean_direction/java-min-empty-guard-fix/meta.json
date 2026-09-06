@@ -1,0 +1,9 @@
+{
+  "id": "java-min-empty-guard-fix",
+  "language": "java",
+  "ext": "java",
+  "label": "fix",
+  "parent": "java-min-empty-guard",
+  "category": "logic-error",
+  "note": "reverses java-min-empty-guard"
+}

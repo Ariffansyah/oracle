@@ -1,0 +1,22 @@
+{
+  "id": "js-concat-coerce",
+  "language": "javascript",
+  "ext": "js",
+  "buggy": true,
+  "category": "logic-error",
+  "must_mention": [
+    [
+      "number(",
+      "concat",
+      "string",
+      "plus",
+      "coerce"
+    ]
+  ],
+  "note": "Number() is dropped from the parsed quantity, so `+` concatenates instead of adding. JavaScript coerces silently in the opposite direction to Python: py-str-concat-typeerror raises TypeError on the same shape, this returns a wrong string. Verified: 8 -> '53'",
+  "check": {
+    "probe": "call `totalItems(\"5\", 3)` where the first quantity arrives as a string",
+    "watch": "`Number(first)` is gone, so `first + second` has a string on the left \u2014 check whether `+` adds or concatenates here",
+    "restored": "`Number(first)` is back before the addition, so check that a string quantity is added rather than glued to the second"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "js-concat-coerce-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-concat-coerce",
+  "category": "logic-error",
+  "note": "renames `first` to `first_x`; behaviour is unchanged",
+  "renamed": [
+    "first",
+    "first_x"
+  ]
+}

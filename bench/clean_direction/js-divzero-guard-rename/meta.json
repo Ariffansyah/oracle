@@ -1,0 +1,13 @@
+{
+  "id": "js-divzero-guard-rename",
+  "language": "javascript",
+  "ext": "js",
+  "label": "refactor",
+  "parent": "js-divzero-guard",
+  "category": "logic-error",
+  "note": "renames `b` to `b_x`; behaviour is unchanged",
+  "renamed": [
+    "b",
+    "b_x"
+  ]
+}

@@ -74,6 +74,14 @@ mean token accuracy 0.896. Held-out verdict recall was **1.000 on 21 positives a
 every reading** (the standing kill condition is 0.000 at step 20); specificity
 0.842, top-1 0.925 at step 147.
 
+> Read that recall as a training-health check, not as generalisation. Until
+> `ff5dd71`, `--eval-max 40` took the first 40 rows of the holdout in file
+> order, and the generators write those grouped by family: v3's slice covered
+> 4 of its 7 held-out families, and 3 of those carried almost all the rows.
+> It is enough to catch the epoch-1 collapse it exists to catch. The
+> generalisation claim rests on the 458-bug BugsInPy measurement below, which
+> uses the whole corpus and is unaffected.
+
 ### The bench arms
 
 Same frozen 458 rows, same rubric, same decode as every arm in the section below.

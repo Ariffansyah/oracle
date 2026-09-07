@@ -247,6 +247,26 @@ def membership_changed(diff: str) -> tuple[int, str] | None:
     return None
 
 
+# A comment cannot change behaviour, so it should not compete for the fact
+# budget with lines that can. On a real Go commit five of the first twelve
+# facts were comment lines, pushing `Set` gaining a parameter and the new
+# early-return past the cut.
+#
+# EXCEPT these. A build tag, a type directive or a linter suppression is a
+# comment to the parser and an instruction to the toolchain, and dropping one
+# would hide a real change.
+_PRAGMA = re.compile(r"""^\s*(?://|\#|/\*)\s*
+    (go:|\+build|type:|noqa|pragma|nolint|eslint-|prettier-|ts-|c8\s|istanbul|
+     cgo|deprecated:|codegen|generated\s+by|@ts-|global\s|jshint|flake8:)""",
+    re.I | re.X)
+
+
+def _pure_comment(text: str, marks: tuple[str, ...]) -> bool:
+    """A whole-line comment that carries no instruction to the toolchain."""
+    t = text.strip()
+    return bool(marks) and t.startswith(marks) and not _PRAGMA.match(t)
+
+
 def describe(diff: str, limit: int = 6) -> list[str]:
     """Plain statements of what the diff did. Never about what it caused.
 
@@ -294,6 +314,8 @@ def describe(diff: str, limit: int = 6) -> list[str]:
                 out.append(f"line {left[0]}: removed `{_clip(left[1])}`")
         dels, adds = [], []
 
+    marks = _comment_prefixes(diff)
+    comments = 0
     for left, right in split(diff):
         if left and left[2] == "hunk":
             flush()
@@ -302,12 +324,24 @@ def describe(diff: str, limit: int = 6) -> list[str]:
             flush()
             continue
         if left and left[1].strip():
-            dels.append(left)
+            if _pure_comment(left[1], marks):
+                comments += 1
+            else:
+                dels.append(left)
         if right and right[1].strip():
-            adds.append(right)
+            if _pure_comment(right[1], marks):
+                comments += 1
+            else:
+                adds.append(right)
     flush()
 
-    out = _group(out)
+    out = _fold_declarations(_group(out))
+    # Not silence: say they changed, in one line rather than six. Only worth a
+    # line at all when something else is being reported -- a diff of nothing
+    # but comments is `cosmetic_only`'s to describe, and it says more.
+    if comments and out:
+        out.append(f"({comments} comment line{'s' if comments > 1 else ''} "
+                   f"also changed, which cannot affect behaviour)")
     # A changed filter clause replaces the line's own entry, which without this
     # reads "line N: rewritten" -- true, and useless.
     widened = membership_changed(diff)
@@ -345,6 +379,44 @@ _ADDED_EL = re.compile(r"^line (\d+): added `<(?P<tag>[A-Za-z][\w.\-]*)"
 _INCLUDES = re.compile(r"const\s+(?P<name>\w+)\s*=\s*\[(?P<items>[^\]]*)\]"
                        r"\s*\.includes\(\s*(?P<subject>[\w.]+)\s*\)")
 _EQ = re.compile(r"^(?P<subject>[\w.]+)\s*===?\s*(?P<lit>[\"'][^\"']*[\"'])$")
+
+
+# A whole added function is ONE fact. Listing its body line by line spent the
+# entire budget on `c.mu.RLock()`, `return c.version` and `}` while the
+# signature change and the new early-return that the commit was actually about
+# sat below the cut.
+_ADDED_LINE = re.compile(r"^line (?P<at>\d+): added `(?P<text>.*)`$")
+_DECL = re.compile(r"""^\s*(?:export\s+|public\s+|private\s+|static\s+|async\s+
+                        |pub\s+|final\s+)*
+                       (func|def|function|class|struct|interface|type|impl|fn)\b""",
+                   re.X)
+
+
+def _fold_declarations(lines: list[str], floor: int = 3) -> list[str]:
+    """Collapse `added` runs that open a declaration into one line."""
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        m = _ADDED_LINE.match(lines[i])
+        if not m or not _DECL.match(m["text"]):
+            out.append(lines[i])
+            i += 1
+            continue
+        j = i + 1
+        while j < len(lines) and _ADDED_LINE.match(lines[j]):
+            # A second declaration starts a new run rather than joining this one.
+            if _DECL.match(_ADDED_LINE.match(lines[j])["text"]):
+                break
+            j += 1
+        n = j - i
+        if n < floor:                       # too short to be worth folding
+            out.extend(lines[i:j])
+        else:
+            head = _clip(m["text"].rstrip("{: "), 62)
+            out.append(f"line {m['at']}: added `{head}` and its body "
+                       f"({n} lines)")
+        i = j
+    return out
 
 
 def _group(lines: list[str]) -> list[str]:

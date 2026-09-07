@@ -42,9 +42,13 @@ from . import core
 from .splitdiff import split
 
 RISK = {"high": "#f38ba8", "change": "#f9e2af", "fixes": "#a6e3a1", "ui-text": "#89b4fa", "unreachable": "#6c7086",
-        "unclear": "#cba6f7", "none": "#6c7086", "unverified": "#9399b2"}
+        "unclear": "#cba6f7", "none": "#6c7086", "unverified": "#9399b2",
+        # Neither is a risk verdict: one says the commit is fine and only the
+        # isolation failed, the other says the diff cannot reach the program.
+        "co-dependent": "#89b4fa", "provably-safe": "#6c7086"}
 DOT = {"high": "●", "change": "●", "fixes": "●", "ui-text": "◇", "unreachable": "○",
-       "unclear": "◆", "none": "○", "unverified": "○"}
+       "unclear": "◆", "none": "○", "unverified": "○",
+       "co-dependent": "◇", "provably-safe": "○"}
 HELP = ("commands:  :run <command>   :repo <path>   :model <name>   :timeout <secs>"
         "   ·   keys: r review, a apply, c/e/y copy, w write, q quit")
 
@@ -117,6 +121,7 @@ class Reviewer(App):
         # a Python command made the tool look broken on every project that is
         # not Python: the baseline could only ever fail.
         self.repo, self.run_cmd = repo, run
+        self.pending: list[str] = []   # files of the HIGHLIGHTED commit
         self._run_explicit = bool(run)
         self.host, self.model, self.timeout = host, model, timeout
         self.commits: list[tuple[str, str]] = []      # (sha, subject)
@@ -278,9 +283,11 @@ class Reviewer(App):
                       f"nothing was measured. Set a working one with "
                       f"`:run <command>`", "#f38ba8")
         else:
+            dep = c("co-dependent")
             self._say(f"{len(rs)} file(s) · {c('high')} high risk · "
                       f"{c('change')} behaviour change · {c('unclear')} not "
-                      f"established · {c('none')} cosmetic")
+                      f"established · {c('none')} cosmetic"
+                      + (f" · {dep} need the rest of the commit" if dep else ""))
         if rs:
             lv.index = 0
             self._show(rs[0])
@@ -290,8 +297,26 @@ class Reviewer(App):
         """Off by default: a review is two runs of the command per file, so
         moving down a list with it on is expensive by accident."""
         i = ev.list_view.index
-        if self.auto_review and self.run_cmd and i is not None \
-                and 0 <= i < len(self.commits):
+        if i is None or not (0 <= i < len(self.commits)):
+            return
+        # Whatever else happens, the file panel must describe the commit that
+        # is highlighted NOW. It used to keep the last REVIEWED commit's files
+        # under a header reading "FILES IN THIS COMMIT" -- so a six-file commit
+        # showed the two files of a docs commit reviewed several selections
+        # ago, with no indication they were stale.
+        sha = self.commits[i][0]
+        self.reviews = []
+        self._armed = None
+        lv = self.query_one("#files", ListView)
+        lv.clear()
+        try:
+            self.pending = core.changed_files(self.repo, f"{sha}^", sha)
+        except Exception:
+            self.pending = []
+        for path in self.pending:
+            lv.append(ListItem(Label(Text(f" ·  {path}", style="#6c7086"))))
+        self._show(None)
+        if self.auto_review and self.run_cmd:
             self.action_review()
 
     @on(ListView.Highlighted, "#files")
@@ -303,10 +328,35 @@ class Reviewer(App):
         # the stale index 4 indexes a list of 2. Bounds-checked rather than
         # guarded on emptiness alone, which is what crashed.
         i = ev.list_view.index
-        if i is not None and 0 <= i < len(self.reviews):
+        if i is None:
+            return
+        if 0 <= i < len(self.reviews):
             self._show(self.reviews[i])
+        elif 0 <= i < len(getattr(self, "pending", [])):
+            self._show_pending(self.pending[i])
 
     # ----------------------------------------------------------------- render
+    def _show_pending(self, path: str) -> None:
+        """A file of the highlighted commit, before anything has been run.
+
+        The diff costs no run and is the thing the panel is pointing at, so
+        showing it beats showing nothing while the reader waits to press `r`.
+        """
+        lv = self.query_one("#commits", ListView)
+        if lv.index is None or not (0 <= lv.index < len(self.commits)):
+            return
+        sha = self.commits[lv.index][0]
+        self.query_one("#badge", Static).update(
+            Text(f"Oracle AI   [not reviewed yet]", style="#6c7086"))
+        self.query_one("#review", Static).update(
+            f"{path}\n\nNothing has been run for this file. Press r to review "
+            f"the commit with `{self.run_cmd or '(no command — use :run)'}`.")
+        try:
+            d = core.git(self.repo, "diff", f"{sha}^..{sha}", "--", path)
+        except Exception:
+            d = ""
+        self.query_one("#diff", Static).update(self._table(d))
+
     def _show(self, r: core.FileReview | None) -> None:
         badge = self.query_one("#badge", Static)
         review = self.query_one("#review", Static)

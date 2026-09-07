@@ -18,7 +18,7 @@ import re
 from .splitdiff import split
 
 __all__ = ["TextChange", "ui_text_change", "membership_changed",
-           "cosmetic_only", "risky_edits"]
+           "cosmetic_only", "risky_edits", "sql_filter_changed"]
 
 # One element, opening and closing tag on the same line, with plain text
 # between them. Anything nested, multi-line or interpolated is out of scope.
@@ -315,6 +315,13 @@ def describe(diff: str, limit: int = 6) -> list[str]:
         at, sentence = widened
         out = [l for l in out if not l.startswith(f"line {at}:")]
         out.insert(0, sentence)
+    # Same treatment as a changed .eq/.in clause: the line's own entry would
+    # read "line N: rewritten", which is true and says nothing about direction.
+    sql = sql_filter_changed(diff)
+    if sql:
+        at, sentence = sql
+        out = [l for l in out if not l.startswith(f"line {at}:")]
+        out.insert(0, sentence)
     wider = broadened(diff)
     if wider:
         name, sentence = wider
@@ -598,3 +605,112 @@ def risky_edits(diff: str, limit: int = 4) -> list[str]:
             seen.add(line)
             uniq.append(line)
     return uniq[:limit]
+
+
+# ------------------------------------------------------- SQL predicate changes
+# `membership_changed` reads `.eq`/`.in` query builders. Raw SQL says the same
+# things with different spelling, and a real commit changed
+#
+#   WHERE id = $1 AND status != 'CANCELLED'   -- anything but CANCELLED
+#   WHERE id = $1 AND status  = 'CONFIRMED'   -- only CONFIRMED
+#
+# which is a strict narrowing -- PENDING and ATTENDED tickets stopped matching
+# -- and was reported as "line N: rewritten".
+#
+# A predicate is modelled as a set that may be a COMPLEMENT: `= 'X'` accepts
+# {X}, `!= 'X'` accepts everything-but-{X}. That is what makes the direction
+# computable across the `!=` -> `=` switch, where comparing value lists cannot.
+_SQL_IN = re.compile(r"""\b(?P<col>[\w.]+)\s+(?P<neg>NOT\s+)?IN\s*\(
+                         (?P<items>[^)]*)\)""", re.I | re.X)
+_SQL_CMP = re.compile(r"""\b(?P<col>[\w.]+)\s*(?P<op><>|!=|=)\s*
+                          (?P<lit>'[^']*'|"[^"]*")""", re.X)
+_SQL_HINT = re.compile(r"\b(WHERE|AND|OR|SELECT|UPDATE|DELETE|JOIN)\b", re.I)
+
+
+_WHERE = re.compile(r"\bWHERE\b", re.I)
+
+
+def _sql_preds(line: str) -> dict[str, tuple[bool, frozenset]]:
+    """column -> (is_complement, values). Only literal comparisons.
+
+    `$1`, `?` and named parameters are deliberately skipped: their value is not
+    in the diff, so no direction can be read from them.
+
+    Only the text after WHERE is a filter. Without that cut, the assignment in
+    `UPDATE tickets SET status = 'CANCELLED' WHERE ... status != 'CANCELLED'`
+    is read as a predicate on `status`, claims the column first, and hides the
+    real condition behind it -- which is exactly the line this was written for.
+    """
+    m = _WHERE.search(line)
+    if m:
+        line = line[m.end():]
+    out: dict[str, tuple[bool, frozenset]] = {}
+    for m in _SQL_IN.finditer(line):
+        vals = [_unquote(v.strip()) for v in m.group("items").split(",")
+                if v.strip() and v.strip()[:1] in "\"'"]
+        if vals:
+            out[m.group("col").lower()] = (bool(m.group("neg")), frozenset(vals))
+    for m in _SQL_CMP.finditer(line):
+        col = m.group("col").lower()
+        if col in out:                      # an IN on the same column wins
+            continue
+        out[col] = (m.group("op") in ("!=", "<>"),
+                    frozenset({_unquote(m.group("lit"))}))
+    return out
+
+
+def _direction(old: tuple[bool, frozenset],
+               new: tuple[bool, frozenset]) -> str | None:
+    """'narrower' | 'wider' | None, for two possibly-complemented sets."""
+    (no, a), (nn, b) = old, new
+    if not no and not nn:                   # {A} -> {B}
+        return "narrower" if b < a else "wider" if a < b else None
+    if no and nn:                           # ¬A -> ¬B ; ¬B ⊂ ¬A iff A ⊂ B
+        return "narrower" if a < b else "wider" if b < a else None
+    if no and not nn:                       # ¬A -> {B} ; {B} ⊆ ¬A iff B ∩ A = ∅
+        return "narrower" if not (a & b) else None
+    return "wider" if not (a & b) else None  # {A} -> ¬B
+
+
+def sql_filter_changed(diff: str) -> tuple[int, str] | None:
+    """(line, sentence) when a SQL predicate provably narrowed or widened."""
+    for left, right in split(diff):
+        if not (left and right and left[2] == "del" and right[2] == "add"):
+            continue
+        old_t, new_t = left[1], right[1]
+        if not (_SQL_HINT.search(old_t) and _SQL_HINT.search(new_t)):
+            continue
+        old, new = _sql_preds(old_t), _sql_preds(new_t)
+        for col in sorted(set(old) & set(new)):
+            if old[col] == new[col]:
+                continue
+            way = _direction(old[col], new[col])
+            if not way:
+                continue
+            show = lambda p: (("anything except " if p[0] else "")
+                              + _fmt(sorted(p[1])))
+            at = right[0] or left[0]
+            more = ("fewer rows match than before"
+                    if way == "narrower" else "more rows match than before")
+            return (at, f"the `{col}` condition is {way}: was {show(old[col])}, "
+                        f"now {show(new[col])} -- {more}.")
+        # A predicate that disappeared entirely, or arrived, is also a
+        # direction -- but ONLY when one side changed. If a column went and
+        # another arrived, that is a replacement (`status = 'a'` becoming
+        # `kind = 'b'`), and its effect on the row count is not readable from
+        # the diff: it was reported as "a `kind` condition was added -- fewer
+        # rows match", which is a guess wearing the clothes of a fact.
+        added, removed = set(new) - set(old), set(old) - set(new)
+        if added and removed:
+            continue
+        for col in sorted(added | removed):
+            gone = col in removed
+            p = old[col] if gone else new[col]
+            if p[0]:                        # a dropped/added negation: unclear
+                continue
+            at = right[0] or left[0]
+            return (at, f"a `{col}` condition was "
+                        f"{'removed' if gone else 'added'} "
+                        f"({_fmt(sorted(p[1]))}) -- "
+                        f"{'more' if gone else 'fewer'} rows match than before.")
+    return None

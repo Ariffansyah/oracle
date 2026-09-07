@@ -109,6 +109,10 @@ class FileReview:
             return "Not Checked By This Command"
         if self.risk == "ui-text":
             return "UI Text Change"
+        if self.risk == "co-dependent":
+            # NOT a risk verdict. The commit passes; this file just cannot be
+            # applied without the others it was written with.
+            return "Needs The Rest Of The Commit"
         if self.risk == "provably-safe":
             # The ONLY badge in this list that promises anything. It is earned
             # by the diff, not by the run: comments or indentation only, so
@@ -1003,6 +1007,17 @@ def review_body(r: FileReview, cmd: str) -> str:
                  f"observed either way — this is read from the change, not from "
                  f"a run.")
         return body
+    if r.risk == "co-dependent":
+        body = (f"This file cannot be applied on its own, but the COMMIT it "
+                f"belongs to is fine: `{cmd}` passes with all of the commit's "
+                f"files in place, and fails only when this one is applied "
+                f"alone. That is a fact about the isolation, not about the "
+                f"change -- a signature and its callers moved together, and "
+                f"neither half compiles without the other.\n\n"
+                f"Nothing here is attributable to this file. Reviewing it "
+                f"means reading it beside the files it moved with."
+                f"\n\nwhen isolated:  {r.after}")
+        return body + _from_diff(r)
     if r.risk == "unclear":
         if r.why_unclear == "timeout":
             return (f"`{cmd}` did not finish within the time limit, at the "
@@ -1096,6 +1111,22 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
     with worktree(repo, base) as w:
         baseline = observe(w, cmd, timeout)
 
+    # The whole commit, once. Per-file isolation is what makes "which file
+    # broke it" an observation rather than an opinion, but in a COMPILED
+    # language it manufactures failures: a commit that changes a signature in
+    # one file and its callers in another cannot compile from either file
+    # alone. Measured on a real Go commit, three of four files came back HIGH
+    # RISK -- `Version undefined`, `not enough arguments to Set`,
+    # `CheckInTicketByQR undefined` -- while the commit itself built cleanly.
+    # Every one of those was an artefact of the isolation.
+    #
+    # Running head settles it. If the commit passes and one file alone fails,
+    # that file did not break anything; it merely cannot stand on its own.
+    say(f"running `{cmd}` at the full commit ({head[:8]}) …")
+    with worktree(repo, head) as w:
+        whole = observe(w, cmd, timeout)
+    whole_ok = not errored(whole) and not whole.get("timeout")
+
     out: list[FileReview] = []
     for i, path in enumerate(files, 1):
         say(f"[{i}/{len(files)}] isolating {path} …")
@@ -1142,6 +1173,16 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
         if baseline.get("timeout"):
             r.risk, r.why_unclear = "unclear", "timeout"
             say(f"[{i}/{len(files)}] {path}: `{cmd}` timed out ...")
+            out.append(r)
+            continue
+
+        # 3a-bis. The file alone fails, but the COMMIT it belongs to does not.
+        #     The failure belongs to the isolation, not to the change, and
+        #     calling it High Risk points the reader at a file that is fine.
+        if whole_ok and (errored(res) or res.get("timeout")) \
+                and not errored(baseline) and not baseline.get("timeout"):
+            r.risk, r.checks = "co-dependent", command_class(cmd)
+            say(f"[{i}/{len(files)}] {path}: needs the rest of the commit ...")
             out.append(r)
             continue
 

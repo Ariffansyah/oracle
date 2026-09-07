@@ -77,7 +77,17 @@ start() {
   fi
   # Likewise the tunnel: a second -L on a live port just fails noisily.
   if ! curl -s -m 3 "http://localhost:${PORT}/api/tags" >/dev/null 2>&1; then
-    ssh -f -N -L "${PORT}:localhost:${PORT}" $SSHOPTS "$H"
+    # The tunnel gets its OWN connection: ControlPath=none. With $SSHOPTS it
+    # rode the shared master, whose ControlPersist=300 tears the master down
+    # after five idle minutes and takes every forward with it. The symptom is
+    # the server answering happily on the box while every review reports
+    # "model unavailable (URLError)" -- which happened twice in one session,
+    # once mid-measurement. Keepalives stop a silently dropped TCP connection
+    # from leaving a forward that accepts and never answers.
+    ssh -f -N -o BatchMode=yes -o ControlPath=none \
+        -o ExitOnForwardFailure=yes \
+        -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+        -L "${PORT}:localhost:${PORT}" "$H"
     sleep 1
   fi
   curl -s -m 3 "http://localhost:${PORT}/api/tags" >/dev/null \
@@ -90,6 +100,9 @@ stop() {
   # (the pkill pattern is part of the ssh command string) and exiting 255.
   remote 'pkill -f "llm_explainer[.]serve" && echo server stopped || echo server not running'
   ssh $SSHOPTS -O exit "$H" 2>/dev/null
+  # The tunnel no longer rides the control master, so closing that no longer
+  # closes it. Kill the forward itself, matched on this exact port.
+  pkill -f "ssh -f -N .*-L ${PORT}:localhost:${PORT}" 2>/dev/null
   echo "tunnel closed"
 }
 

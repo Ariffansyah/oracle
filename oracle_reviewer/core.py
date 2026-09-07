@@ -101,6 +101,8 @@ class FileReview:
     verified: bool = True
     why_unclear: str = ""          # "" | baseline | not-exercised | timeout
     checks: str = ""               # style | types | build | tests | unknown
+    moves_with: list = field(default_factory=list)   # co-dependent siblings
+    isolated: str = ""             # what the command said with only this file
     static: list = field(default_factory=list)   # facts read from the diff
 
     @property
@@ -1008,15 +1010,27 @@ def review_body(r: FileReview, cmd: str) -> str:
                  f"a run.")
         return body
     if r.risk == "co-dependent":
-        body = (f"This file cannot be applied on its own, but the COMMIT it "
-                f"belongs to is fine: `{cmd}` passes with all of the commit's "
-                f"files in place, and fails only when this one is applied "
-                f"alone. That is a fact about the isolation, not about the "
-                f"change -- a signature and its callers moved together, and "
-                f"neither half compiles without the other.\n\n"
-                f"Nothing here is attributable to this file. Reviewing it "
-                f"means reading it beside the files it moved with."
-                f"\n\nwhen isolated:  {r.after}")
+        with_ = ("\n".join(f"  · {p}" for p in r.moves_with)
+                 if r.moves_with else "  (none)")
+        body = (f"This file cannot be applied on its own -- `{cmd}` fails when "
+                f"it is, because a signature and its callers moved together "
+                f"and neither half compiles without the other. That is a fact "
+                f"about the isolation, not about the change.\n\n"
+                f"It moves with:\n{with_}\n\n"
+                f"So it was measured WITH them, which is the only way they "
+                f"run, and the explanation below is about that group rather "
+                f"than this file alone:")
+        if r.explanation:
+            body += f"\n\n{r.explanation}"
+        elif r.withheld:
+            body += f"\n\n(A model explanation was withheld: {r.withheld}.)"
+        if norm_out(r.before) == norm_out(r.after):
+            body += f"\n\ntogether, output identical on both sides:  {r.before}"
+        else:
+            body += (f"\n\ntogether, before:  {r.before}"
+                     f"\ntogether, after:   {r.after}")
+        if r.isolated:
+            body += f"\n\nwhen this file is applied ALONE:  {r.isolated}"
         return body + _from_diff(r)
     if r.risk == "unclear":
         if r.why_unclear == "timeout":
@@ -1182,6 +1196,7 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
         if whole_ok and (errored(res) or res.get("timeout")) \
                 and not errored(baseline) and not baseline.get("timeout"):
             r.risk, r.checks = "co-dependent", command_class(cmd)
+            r.isolated = r.after
             say(f"[{i}/{len(files)}] {path}: needs the rest of the commit ...")
             out.append(r)
             continue
@@ -1261,4 +1276,34 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
         say(f"[{i}/{len(files)}] {path}: {r.badge} — explaining …")
         explain(host, model, r, message, cmd, outcome)
         out.append(r)
+
+    # Files that cannot run alone can still be MEASURED -- together. The
+    # whole-commit run above is exactly that measurement, and telling each of
+    # them only "read this beside its siblings" wastes it. Explain them once,
+    # as the unit they actually form, with every one of their diffs in the
+    # prompt: a signature change is unreadable without its callers, and a
+    # caller is unreadable without the signature.
+    deps = [r for r in out if r.risk == "co-dependent"]
+    if deps:
+        say(f"explaining {len(deps)} co-dependent files together …")
+        group = FileReview(path=" + ".join(r.path for r in deps),
+                           risk="co-dependent",
+                           diff="\n".join(r.diff for r in deps))
+        group.before, group.after = shown_pair(baseline, whole)
+        if errored(baseline):
+            outcome = ("the run was FAILING before this commit and PASSES with "
+                       "all of these files applied together")
+        elif same(baseline, whole):
+            outcome = ("with all of these files applied together the output is "
+                       "byte-for-byte IDENTICAL -- the command did not exercise "
+                       "them, and nothing is established either way")
+        else:
+            outcome = ("the run still succeeds with all of these files applied "
+                       "together, and the output differs")
+        explain(host, model, group, message, cmd, outcome,
+                measured=not same(baseline, whole))
+        for r in deps:
+            r.explanation, r.withheld = group.explanation, group.withheld
+            r.before, r.after = group.before, group.after
+            r.moves_with = [x.path for x in deps if x.path != r.path]
     return out

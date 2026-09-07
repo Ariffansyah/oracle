@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from exec_contract import (contradiction, direction_reversed,  # noqa: E402
                            swapped, unmeasured_claim,
                            phantom_removal)
+from .related import related_context
 from .static_claims import (cosmetic_only, describe, risky_edits,
                             ui_text_change)
 
@@ -60,6 +61,17 @@ TIMEOUT = 300
 # lost 34 rows on the deployed path, because a model leans on new structure.
 # Longer diffs are the same shape the model already reads.
 DIFF_CONTEXT = int(os.environ.get("ORACLE_DIFF_CONTEXT", "12"))
+
+# Fetch the definitions a diff calls and put them in the prompt. OFF by default
+# and it must stay off until measured: this ADDS A SECTION to a prompt v3 was
+# never trained on, and that is exactly the move that cost v4 34 rows on the
+# deployed path (p=0.00037). Widening the diff was safe because it changed the
+# content of a field the model already knew; this changes the structure.
+#
+# The retrieval itself is cheap and honest -- 595 chars in 9ms on the Go commit
+# that motivated it, by grep, with no model call and nothing that can be
+# invented. Whether the model USES it well is the open question.
+RELATED = os.environ.get("ORACLE_RELATED", "") not in ("", "0", "no")
 
 _ERR = re.compile(r"\b(Traceback|Error|Exception|panic:|FAILED|AssertionError|"
                   r"SyntaxError|TypeError|ValueError|IndexError|KeyError|"
@@ -119,6 +131,7 @@ class FileReview:
     checks: str = ""               # style | types | build | tests | unknown
     moves_with: list = field(default_factory=list)   # co-dependent siblings
     isolated: str = ""             # what the command said with only this file
+    related: list = field(default_factory=list)   # (where, snippet) definitions
     static: list = field(default_factory=list)   # facts read from the diff
 
     @property
@@ -556,6 +569,14 @@ def explain(host: str, model: str, r: FileReview, message: str, cmd: str,
     prompt = USER.format(path=r.path, message=message, diff=r.diff[:9000],
                          cmd=cmd, before=r.before, after=r.after,
                          outcome=outcome)
+    # Appended, not woven into USER, so that with RELATED off the prompt is
+    # byte-identical to the one every published number was measured on.
+    if r.related:
+        blocks = "\n\n".join(f"# {where}\n{snip}" for where, snip in r.related)
+        prompt += (f"\n\n## Definitions this change calls\n"
+                   f"These are the real definitions, read from the repository. "
+                   f"They are correct; do not invent others.\n\n```\n"
+                   f"{blocks}\n```")
     try:
         got = first_json(ask(host, model, prompt)) or {}
         expl = str(got.get("explanation") or "")
@@ -1191,6 +1212,11 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
                                 path], capture_output=True, text=True)
             res = observe(w, cmd, timeout)
 
+        if RELATED:
+            try:
+                r.related = related_context(repo, path, diff)
+            except Exception:
+                r.related = []
         r.before, r.after = shown_pair(baseline, res)
 
         # ORDER MATTERS. Each guard below removes a case the later ones cannot

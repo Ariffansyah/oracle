@@ -5074,3 +5074,146 @@ in this evaluation, n=46 and all-synthetic, since the repos are already cloned
 in `data/repos/`. Use only the five held-out projects (`axios`, `clap`, `gin`,
 `fastapi`, `spring-boot`); the `apache__*` repos are leaked into the gate's
 training set.
+
+### The BugsInPy arms: 458 real bugs, and what each input buys (5 Sep)
+
+`bench/eval_bugsinpy_arms.py` over the frozen 458 rows of
+`data/bugsinpy_rows_v2.jsonl` — real projects, real bugs, the project's own
+failing test, and a gate with all 14 metrics live. The rubric is the one the
+synthetic corpus could not support: `grounded = (names_exception or
+quotes_signature) and not invented`. Every arm below runs the same rows in the
+same order, so every comparison is paired and McNemar applies.
+
+**The input ablation reproduces, and it is not close.**
+
+| arm | what the prompt carries beyond the diff | grounded | INVENTS |
+|---|---|---|---|
+| `exec` | the measured failure from running the test | **255/458 (56%)** | 12 |
+| `score` | the JIT gate's probability | 48/458 (10%) | 47 |
+| `diff` | nothing | 48/458 (10%) | 52 |
+
+exec vs diff: 212 rows to 5, p < 1e-5. exec vs score: 213 to 6, p < 1e-5. The
+gate's probability is worth **nothing at all** as explanation context — `score`
+and `diff` land on the same 48 and invent at four times the rate. That
+reproduces the 519-mutant finding (score and diff indistinguishable, p=0.699)
+on real code, and it is the clearest statement of the two-stage split this
+project rests on: the gate decides *whether* to look, and contributes nothing
+to *what to say*.
+
+**Prompting the base model works, and then stops working.**
+
+| checkpoint | prompt | grounded | INVENTS |
+|---|---|---|---|
+| base Qwen2.5-Coder-3B | plain | 183/458 (40%) | 11 |
+| base Qwen2.5-Coder-3B | strong (system + 3 examples) | 279/458 (61%) | 11 |
+| earlier exec SFT | strong | 274/458 (60%) | 20 |
+| **v3 adapter** | **plain** | **400/458 (87%)** | **9** |
+| v3 adapter | strong | 356/458 (78%) | 31 |
+
+Three things in that table are worth stating separately, because each one
+kills a different objection.
+
+1. **The strong prompt is a real intervention on the base model**: 183 -> 279,
+   42 rows to 138, p < 1e-5. Prompting is not a straw man here.
+2. **The earlier SFT checkpoint did not beat the prompt.** 274 vs 279 under the
+   same strong prompt, 93 rows to 98, **p = 0.77**. A fine-tune that merely
+   matches a prompt is not a contribution, and for several weeks that is what
+   this project had.
+3. **v3 beats the prompted base by 121 rows on a PLAIN prompt** — 21 to 147,
+   p < 1e-5. That is the result. The corpus does what the prompt could not.
+
+**And the strong prompt now HURTS.** v3 plain 400 vs v3 strong 356, 71 to 27,
+p = 1e-5, with inventions going 9 -> 31. The adapter was trained against the
+plain prompt; the three hand-written examples are out of its distribution, and
+the model paraphrases them instead of reading the measurement. This is the same
+mechanism that sank v4 the next day, observed a day earlier without being
+recognised.
+
+**What this is not.** `grounded` asks whether the explanation gets the observed
+failure right. It does not ask whether the explanation identifies the *cause*,
+and the 25 Aug locus/mechanism split says those diverge by ~20 points. 87%
+grounded is not 87% correct, and nothing here licenses that reading.
+
+### v4: adding a prompt SECTION cost 20 rows, and the revert (6 Sep)
+
+v4 rebuilt the corpus so training rows carried the same `## Outcome of running
+the project's own test` section the deployed prompt carries, closing a known
+train/deploy gap. 1069 train rows, 35% positive, audit clean. It lost.
+
+| | v3 | v4 | discordant | p |
+|---|---|---|---|---|
+| plain | **400/458** | 380/458 | 50 / 30 | **0.033** |
+| guarded | **392/458** | 358/458 | 61 / 27 | **0.00037** |
+
+Both arms, same direction, and the guarded arm — the deployed configuration,
+where `verify()` withholds an explanation that fails to quote its measured
+values — lost hardest. Per the pre-registered rule, v4 was reverted and v3
+stands.
+
+**The mechanism is legible in the sub-counts.** v4 does not get *worse* at
+finding the failure — `names_exception` went UP, 331 -> 341. What collapsed was
+`quotes_signature`, 390 -> 363. v4 paraphrases where v3 quotes, and the rubric
+counts quoting. Feeding the outcome as prose taught the model to *restate* the
+outcome in its own words rather than lift the signature out of it.
+
+**The lesson, stated so it survives:** widening the *content* of a field the
+model already trains on is safe; adding a *section* to the prompt's structure
+is not. The v3 strong-prompt loss the day before said the same thing and was
+read as a prompt-engineering curiosity instead of as evidence.
+
+`data/sft_v4_suggest.jsonl` and the v4 corpora are kept. The result is a
+negative one, not a broken one, and it is the only direct measurement of what
+prompt-structure drift costs this adapter.
+
+### The seed replicate: 400/458 is the corpus, not the draw (7 Sep)
+
+Every checkpoint comparison in this project had been a single-seed point
+estimate, and on 28 Aug seed alone moved the basic-bench headline by 10 cases.
+So v3 was retrained with `--seed 7` and nothing else changed: same corpus
+(`data/exec_sft_v3.jsonl`), same trainer, same hyperparameters, the box's copy
+of `train_sft.py` deliberately left unsynced so it matched the seed-42 run
+exactly. 147 steps, 4h57m on the 6GB card.
+
+**The training metrics predicted a materially worse model.**
+
+| | seed 42 | seed 7 |
+|---|---|---|
+| `train_loss` | 1.744 | 2.24 |
+| mean token accuracy | 0.896 | 0.867 |
+| held-out specificity | 0.842 | 0.737 |
+| held-out top-1 | 0.925 | 0.875 |
+| held-out verdict recall | 1.000 | 1.000 |
+
+**The bench disagreed.**
+
+| | seed 42 | seed 7 |
+|---|---|---|
+| grounded | 400/458 (87%) | 395/458 (86%) |
+| INVENTS a different failure | 9 | 10 |
+| names the real exception | 331 | 317 |
+| quotes the real message | 390 | 386 |
+
+Paired McNemar: **32 seed42-only, 27 seed7-only, p = 0.60.** The reportable
+figure is the pair — **mean 397.5/458 = 86.8%, range 395–400** — never the
+better draw, which would be selecting on the outcome.
+
+**The seeds disagree on 59 rows (13%) and it cancels.** Per-row churn is large;
+the aggregate is stable. Four rows are invented by *both* seeds: those are
+corpus-level failures and are the only inventions worth reading individually.
+
+Two consequences:
+
+* **The held-out slice does not predict the bench.** n=40 with 21 positives,
+  and it was wrong about the direction of a 5-row difference while reporting a
+  10-point specificity gap. Training metrics gate a run (recall 0 at step 20
+  still kills it); they do not rank checkpoints.
+* **The v4 revert survives, but only on the guarded arm — and that is worth
+  saying out loud.** Running the seed-7 checkpoint against v4 directly gives
+  **46 / 31, p = 0.11: not distinguishable.** The plain-arm case against v4
+  (p = 0.033) does NOT survive a seed swap; it was inside the band after all.
+  What carries the revert is the guarded arm, 392 vs 358 at p = 0.00037 — a
+  34-row gap against a measured seed band of ~5, and the guarded arm is the
+  deployed configuration. There is no seed-7 guarded run to check that against,
+  so the honest statement is: the decision stands on one arm at one seed, and
+  the arm it stands on is the one that ships. A seed-7 guarded run would close
+  this and costs ~50 min of GPU.

@@ -71,7 +71,8 @@ DIFF_CONTEXT = int(os.environ.get("ORACLE_DIFF_CONTEXT", "12"))
 # The retrieval itself is cheap and honest -- 595 chars in 9ms on the Go commit
 # that motivated it, by grep, with no model call and nothing that can be
 # invented. Whether the model USES it well is the open question.
-RELATED = os.environ.get("ORACLE_RELATED", "") not in ("", "0", "no")
+_RELATED_ENV = os.environ.get("ORACLE_RELATED", "")
+RELATED = _RELATED_ENV not in ("", "0", "no")
 
 _ERR = re.compile(r"\b(Traceback|Error|Exception|panic:|FAILED|AssertionError|"
                   r"SyntaxError|TypeError|ValueError|IndexError|KeyError|"
@@ -98,6 +99,80 @@ Four cases. Stay inside the one you were given:
 4. THE COMMAND DID NOT EXERCISE THIS CHANGE -- output identical, nothing observed either way. Do not say it is safe and do not say it is broken; neither was measured. Say plainly that this command does not cover the change, name the construct that was edited, and suggest what a human should check -- callers of the function, other code reading the value, a test that would reach it.
 
 Quote the measured values exactly. Never mention a number that is not in the measurements or the diff."""
+
+# ---------------------------------------------------------------- REVIEW MODE
+#
+# Two ways to use the same checkpoint, and they answer different questions.
+#
+#   grounded  (default)  "what did running this prove?"  Execution is the
+#                        verdict; where it proved nothing the tool says so and
+#                        withholds. This is the mode every published number was
+#                        measured on -- 400/458 grounded on BugsInPy, and the
+#                        property that a finding can be wrong about WHY but
+#                        never about WHETHER.
+#
+#   explain              "what does this code do, and what could go wrong?"
+#                        The diff is the evidence and the run is context. It
+#                        answers on a repository with no tests, which grounded
+#                        mode cannot, and it gives up the false-positive floor
+#                        to do it: the unrestricted reviewer this project
+#                        measured was wrong in 30 of 32 findings on real
+#                        commits. Its output is REASONING, not measurement, and
+#                        the UI has to say so wherever it appears.
+#
+# Set with ORACLE_MODE, or `:mode explain` in the TUI. The default is not a
+# recommendation about usefulness -- it is that the numbers belong to it.
+MODE = os.environ.get("ORACLE_MODE", "grounded").strip().lower() or "grounded"
+
+# explain mode is asked what the code DOES, which it cannot answer from a diff
+# alone -- a hunk calling `h.EventCache.Version()` says nothing about what
+# Version is. So retrieval is ON by default here, and off by default in grounded
+# mode, where every published number was measured without it. An explicit
+# ORACLE_RELATED still wins in both directions.
+if MODE == "explain" and _RELATED_ENV == "":
+    RELATED = True
+
+# Printed above any prose explain mode produced. The default mode's prose is
+# backed by a measurement; this is not, and a reader cannot tell them apart from
+# the sentence alone -- they read identically. Saying which one they are looking
+# at is the price of offering the mode at all.
+EXPLAIN_TAG = ("read from the code, not measured -- the run below is context, "
+               "and this reasoning has not been verified against it:")
+
+
+EXPLAIN_SYSTEM = """You are ORACLE, a local code reviewer. You are given one file's change from a commit, and -- as SUPPORTING CONTEXT -- what happened when the project's own command was run before and after it.
+
+Read the code. Your job is to tell a developer what this change does and where it can go wrong. Work from the diff itself; the run is evidence you may use, not the question you are answering. A command that exercised nothing tells you nothing either way, and you should still explain the code.
+
+Answer with one JSON object:
+
+  "explanation"  what this change does, and the risk if there is one, in two or three sentences
+
+How to answer:
+
+* Say what the code now does that it did not do before. Name the construct: the function, the field, the condition, the parameter.
+* Then, if the change carries a risk, say what it is and what would trigger it -- a concurrent caller, an empty input, a nil value, an unchecked error, an index that can run past the end, a lock held or not held, a value read before it is set. Name the condition that triggers it, not just the category.
+* If you see no risk in what the diff shows, say what the change does and say plainly that nothing in it looks dangerous. Do not invent a risk to have something to report.
+* Do not describe a line as removed unless a `-` line shows it removed, or added unless a `+` line shows it added.
+* Never state a number, an error message, or an output value that is not in the diff or in the run context.
+* Do not claim the run proved something it did not. If the command exercised nothing, do not say the change was verified, tested, or shown to be safe -- your reasoning is a reading of the code, and say it that way."""
+
+EXPLAIN_USER = """## File
+{path}
+
+## Commit message
+{message}
+
+## Change
+```diff
+{diff}
+```
+
+## Context: the project's own command `{cmd}`
+before this file's change: {before}
+after this file's change:  {after}
+what that establishes: {outcome}"""
+
 
 USER = """## File
 {path}
@@ -133,9 +208,22 @@ class FileReview:
     isolated: str = ""             # what the command said with only this file
     related: list = field(default_factory=list)   # (where, snippet) definitions
     static: list = field(default_factory=list)   # facts read from the diff
+    # Which question the prose answers. "explain" prose is a READING of the
+    # diff, not a report of the measurement, and anything that displays it has
+    # to say so -- otherwise the two modes are indistinguishable on the page and
+    # the guarantee the default mode carries is quietly claimed for both.
+    mode: str = "grounded"
 
     @property
     def badge(self) -> str:
+        # Every badge below names what the RUN could establish, because in
+        # grounded mode that is the finding. In explain mode the finding is the
+        # reading of the code, and a badge about the harness's reach at the top
+        # of the panel reads as the verdict on the change -- which is exactly
+        # the objection that "it still says needs rest of commit" is making.
+        # One badge for the mode, and the coverage detail moves into the body.
+        if getattr(self, "mode", "") == "explain":
+            return "Explained From The Code"
         if self.risk == "unreachable":
             return "Not Checked By This Command"
         if self.risk == "ui-text":
@@ -470,11 +558,18 @@ def base_lines(diff: str) -> list[str]:
 
 
 # ---------------------------------------------------------------- the model
-def ask(host: str, model: str, prompt: str, timeout: int = 180) -> str:
+def ask(host: str, model: str, prompt: str, timeout: int = 180,
+        system: str = "") -> str:
+    # explain mode needs more room: it is asked for two or three sentences
+    # naming a trigger condition, where grounded mode is asked for one or two
+    # restating a measurement. 320 truncated it mid-clause, which the parser
+    # now recovers and `explain` then has to drop -- better not to truncate.
+    system = system or SYSTEM
     body = json.dumps({
         "model": model, "stream": False,
-        "options": {"temperature": 0.0, "num_predict": 320},
-        "messages": [{"role": "system", "content": SYSTEM},
+        "options": {"temperature": 0.0,
+                    "num_predict": 480 if system is EXPLAIN_SYSTEM else 320},
+        "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": prompt}],
     }).encode()
     req = urllib.request.Request(f"{host}/api/chat", data=body,
@@ -483,28 +578,26 @@ def ask(host: str, model: str, prompt: str, timeout: int = 180) -> str:
         return json.loads(r.read())["message"]["content"]
 
 
-def first_json(text: str) -> dict | None:
-    for m in re.finditer(r"\{", text):
-        depth = 0
-        for j in range(m.start(), len(text)):
-            depth += (text[j] == "{") - (text[j] == "}")
-            if depth == 0:
-                try:
-                    v = json.loads(text[m.start():j + 1])
-                except Exception:
-                    break
-                return v if isinstance(v, dict) else None
-    return None
+# Shared so the brace-counting bug that blanked 18 BugsInPy rows -- and
+# any review whose failure message contained a lone brace -- is fixed in
+# exactly one place. See oracle_reviewer/jsonio.py.
+from oracle_reviewer.jsonio import (REPAIRS_TRUNCATED,  # noqa: E402
+                                    first_json_ex)
 
 
 def verify(expl: str, before: str, after: str, diff: str,
-           measured: bool = True, case: str = "") -> str | None:
+           measured: bool = True, case: str = "", mode: str = "") -> str | None:
     """Why this prose must not be shown, or None if it may be.
 
     `measured` is False for the two cases where the run established nothing --
     identical output, or a baseline that was already failing. A verdict either
     way is unsupported there, so the bar is higher, not lower.
+
+    `mode` defaults to the module's MODE. In "explain" mode the verdict is meant
+    to come from reading the diff, so the unmeasured-claim rule is skipped and
+    every fabrication check is kept.
     """
+    mode = mode or MODE
     if not expl or len(expl.strip()) < 15:
         return "empty"
     nums = lambda s: set(re.findall(r"-?\d+", s))
@@ -512,10 +605,16 @@ def verify(expl: str, before: str, after: str, diff: str,
                              {"0", "1", "2"})
     if invented:
         return f"invented {sorted(invented)[:2]}"
-    if not measured:
+    if not measured and mode != "explain":
         # A dead baseline is stricter than an unexercised one: there, both runs
         # failed for a reason that has nothing to do with this file, so a
         # sentence reporting what was observed is unsupported as well.
+        #
+        # This is the ONE check explain mode drops, and dropping it is the whole
+        # difference between the modes: there, a verdict is allowed to come from
+        # reading the code instead of from the run. Everything below still
+        # applies -- an invented number, a removal the diff does not contain and
+        # a reversed direction are wrong however the verdict was reached.
         why = unmeasured_claim(expl, baseline_broken=(case == "baseline"))
         if why:
             return why
@@ -538,12 +637,22 @@ def verify(expl: str, before: str, after: str, diff: str,
 _SENT = re.compile(r"(?<=[.!?])\s+(?=[A-Z`\"\'])")
 
 
+_TERMINAL = re.compile(r"[.!?][\"')\]]*\s*$")
+
+
+def _terminated(text: str) -> str:
+    """`text` up to its last completed sentence, or "" if none completed."""
+    cut = max((text.rfind(c) for c in ".!?"), default=-1)
+    return text[:cut + 1].strip() if cut >= 0 else ""
+
+
 def sentences(text: str) -> list[str]:
     return [t.strip() for t in _SENT.split((text or "").strip()) if t.strip()]
 
 
 def filter_prose(expl: str, before: str, after: str, diff: str,
-                 measured: bool = True, case: str = "") -> tuple[str, list[str]]:
+                 measured: bool = True, case: str = "",
+                 mode: str = "") -> tuple[str, list[str]]:
     """Keep the sentences that survive the checks; report what was dropped.
 
     The checks used to run on the whole explanation, so one false clause
@@ -558,17 +667,20 @@ def filter_prose(expl: str, before: str, after: str, diff: str,
     """
     kept, dropped = [], []
     for one in sentences(expl):
-        why = verify(one, before, after, diff, measured, case)
+        why = verify(one, before, after, diff, measured, case, mode)
         (dropped if why else kept).append(why or one)
     return " ".join(kept), dropped
 
 
 def explain(host: str, model: str, r: FileReview, message: str, cmd: str,
-            outcome: str, measured: bool = True) -> None:
+            outcome: str, measured: bool = True, mode: str = "") -> None:
     """Fill in `explanation`, or record why it was withheld. Never raises."""
-    prompt = USER.format(path=r.path, message=message, diff=r.diff[:9000],
-                         cmd=cmd, before=r.before, after=r.after,
-                         outcome=outcome)
+    mode = mode or MODE
+    r.mode = mode
+    template = EXPLAIN_USER if mode == "explain" else USER
+    prompt = template.format(path=r.path, message=message, diff=r.diff[:9000],
+                             cmd=cmd, before=r.before, after=r.after,
+                             outcome=outcome)
     # Appended, not woven into USER, so that with RELATED off the prompt is
     # byte-identical to the one every published number was measured on.
     if r.related:
@@ -578,12 +690,27 @@ def explain(host: str, model: str, r: FileReview, message: str, cmd: str,
                    f"They are correct; do not invent others.\n\n```\n"
                    f"{blocks}\n```")
     try:
-        got = first_json(ask(host, model, prompt)) or {}
+        got, repaired = first_json_ex(ask(
+            host, model, prompt,
+            system=EXPLAIN_SYSTEM if mode == "explain" else SYSTEM))
+        got = got or {}
         expl = str(got.get("explanation") or "")
         expl = unicodedata.normalize("NFKC", expl).replace(" ", " ").strip()
     except Exception as e:
         r.withheld = f"model unavailable ({type(e).__name__})"
         return
+    # The parser can recover an answer the model did not finish emitting. That
+    # is right for scoring -- the sentence it managed is still evidence -- and
+    # wrong here, because a clause cut off mid-thought reads to a developer as a
+    # completed claim. "the guard was removed, so the value is no longer" is not
+    # a statement about anything. Keep only what is terminated.
+    if repaired in REPAIRS_TRUNCATED and not _TERMINAL.search(expl):
+        expl = _terminated(expl)
+        if not expl:
+            r.withheld = "the model's answer was cut off before it said anything"
+            return
+        r.withheld = ("the model's answer was cut off; the unfinished clause "
+                      "was dropped")
     # The model was trained on the four-field exec contract, so it still emits
     # `differs`/`before`/`after` even though only `explanation` is asked for.
     # Those fields are free evidence about the sentence: if it assigned the
@@ -593,7 +720,7 @@ def explain(host: str, model: str, r: FileReview, message: str, cmd: str,
         r.withheld = "the model reported the two runs the wrong way round"
         return
     kept, dropped = filter_prose(expl, r.before, r.after, r.diff, measured,
-                                 r.why_unclear)
+                                 r.why_unclear, mode)
     r.explanation = kept
     if dropped:
         # Deduplicated: several sentences failing the same check is one fact
@@ -1001,6 +1128,25 @@ def gate_line(g: dict | None) -> str:
             f"introducing a defect from fixing one")
 
 
+# Commands that report, in their own words, that they ran no tests. "output
+# identical on both sides" is true for these and useless: it suggests a
+# comparison happened, when in fact nothing exercised the code at all. Saying
+# which one it is changes what the reader does next -- write a test, or point
+# `:run` somewhere that has them.
+_NO_TESTS = re.compile(
+    r"\[no test files\]"                      # go test
+    r"|no tests ran"                           # pytest
+    r"|collected 0 items"                      # pytest
+    r"|No tests found"                         # jest
+    r"|Ran 0 tests"                            # unittest
+    r"|0 passing"                              # mocha
+    r"|no test specified", re.I)               # npm default
+
+
+def ran_no_tests(out: str) -> bool:
+    return bool(_NO_TESTS.search(out or ""))
+
+
 def norm_out(v: str) -> str:
     return " ".join((v or "").split())
 
@@ -1049,6 +1195,29 @@ def review_body(r: FileReview, cmd: str) -> str:
     if r.risk == "co-dependent":
         with_ = ("\n".join(f"  · {p}" for p in r.moves_with)
                  if r.moves_with else "  (none)")
+        # explain mode answers "what does this change do"; the isolation report
+        # answers "what could this harness measure". Leading with the second
+        # buries the first under a paragraph about the tool's own difficulty,
+        # which is not a fact about the code and is not what was asked for. So
+        # here the explanation comes first and the harness detail becomes a
+        # footnote. Grounded mode keeps the original order, where the isolation
+        # IS the finding because the measurement is the verdict.
+        if r.mode == "explain" and r.explanation:
+            body = _tag(r) + r.explanation
+            body += (f"\n\nRead together with {len(r.moves_with)} file(s) it "
+                     f"cannot compile without:\n{with_}")
+            if r.withheld:
+                body += f"\n\n(Part was withheld: {r.withheld}.)"
+            body += f"\n\nsupporting run of `{cmd}`:  "
+            if norm_out(r.before) != norm_out(r.after):
+                body += f"before {r.before} · after {r.after}"
+            elif ran_no_tests(r.before):
+                body += (f"it ran NO TESTS over this code, so it is not "
+                         f"evidence either way:  {r.before}")
+            else:
+                body += (f"identical on both sides — it did not exercise this "
+                         f"change:  {r.before}")
+            return body + _from_diff(r)
         body = (f"This file cannot be applied on its own -- `{cmd}` fails when "
                 f"it is, because a signature and its callers moved together "
                 f"and neither half compiles without the other. That is a fact "
@@ -1058,7 +1227,7 @@ def review_body(r: FileReview, cmd: str) -> str:
                 f"run, and the explanation below is about that group rather "
                 f"than this file alone:")
         if r.explanation:
-            body += f"\n\n{r.explanation}"
+            body += f"\n\n{_tag(r)}{r.explanation}"
         elif r.withheld:
             body += f"\n\n(A model explanation was withheld: {r.withheld}.)"
         if norm_out(r.before) == norm_out(r.after):
@@ -1103,13 +1272,14 @@ def review_body(r: FileReview, cmd: str) -> str:
         if r.explanation:
             note = (f"\n\n(Part of the explanation was withheld: {r.withheld}.)"
                     if r.withheld else "")
-            return body + "\n\n" + r.explanation + note + _from_diff(r)
+            return (body + "\n\n" + _tag(r) + r.explanation + note
+                    + _from_diff(r))
         if r.withheld:
             return (body + f"\n\n(A model explanation was withheld: "
                     f"{r.withheld}.)" + _from_diff(r))
         return body + _from_diff(r)
     if r.explanation:
-        body = r.explanation
+        body = _tag(r) + r.explanation
         if r.withheld:
             body += f"\n\n(Part of the explanation was withheld: {r.withheld}.)"
     else:
@@ -1118,6 +1288,11 @@ def review_body(r: FileReview, cmd: str) -> str:
     if r.risk in ("high", "change", "fixes"):
         body += f"\n\nbefore:  {r.before}\nafter:   {r.after}"
     return body + _from_diff(r)
+
+
+def _tag(r: "FileReview") -> str:
+    """The explain-mode banner, or "" in grounded mode."""
+    return f"({EXPLAIN_TAG})\n" if getattr(r, "mode", "") == "explain" else ""
 
 
 def _from_diff(r: FileReview) -> str:
@@ -1365,5 +1540,10 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
         for r in deps:
             r.explanation, r.withheld = group.explanation, group.withheld
             r.before, r.after = group.before, group.after
+            # The prose is the GROUP's, so the mode that produced it is the
+            # group's too. Without this the co-dependent files kept the default
+            # and explain-mode reasoning printed with no banner -- on the one
+            # path where a repository with no tests is most likely to land.
+            r.mode = group.mode
             r.moves_with = [x.path for x in deps if x.path != r.path]
     return out

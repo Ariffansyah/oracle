@@ -21,6 +21,8 @@ until you open it, and closes again on enter or escape.
   :run python main.py     the command whose output defines what the project does
   :repo ~/code/thing      review a different repository
   :model oracle-reviewer-3b
+  :mode explain          explain the code and its risks, with the run as context
+  :mode grounded         only say what running it proved (the default)
 """
 from __future__ import annotations
 
@@ -49,7 +51,7 @@ RISK = {"high": "#f38ba8", "change": "#f9e2af", "fixes": "#a6e3a1", "ui-text": "
 DOT = {"high": "●", "change": "●", "fixes": "●", "ui-text": "◇", "unreachable": "○",
        "unclear": "◆", "none": "○", "unverified": "○",
        "co-dependent": "◇", "provably-safe": "○"}
-HELP = ("commands:  :run <command>   :repo <path>   :model <name>   :timeout <secs>"
+HELP = ("commands:  :run <command>   :repo <path>   :model <name>   :mode grounded|explain   :timeout <secs>"
         "   ·   keys: r review, a apply, c/e/y copy, w write, q quit")
 
 
@@ -609,6 +611,19 @@ class Reviewer(App):
         elif verb == "host" and rest:
             self.host = rest
             self._say(f"host is now {rest}", "#a6e3a1")
+        elif verb == "mode":
+            if rest in ("grounded", "explain"):
+                core.MODE = rest
+                self._say(
+                    "grounded · execution is the verdict; where it proves "
+                    "nothing, nothing is claimed" if rest == "grounded" else
+                    "explain · the diff is the evidence and the run is "
+                    "context. It will answer where grounded mode stays "
+                    "silent, and it can be confidently wrong.",
+                    "#a6e3a1" if rest == "grounded" else "#f9e2af")
+            else:
+                self._say(f"mode is {core.MODE} · :mode grounded | :mode explain",
+                          "#f9e2af")
         elif verb in ("help", "h", "?"):
             self._say(HELP)
         else:

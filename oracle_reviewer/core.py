@@ -45,6 +45,22 @@ from .static_claims import (cosmetic_only, describe, risky_edits,
 # because "the tool timed out" was being reported as "your project is broken".
 TIMEOUT = 300
 
+# How much unchanged code goes into the review diff. git's default of 3 lines
+# showed the model `h.EventCache.Set(cacheKey, body, cacheVersion)` with no
+# sight of the function around it, and it summarised the keyhole: "updates Set
+# to include a version parameter", never reaching what the parameter is FOR --
+# which the surrounding lines and the doc comment state outright.
+#
+# 12 is chosen to reach the enclosing function without blowing the 9000-char
+# prompt cap: on the commit that motivated it, one file went 1174 -> 2809 chars
+# and the largest 4374 -> 4772.
+#
+# This widens an existing field rather than adding a new one. That distinction
+# is load-bearing: v4 added an `outcome` section to the training prompt and
+# lost 34 rows on the deployed path, because a model leans on new structure.
+# Longer diffs are the same shape the model already reads.
+DIFF_CONTEXT = int(os.environ.get("ORACLE_DIFF_CONTEXT", "12"))
+
 _ERR = re.compile(r"\b(Traceback|Error|Exception|panic:|FAILED|AssertionError|"
                   r"SyntaxError|TypeError|ValueError|IndexError|KeyError|"
                   r"ReferenceError|NullPointerException)\b")
@@ -1144,7 +1160,16 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
     out: list[FileReview] = []
     for i, path in enumerate(files, 1):
         say(f"[{i}/{len(files)}] isolating {path} …")
-        diff = git(repo, "diff", f"{base}..{head}", "--", path)
+        diff = git(repo, "diff", f"-U{DIFF_CONTEXT}", f"{base}..{head}",
+                   "--", path)
+        # Context is a luxury; the changed lines are not. `explain` truncates
+        # the prompt at 9000 chars, so on a large file the extra context can
+        # push real `+`/`-` lines off the end -- trading a fact for a nicety.
+        # Fall back to git's default rather than lose changes.
+        if len(diff) > 9000:
+            tight = git(repo, "diff", f"{base}..{head}", "--", path)
+            if len(tight) < len(diff):
+                diff = tight
         r = FileReview(path=path, risk="none", diff=diff)
         if not diff.strip():
             continue

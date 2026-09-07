@@ -65,18 +65,10 @@ _STOP = {"the", "and", "for", "with", "that", "this", "was", "not", "object",
          "has", "does", "have", "from", "are", "but", "its", "into", "such"}
 
 
-def first_json(text: str) -> dict | None:
-    for m in re.finditer(r"\{", text):
-        depth = 0
-        for j in range(m.start(), len(text)):
-            depth += (text[j] == "{") - (text[j] == "}")
-            if depth == 0:
-                try:
-                    v = json.loads(text[m.start():j + 1])
-                except Exception:
-                    break
-                return v if isinstance(v, dict) else None
-    return None
+# Shared so the brace-counting bug that blanked 18 BugsInPy rows -- and
+# any review whose failure message contained a lone brace -- is fixed in
+# exactly one place. See oracle_reviewer/jsonio.py.
+from oracle_reviewer.jsonio import first_json  # noqa: E402
 
 
 def diff_of(user: str) -> str:
@@ -391,11 +383,20 @@ def main() -> int:
         n["from_message"] += msg_ok
         n["symbol"] += f_ok
         n["grounded"] += bool((exc_ok or sig_ok) and not inv)
-        out_rows.append({"id": r["id"], "project": r["project"],
-                         "exception": r["exception"], "before": r["before"],
-                         "explanation": expl[:800], "names_exception": exc_ok,
-                         "quotes_signature": sig_ok, "invented": inv,
-                         "from_message": msg_ok, "names_symbol": f_ok})
+        # `raw` is kept ONLY when nothing parsed. 18 rows of the v3 arm scored
+        # "produced no explanation" and the arm file had no way to say whether
+        # that was the model or the parser -- it was the parser, and diagnosing
+        # it cost a re-run of all 458. Storing the unparsed text makes the same
+        # question answerable from the file. It is capped and it is absent on
+        # the ~96% of rows that parse, so the file does not grow meaningfully.
+        row = {"id": r["id"], "project": r["project"],
+               "exception": r["exception"], "before": r["before"],
+               "explanation": expl[:800], "names_exception": exc_ok,
+               "quotes_signature": sig_ok, "invented": inv,
+               "from_message": msg_ok, "names_symbol": f_ok}
+        if not expl:
+            row["raw"] = str(texts[i - 1])[:2000]
+        out_rows.append(row)
 
     tot = len(rows)
     pct = lambda a: f"{a}/{tot} ({a / tot:.0%})" if tot else "0/0"

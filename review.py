@@ -195,18 +195,10 @@ def ask(host: str, model: str, prompt: str, timeout: int = 180) -> str:
         return json.loads(r.read())["message"]["content"]
 
 
-def first_json(text: str) -> dict | None:
-    for m in re.finditer(r"\{", text):
-        depth = 0
-        for j in range(m.start(), len(text)):
-            depth += (text[j] == "{") - (text[j] == "}")
-            if depth == 0:
-                try:
-                    v = json.loads(text[m.start():j + 1])
-                except Exception:
-                    break
-                return v if isinstance(v, dict) else None
-    return None
+# Shared so the brace-counting bug that blanked 18 BugsInPy rows -- and
+# any review whose failure message contained a lone brace -- is fixed in
+# exactly one place. See oracle_reviewer/jsonio.py.
+from oracle_reviewer.jsonio import first_json  # noqa: E402
 
 
 def verify(expl: str, before: str, after: str, diff: str) -> str | None:

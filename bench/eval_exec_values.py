@@ -35,20 +35,10 @@ from exec_contract import contradiction, repair  # noqa: E402
 _OBJ = re.compile(r"\{.*?\}", re.S)
 
 
-def first_json(text: str) -> dict | None:
-    """First balanced {...} that parses. The model may emit prose around it."""
-    for m in _OBJ.finditer(text):
-        i = m.start()
-        depth = 0
-        for j in range(i, len(text)):
-            depth += (text[j] == "{") - (text[j] == "}")
-            if depth == 0:
-                try:
-                    v = json.loads(text[i:j + 1])
-                except Exception:
-                    break
-                return v if isinstance(v, dict) else None
-    return None
+# Shared so the brace-counting bug that blanked 18 BugsInPy rows -- and
+# any review whose failure message contained a lone brace -- is fixed in
+# exactly one place. See oracle_reviewer/jsonio.py.
+from oracle_reviewer.jsonio import first_json  # noqa: E402
 
 
 def norm(v) -> str:

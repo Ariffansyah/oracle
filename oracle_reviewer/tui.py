@@ -413,11 +413,16 @@ class Reviewer(App):
 
     def _report(self, r: core.FileReview) -> str:
         stage1 = str(self.query_one("#stage1", Static).render()).strip()
+        body = core.review_body(r, self.run_cmd)
+        # The body already prints the measurement for every verdict that has
+        # one, and prints it with the label that makes it readable -- "output,
+        # identical on both sides", or "together, before/after" for a group.
+        # Repeating a bare before/after underneath said the same thing twice
+        # and, for a co-dependent file, restated the GROUP's numbers as though
+        # they were this file's. Name the command; do not re-run the values.
         return (f"{r.path}  [{r.badge}]\n\n"
                 + (f"{stage1}\n\n" if stage1 else "") +
-                f"{core.review_body(r, self.run_cmd)}\n\n"
-                f"measured by running `{self.run_cmd}`\n"
-                f"  before: {r.before}\n  after:  {r.after}\n\n{r.diff}")
+                f"{body}\n\nmeasured by running `{self.run_cmd}`\n\n{r.diff}")
 
     def _copy(self, text: str, what: str) -> None:
         """Clipboard via OSC 52, plus a native helper when one exists.

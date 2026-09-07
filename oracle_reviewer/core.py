@@ -1162,11 +1162,20 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
         say(f"[{i}/{len(files)}] isolating {path} …")
         diff = git(repo, "diff", f"-U{DIFF_CONTEXT}", f"{base}..{head}",
                    "--", path)
-        # Context is a luxury; the changed lines are not. `explain` truncates
-        # the prompt at 9000 chars, so on a large file the extra context can
-        # push real `+`/`-` lines off the end -- trading a fact for a nicety.
-        # Fall back to git's default rather than lose changes.
-        if len(diff) > 9000:
+        # Context is a luxury; the changed lines are not. Fall back to git's
+        # default rather than spend the budget on unchanged lines.
+        #
+        # The budget is the ADAPTER's, not the base model's. Qwen2.5 handles
+        # 32k, but this LoRA was trained at MAX_SEQ_LENGTH=1024 tokens, and a
+        # prompt far past that is out of distribution for it. ~4 chars/token
+        # puts 1024 near 4000 chars for the WHOLE prompt, so the diff gets
+        # 3000 and the scaffolding, before/after and outcome get the rest.
+        #
+        # Measured on one real Go commit: at U=12 a 1174-char diff became 946
+        # tokens (fine) and a 4374-char one 1543 (already over at U=3 -- that
+        # is a large change, not a context problem, and no choice of -U fixes
+        # it).
+        if len(diff) > 3000:
             tight = git(repo, "diff", f"{base}..{head}", "--", path)
             if len(tight) < len(diff):
                 diff = tight

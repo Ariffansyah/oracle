@@ -176,6 +176,13 @@ _ATTRIBUTES_RUN = [
         r"\bmak(?:es|ing)\b[^.]{0,30}?\b(?:fail|crash|break)\b",
         r"\bexit\s+(?:status|code)\s+(?:changed|becomes?|is\s+now|went)\b",
         r"\bthe\s+(?:program|run|command|tests?)\s+(?:now\s+)?(?:fails?|crashes?|errors?|passes?|succeeds?)\b",
+        # Observed printed as a finding: "The project still fails, so the change
+        # did not resolve the issue", on a file whose baseline was already
+        # broken. The first clause RESTATES the measurement and is fine (see the
+        # `is None` cases in test_exec_contract.py); the second INFERS that the
+        # change failed to achieve something, which nothing established. Only
+        # the inference is caught here.
+        r"\b(?:did|does|do|would|will)\s+not\s+(?:resolve|fix|address|solve)\b",
     )
 ]
 # Claims to have OBSERVED something. Legitimate where output really was compared
@@ -258,13 +265,35 @@ def _code_like(name: str, expl: str) -> bool:
             or any(a.islower() and b.isupper() for a, b in zip(name, name[1:])))
 
 
+# A name introduced by one of these is the OBJECT of a phrase, not the subject
+# of the sentence, so a following "is dropped" describes a runtime value rather
+# than a deleted line. Observed: "a write racing a `Clear` is dropped" -- a
+# correct reading of a cache generation guard -- was rejected as claiming
+# `Clear` had been deleted from the diff. The ACTIVE pattern already guards
+# against this confusion by restricting its subject to the change itself; the
+# passive one had no such guard, and prose about runtime behaviour hits it
+# constantly.
+_OBJECT_OF = re.compile(
+    r"\b(?:with|from|by|against|into|onto|than|via|racing|holding|using|"
+    r"calling|matching|carrying|beating|after|before|during|for|to|of|on|in|at)"
+    r"\s+(?:an?|the|its|their|any|some)?\s*`?$", re.I)
+
+
 def phantom_removal(expl: str, diff: str) -> str | None:
     """Why this sentence describes a deletion the diff does not contain."""
+    expl = expl or ""
+    m = None
     for rx in _REMOVED:
-        m = rx.search(expl or "")
-        if m and _code_like(m.group("name"), expl or ""):
+        for cand in rx.finditer(expl):
+            if not _code_like(cand.group("name"), expl):
+                continue
+            if _OBJECT_OF.search(expl[:cand.start("name")]):
+                continue          # object of a phrase: not a claim about a line
+            m = cand
             break
-    else:
+        if m:
+            break
+    if m is None:
         return None
     name = m.group("name").split(".")[-1]
     for line in (diff or "").splitlines():

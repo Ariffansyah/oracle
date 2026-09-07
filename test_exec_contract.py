@@ -246,3 +246,67 @@ assert phantom_removal("it removes the leading zeros before storing", GO_DIFF) i
 assert phantom_removal("it removes the `leadingZeros` helper", GO_DIFF)   # camelCase
 
 print("ok")
+
+# --------------------------------- the inference that walked past both lists
+# Verbatim from a real review of a TypeScript commit. `pnpm run lint` was
+# already failing before it, so nothing about the file was measured, and this
+# was printed as a finding:
+#
+#   "The project still fails, so the change did not resolve the issue."
+#
+# Two clauses, and only one of them is wrong. "The project still fails" restates
+# the measured output and is allowed off a live baseline -- that is the
+# `is None` case a few lines above, and it must stay. "so the change did not
+# resolve the issue" INFERS that the change failed at something, which nothing
+# established. Only the inference is caught unconditionally.
+_LEAK = "The project still fails, so the change did not resolve the issue."
+assert unmeasured_claim(_LEAK, baseline_broken=False), _LEAK
+assert unmeasured_claim(_LEAK, baseline_broken=True), _LEAK
+for s in ("the change did not resolve the issue",
+          "this does not fix the underlying problem",
+          "it will not address the race",
+          "the patch does not solve it"):
+    assert unmeasured_claim(s), s
+
+# On a DEAD baseline the restatement is unsupported too: both runs failed for a
+# reason that has nothing to do with this file, so "still fails" is a fact about
+# the broken baseline. Live baseline, unexercised change: still allowed.
+# The restatement stays allowed on a dead baseline too. It quotes the measured
+# output verbatim -- it is the same string the tool prints itself -- and it is
+# the half the per-sentence filter exists to keep. Blocking it was tried and it
+# broke the end-to-end assertion below, correctly.
+_RESTATE = "The project still fails with exit 5: no tests ran."
+assert unmeasured_claim(_RESTATE, baseline_broken=False) is None, _RESTATE
+assert unmeasured_claim(_RESTATE, baseline_broken=True) is None, _RESTATE
+
+# Plain description of a diff must not trip any of this.
+for ok in ("the `version` field was added to the Cache struct",
+           "`Set` gained a third parameter, `version`",
+           "the guard returns early when the generation does not match"):
+    assert unmeasured_claim(ok, baseline_broken=True) is None, ok
+
+print("unmeasured_claim: inference vs restatement ok")
+
+# ------------------------------- a name in object position is not a deletion
+# "a write racing a `Clear` is dropped" is a correct reading of a cache
+# generation guard, and it was rejected as claiming `Clear` had been deleted.
+# The PASSIVE pattern had no subject restriction, so any backticked name
+# followed by "is dropped" matched, whatever its grammatical role. The active
+# pattern had guarded against this since it was written; this brings the
+# passive one into line. It matters most in explain mode, whose prose is
+# mostly about what the code DOES rather than about what the diff shows.
+_CACHE_DIFF = ("-func (c *Cache) Set(k string, d []byte) {\n"
+               "+func (c *Cache) Set(k string, d []byte, version uint64) {\n")
+for ok in ("a write racing a `Clear` is dropped",
+           "the entry is dropped when the generation does not match",
+           "a request arriving after `Clear` is discarded",
+           "the response is dropped for any stale `version`"):
+    assert phantom_removal(ok, _CACHE_DIFF) is None, ok
+
+# ...and a genuine claim of deletion is still caught, in both voices.
+assert phantom_removal("the `Version` method was removed", _CACHE_DIFF)
+assert phantom_removal("the change removes the `Version` method", _CACHE_DIFF)
+# A deletion the diff DOES contain stays allowed.
+assert phantom_removal("the old `Set` signature was removed", _CACHE_DIFF) is None
+
+print("phantom_removal: object position ok")

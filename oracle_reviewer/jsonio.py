@@ -47,6 +47,18 @@ __all__ = ["first_json", "first_json_ex", "spans", "loads_lenient",
 REPAIRS_TRUNCATED = ("truncated", "truncated+trailing-comma", "explanation-only")
 
 _EXPL = re.compile(r'"explanation"\s*:\s*"((?:[^"\\]|\\.)*)"', re.S)
+# The same field, read greedily to the LAST quote of the object. For an answer
+# whose explanation QUOTES JSON and does not escape it:
+#
+#   {"explanation": "... `AssertionError: '{"duration": 0}' != ...` ..."}
+#
+# the string ends, as far as any parser is concerned, at the quote before
+# `duration`. The strict pattern above then captures a truncated sentence, and
+# the brace scanner finds `{"duration": 0}` -- a perfectly valid object nested
+# INSIDE the prose -- and returns it. Returning the wrong dict is worse than
+# returning none: the caller reads `.get("explanation")`, gets nothing, and the
+# row is scored as "the model said nothing" when it said the right thing.
+_EXPL_GREEDY = re.compile(r'"explanation"\s*:\s*"(.*)"\s*,?\s*\}?\s*$', re.S)
 
 
 def spans(text: str):
@@ -139,27 +151,49 @@ def loads_lenient(frag: str):
     return _loads(frag)[0]
 
 
+def _unquote(raw: str) -> str:
+    """Decode a captured JSON string body, or return it as written."""
+    try:
+        return json.loads(f'"{raw}"', strict=False)
+    except Exception:
+        return raw
+
+
 def first_json_ex(text: str) -> tuple[dict | None, str | None]:
     """(first JSON object, repair-label). The label is None when it parsed as
     given, and one of REPAIRS_TRUNCATED when the result may be incomplete."""
     if not text:
         return None, None
+    fallback = None
     for a, b in spans(text):
         v, label = _loads(text[a:b])
-        if v is not None:
+        if v is None:
+            continue
+        if "explanation" in v:
             return v, label
-    m = _EXPL.search(text)          # last resort: the one field callers read
-    if m:
-        # Nothing here carries `before`/`after`, so `contradiction` and
-        # `swapped` cannot run on it. That is why it is labelled: a caller that
-        # relies on those checks is being handed prose they never saw.
-        try:
-            return ({"explanation": json.loads(f'"{m.group(1)}"', strict=False)},
-                    "explanation-only")
-        except Exception:
-            return {"explanation": m.group(1)}, "explanation-only"
-    return None, None
-
+        # It parsed, but it is not the answer -- most likely an object quoted
+        # inside the prose of a larger one that did NOT parse. Hold it in case
+        # nothing better turns up, and keep looking.
+        if fallback is None:
+            fallback = (v, label)
+    # The one field callers actually read. Strict first, because it is right
+    # whenever the value is properly escaped. It is WRONG when an unescaped
+    # quote inside the prose ended the string early, and the tell for that is
+    # what follows the match: a complete value is followed by `,` or `}` or the
+    # end of the text, and a truncated one is followed by more of its own
+    # sentence. Only then is the greedy read -- to the last quote of the object
+    # -- the better answer.
+    m = _EXPL.search(text)
+    if m and m.group(1).strip():
+        rest = text[m.end():].lstrip()
+        if rest[:1] in ("", ",", "}"):
+            return {"explanation": _unquote(m.group(1))}, "explanation-only"
+    g = _EXPL_GREEDY.search(text)
+    if g and g.group(1).strip():
+        return {"explanation": _unquote(g.group(1))}, "explanation-only"
+    if m and m.group(1).strip():
+        return {"explanation": _unquote(m.group(1))}, "explanation-only"
+    return fallback if fallback else (None, None)
 
 def first_json(text: str) -> dict | None:
     """The first JSON object in `text`, repaired if it has to be.

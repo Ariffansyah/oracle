@@ -113,6 +113,33 @@ check("every truncating label is in REPAIRS_TRUNCATED",
 check("a clean parse is NOT treated as truncating",
       None in REPAIRS_TRUNCATED, False)
 
+# --- an object quoted INSIDE the prose ---------------------------------------
+# Verbatim shape from youtube-dl-25, the last of the 458 rows that still scored
+# "the model said nothing" after the brace fix. The explanation quotes JSON and
+# does not escape it, so the string ends at the quote before `duration`; the
+# outer object then fails and the scanner finds `{"duration": 0}` -- valid, and
+# from the middle of a sentence. Returning that is worse than returning None:
+# the caller reads `.get("explanation")`, gets nothing, and a correct
+# explanation is scored as silence.
+_NESTED = ('{"explanation": "detection in `js_to_json` now uses the group '
+           'index, which resolves `AssertionError: \'{"duration": 0}\' != '
+           '\'{"duration": "00:01:07"}"` by parsing the integer."}')
+got, label = first_json_ex(_NESTED)
+check("a nested object is not mistaken for the answer",
+      got.get("explanation", "").startswith("detection in `js_to_json`"), True)
+check("the whole explanation survives, quotes and all",
+      "00:01:07" in got.get("explanation", ""), True)
+check("and it is labelled as a recovery", label, "explanation-only")
+
+# The greedy read is used ONLY when the strict one was cut short. A value that
+# is followed by `,` or `}` is complete and must be taken as written.
+check("a well-formed object still parses normally",
+      first_json_ex('{"explanation": "clean"}'), ({"explanation": "clean"}, None))
+check("a truncated object still reports truncation",
+      first_json_ex('{"explanation": "x", "after": "y"')[1], "truncated")
+check("an object with no explanation is still returned",
+      first_json_ex('{"a": 1}'), ({"a": 1}, None))
+
 bad = [t for t in OK if not t[1]]
 for name, ok, got, want in OK:
     print(("  ok   " if ok else "  FAIL ") + name)

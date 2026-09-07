@@ -148,7 +148,8 @@ def emit(arm: str, n: int, seed: int, rows_path: pathlib.Path,
 
 
 def emit_inventions(rows_path: pathlib.Path, out: pathlib.Path,
-                    csv_out: pathlib.Path) -> None:
+                    csv_out: pathlib.Path, arms: tuple = ("exec", "score", "diff"),
+                    cap: int = 0, seed: int = 7) -> None:
     """Every flagged invention, across all three arms, for direct checking.
 
     A 50-case random sample contains one invention, because inventions are rare
@@ -158,23 +159,42 @@ def emit_inventions(rows_path: pathlib.Path, out: pathlib.Path,
     Whether each is really an invention is a yes/no about one sentence, so this
     is a shorter job than it looks.
     """
+    # `arms` is a parameter because the default three name the FIRST corpus:
+    # `bip_arm_exec.json` is n=264 and a superseded checkpoint, so grading it
+    # validates the rubric against output nobody reports. Pass the arms the
+    # paper actually cites.
+    #
+    # `cap` samples the arms that invent a lot. The whole population is the
+    # right packet when it is ~60 rows; on the v2 corpus the diff and score arms
+    # flag ~50 each and the total runs past 100, which is a different size of
+    # favour to ask. The arm under test is never capped -- its inventions are
+    # the ones the headline depends on -- so what gets sampled is only the
+    # comparison side, and the comparison becomes an estimate with a stated n
+    # rather than a census.
     src = {json.loads(l)["id"]: json.loads(l) for l in open(rows_path)}
+    rng = random.Random(seed)
     picked = []
-    for arm in ("exec", "score", "diff"):
+    for i, arm in enumerate(arms):
         try:
             rows = load(arm, rows_path)
         except SystemExit:
             continue
-        picked += [(arm, r) for r in rows if r["invented"] and r["id"] in src]
+        flagged = [(arm, r) for r in rows if r["invented"] and r["id"] in src]
+        if cap and i and len(flagged) > cap:
+            rng.shuffle(flagged)
+            flagged = flagged[:cap]
+        picked += flagged
 
     lines = [
         "# BugsInPy invention packet",
         "",
         f"All {len(picked)} explanations the rubric flagged as asserting a",
-        "failure that did not happen, across all three arms. This is the whole",
-        "population, not a sample: the claim they support (2% for the arm given",
-        "measured values, 11% for the arm given only a risk score) is the",
-        "difference between these rows and nothing else.",
+        f"failure that did not happen, across arms {', '.join(arms)}.",
+        "",
+        "Every flagged row from the FIRST arm is here -- that is the arm the",
+        "headline depends on, and its inventions are the ones that would sink",
+        "it. The comparison arms are sampled where they flag more than the cap,",
+        "so the contrast they support is an estimate with a stated n.",
         "",
         "For each: does the explanation assert a failure the measurement",
         "contradicts or never showed?",
@@ -187,7 +207,9 @@ def emit_inventions(rows_path: pathlib.Path, out: pathlib.Path,
         "the prompt differs visibly. What is withheld is which class the rubric",
         "thought was invented.",
         "",
-        f"Record as `id,invented` in `{csv_out.name}`, then:",
+        f"Record as `invented` against the matching `case` row in "
+        f"`{csv_out.name}` -- the case number, id and arm are already filled",
+        "in, so you only type y or n. Then:",
         "",
         f"    python bench/bugsinpy_rater.py --score {csv_out} --arm exec",
         "",
@@ -204,11 +226,16 @@ def emit_inventions(rows_path: pathlib.Path, out: pathlib.Path,
         lines.append(f"`{r['id']}` — invented: ____\n")
         lines.append("---\n")
     out.write_text("\n".join(lines))
+    # `arm` is a column because the same row is often flagged by more than one
+    # arm -- 11 of 59 on the v3/diff/score packet -- and an answer sheet keyed by
+    # id alone silently merges them, so one judgement lands on two different
+    # sentences. `case` is the packet's own numbering, so a grader never has to
+    # work out which duplicate they are looking at.
     with open(csv_out, "w", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(["id", "invented"])
-        for _, r in picked:
-            w.writerow([r["id"], ""])
+        w.writerow(["case", "id", "arm", "invented"])
+        for i, (arm, r) in enumerate(picked, 1):
+            w.writerow([i, r["id"], arm, ""])
     print(f"{len(picked)} flagged inventions -> {out}")
     print(f"blank answer sheet -> {csv_out}")
 
@@ -226,9 +253,14 @@ def kappa(a: list[bool], b: list[bool]) -> float:
 
 def score(csv_path: pathlib.Path, arm: str, rows_path: pathlib.Path) -> int:
     rubric = {r["id"]: r for r in load(arm, rows_path)}
+    # Keyed by id, but an invention sheet carries an `arm` column and may hold
+    # the same id twice. Only the rows for the arm being scored are read, so a
+    # duplicate no longer overwrites its twin from another arm.
     human: dict[str, dict] = {}
     with open(csv_path) as fh:
         for row in csv.DictReader(fh):
+            if (row.get("arm") or "").strip() not in ("", arm):
+                continue
             human[row["id"].strip()] = row
 
     # `direction` is a standalone human measurement -- there is nothing
@@ -300,14 +332,20 @@ def main() -> int:
                     default=ROOT / "data" / "bip_rater_packet.md")
     ap.add_argument("--csv", type=pathlib.Path,
                     default=ROOT / "data" / "bip_rater.csv")
+    ap.add_argument("--arms", default="exec,score,diff",
+                    help="--emit-inventions: arms to pull flagged rows from; "
+                         "the FIRST is never sampled")
+    ap.add_argument("--cap", type=int, default=0,
+                    help="--emit-inventions: max rows from each arm after the "
+                         "first (0 = take all)")
     args = ap.parse_args()
     if args.emit:
         emit(args.arm, args.n, args.seed, args.rows, args.out, args.csv)
         return 0
     if args.emit_inventions:
-        emit_inventions(args.rows,
-                        ROOT / "data" / "bip_invention_packet.md",
-                        ROOT / "data" / "bip_inventions.csv")
+        emit_inventions(args.rows, args.out, args.csv,
+                        arms=tuple(a.strip() for a in args.arms.split(",")),
+                        cap=args.cap, seed=args.seed)
         return 0
     if args.score:
         return score(args.score, args.arm, args.rows)

@@ -1,7 +1,7 @@
 # BugsInPy invention packet
 
 All 59 explanations the rubric flagged as asserting a
-failure that did not happen, across arms v3plain_v2, diff_v2, score_v2.
+failure that did not happen, across arms v3plain_fix_v2, score_fix_v2, diff_fix_v2.
 
 Every flagged row from the FIRST arm is here -- that is the arm the
 headline depends on, and its inventions are the ones that would sink
@@ -26,7 +26,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 1. `httpie-4`  (httpie, arm `v3plain_v2`)
+## 1. `httpie-4`  (httpie, arm `v3plain_fix_v2`)
 
 **Commit message:** Fixed custom Host
 
@@ -40,7 +40,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 2. `PySnooper-1`  (PySnooper, arm `v3plain_v2`)
+## 2. `PySnooper-1`  (PySnooper, arm `v3plain_fix_v2`)
 
 **Commit message:** Fix unicode issues and add test, fix #124
 
@@ -54,7 +54,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 3. `cookiecutter-1`  (cookiecutter, arm `v3plain_v2`)
+## 3. `cookiecutter-1`  (cookiecutter, arm `v3plain_fix_v2`)
 
 **Commit message:** Fix default values being loaded with wrong encoding on Windows (#1414)
 
@@ -68,7 +68,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 4. `fastapi-6`  (fastapi, arm `v3plain_v2`)
+## 4. `fastapi-6`  (fastapi, arm `v3plain_fix_v2`)
 
 **Commit message:** :bug: Fix validating form params declared with classes (list, tuple, set, etc) (#856)
 
@@ -82,7 +82,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 5. `keras-12`  (keras, arm `v3plain_v2`)
+## 5. `keras-12`  (keras, arm `v3plain_fix_v2`)
 
 **Commit message:** Fix bug in sparse_categorical_accuracy  (#11373)
 
@@ -96,7 +96,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 6. `tornado-8`  (tornado, arm `v3plain_v2`)
+## 6. `tornado-8`  (tornado, arm `v3plain_fix_v2`)
 
 **Commit message:** fix websocket handshake failure causes an exception
 
@@ -110,7 +110,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 7. `tornado-15`  (tornado, arm `v3plain_v2`)
+## 7. `tornado-15`  (tornado, arm `v3plain_fix_v2`)
 
 **Commit message:** Fix path traversal check in StaticFileHandler.
 
@@ -124,7 +124,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 8. `keras-28`  (keras, arm `v3plain_v2`)
+## 8. `keras-28`  (keras, arm `v3plain_fix_v2`)
 
 **Commit message:** fix TimeSeriesGenerator glitch (#9899)
 
@@ -138,7 +138,7 @@ in, so you only type y or n. Then:
 
 ---
 
-## 9. `pandas-92`  (pandas, arm `v3plain_v2`)
+## 9. `pandas-92`  (pandas, arm `v3plain_fix_v2`)
 
 **Commit message:** BUG: PeriodIndex.searchsorted accepting invalid inputs (#30763)
 
@@ -152,329 +152,91 @@ in, so you only type y or n. Then:
 
 ---
 
-## 10. `scrapy-12`  (scrapy, arm `diff_v2`)
+## 10. `keras-13`  (keras, arm `score_fix_v2`)
 
-**Commit message:** Merge pull request #2153 from Digenis/Selector_bad_args
+**Commit message:** Fix `fit_generator` for `workers=0` (#11285)
 
-**Measured before:** `FAIL: test_selector_bad_args (tests.test_selector.SelectorTestCase)`
+**Measured before:** `ValueError: `steps=None` is only valid for a generator based on the `keras.utils.Sequence` class. Please specify `steps` or use the `keras.utils.Sequence` class.`
 
-**Measured after:**  `OK`
+**Measured after:**  `1 passed, 12 warnings`
 
-**The model said:** The commit adds a check to ensure that the `response` and `text` arguments are mutually exclusive, raising a `ValueError` if both are provided. This prevents the `TypeError: 'Selector' object cannot be instantiated with both 'response' and 'text' arguments
+**The model said:** The change replaces the direct call to `iter_sequence_infinite(generator)` with `iter_sequence_infinite(val_data)`, which corrects the logic to handle validation data correctly when `validation_steps` is not provided. This resolves the failure where the test `test_fit_generator_with_validation_steps` failed with the message "AssertionError: assert '[...]' == '[...]".
 
-`scrapy-12` — invented: ____
-
----
-
-## 11. `pandas-78`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG: Use self._constructor_sliced in df._reduce to respect subclassed… (#30945)
-
-**Measured before:** `AssertionError: assert False`
-
-**Measured after:**  `2 passed`
-
-**The model said:** The `Series` constructor was replaced by `self._constructor_sliced`, which ensures that the resulting data structure respects any subclass-specific behavior defined by the `_constructor_sliced` method. This change fixes the test failure where the returned data type was not correctly inferred, causing the test to fail with an `IndexError: list index out of range`.
-
-`pandas-78` — invented: ____
+`keras-13` — invented: ____
 
 ---
 
-## 12. `keras-37`  (keras, arm `diff_v2`)
+## 11. `pandas-131`  (pandas, arm `score_fix_v2`)
 
-**Commit message:** Fix __call__ for Bidirectional wrapper (#9248)
+**Commit message:** BUG: make tz_localize operate on values rather than categories (#28300)
 
-**Measured before:** `assert 2 == 4`
+**Measured before:** `ModuleNotFoundError: No module named 'coverage'`
 
-**Measured after:**  `1 passed, 27 warnings`
+**Measured after:**  `13 passed`
 
-**The model said:** The `Bidirectional` wrapper now checks if the `initial_state` passed to the layer is a list, raising a `ValueError` if it is not. This ensures that the state is correctly specified as a list of state tensors for each underlying RNN, which was previously allowed but not explicitly documented.
+**The model said:** The change replaces `take_1d` with `orig.array` in the `DatetimeProperties` constructor, which resolves the failure where the test `test_datetime_index_properties` failed with the message "AssertionError: assert '[2017-01-01 00:00:00]...00:00:00]' == '[2017-01-01 00:00:00]...'".
 
-`keras-37` — invented: ____
+`pandas-131` — invented: ____
 
 ---
 
-## 13. `sanic-2`  (sanic, arm `diff_v2`)
+## 12. `matplotlib-6`  (matplotlib, arm `score_fix_v2`)
 
-**Commit message:** Add server.start_serving and server.serve_forever to AsyncioServer proxy object, to match asyncio-python3.7 example doc, fixes #1754 (#1762)
+**Commit message:** FIX: fix support for single color 2D array as c to mean single color
 
-**Measured before:** `1 passed`
+**Measured before:** `matplotlib.testing.exceptions.ImageComparisonFailure: images not close (RMS 5.043):`
 
 **Measured after:**  `1 passed`
 
-**The model said:** The `start_serving` and `serve_forever` methods were added to the `AsyncioServer` proxy object, which matches the asyncio Python 3.7 example documentation. This change fixes issue #1754 by providing a more explicit way to start the server, which was previously implicit through the `__await__` method. Additionally, the error handling was updated to catch `AttributeError` instead of `NotImplementedError`, which is a more specific exception that can occur when the underlying server implementation does not support these methods.
+**The model said:** The change normalizes the handling of single-color 2D arrays by ensuring they are treated as RGB(A) colors when their size matches the axis length, fixing the `ValueError: shape mismatch: array of size 4 not aligned to 4-byte boundary` that occurred when the input was a 2D array with 1 row.
 
-`sanic-2` — invented: ____
-
----
-
-## 14. `pandas-80`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG: Series/Frame invert dtypes (#31183)
-
-**Measured before:** `AssertionError: Attributes of Series are different`
-
-**Measured after:**  `2 passed`
-
-**The model said:** The `__invert__` method was added to the `BaseMaskedArray` class, which allows the inversion of boolean arrays using the `~` operator. This change fixes the failure observed in the `pandas/tests/arrays/test_boolean.py` file, where the `BooleanArray` constructor was failing with a `TypeError` when passed a list instead of a boolean numpy array.
-
-`pandas-80` — invented: ____
+`matplotlib-6` — invented: ____
 
 ---
 
-## 15. `spacy-1`  (spacy, arm `diff_v2`)
+## 13. `pandas-36`  (pandas, arm `score_fix_v2`)
 
-**Commit message:** Fix ErrorsWithCodes().__class__ return value
+**Commit message:** BUG: isna_old with td64, dt64tz, period (#33158)
 
-**Measured before:** `assert False`
+**Measured before:** `TypeError: ufunc 'isfinite' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''`
 
 **Measured after:**  `1 passed`
 
-**The model said:** The `ErrorsWithCodes` class now includes a check for attribute names starting with `__`, which prevents the `AttributeError: 'ErrorsWithCodes' object has no attribute '__init__'` when accessing private attributes. This change ensures that the project's own tests continue to pass without errors.
+**The model said:** The change replaces the `isna` method for `ABCDatetimeArray`, `ABCTimedeltaArray`, and `ABCPeiod` with a direct call to `_isna_string_dtype`, which resolves the failure where the test `test_isna_datetime64tz` was failing with the error `AssertionError: assert '[False False ... False False]' == '[False False ... False False]'`.
 
-`spacy-1` — invented: ____
-
----
-
-## 16. `httpie-1`  (httpie, arm `diff_v2`)
-
-**Commit message:** Fixed #451 - OSError: [Errno 36] File name too long
-
-**Measured before:** `AttributeError: <module 'httpie.downloads' from '<repo>/httpie/downloads.py'> does not have the attribute 'get_filename_max_length'`
-
-**Measured after:**  `11 passed`
-
-**The model said:** The `trim_filename` function was added to truncate filenames if they exceed the system's maximum path length, which resolves the `OSError: [Errno 36] File name too long` issue in the `get_unique_filename` function.
-
-`httpie-1` — invented: ____
+`pandas-36` — invented: ____
 
 ---
 
-## 17. `scrapy-24`  (scrapy, arm `diff_v2`)
+## 14. `httpie-4`  (httpie, arm `score_fix_v2`)
 
-**Commit message:** https proxy tunneling - add a test (not perfect, but covers all impl) and fix for py3
+**Commit message:** Fixed custom Host
 
-**Measured before:** `DirtyReactorAggregateError: Reactor was unclean.`
-
-**Measured after:**  `OK`
-
-**The model said:** The response matcher was updated to use `bytes` literals instead of `str`, which fixes a UnicodeDecodeError when running on Python 3. This ensures that the test suite continues to pass without modification.
-
-`scrapy-24` — invented: ____
-
----
-
-## 18. `pandas-3`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG : Series.to_timestamp and Series.to_period raise user-facing AssertionError (#34067)
-
-**Measured before:** `AssertionError`
-
-**Measured after:**  `18 passed`
-
-**The model said:** The `assert` statement in `Series.to_timestamp` and `Series.to_period` was replaced with a `TypeError` check, which raises an exception when the index is not a `PeriodIndex` or `DatetimeIndex`. This change ensures that the function now correctly handles unsupported index types by raising a user-facing error instead of failing silently.
-
-`pandas-3` — invented: ____
-
----
-
-## 19. `pandas-135`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG/TST: ensure groupby.agg preserves extension dtype (#29144)
-
-**Measured before:** `AssertionError: Attributes of Series are different`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The `TypeError` catch block was added to the `_aggregate_series_pure_python` method to handle the case where the input object's values are not an ndarray, which was causing the test to fail. This ensures that the function can still execute without raising an error when the input data type is not compatible with the pure Python aggregation logic.
-
-`pandas-135` — invented: ____
-
----
-
-## 20. `scrapy-9`  (scrapy, arm `diff_v2`)
-
-**Commit message:** Merge pull request #2331 from moisesguimaraes/fixes-2272
-
-**Measured before:** `AttributeError: 'str' object has no attribute 'extend'`
-
-**Measured after:**  `OK`
-
-**The model said:** The `to` and `cc` arguments in `MailSender.send_mail` were updated to be lists instead of tuples, which allows for more flexibility when passing multiple recipients. This change resolves the TypeError: 'tuple' object is not iterable error observed in the project's own tests.
-
-`scrapy-9` — invented: ____
-
----
-
-## 21. `fastapi-12`  (fastapi, arm `diff_v2`)
-
-**Commit message:** :bug: Fix HTTP Bearer security auto-error (#282)
-
-**Measured before:** `assert 403 == 200`
-
-**Measured after:**  `1 passed, 6 warnings`
-
-**The model said:** The `HTTPBearer` class now includes an `auto_error` flag that determines whether to raise an exception when the authentication scheme is invalid. If `auto_error` is set to `True`, the default behavior of raising an `HTTPException` is preserved; otherwise, the method returns `None`.
-
-`fastapi-12` — invented: ____
-
----
-
-## 22. `pandas-77`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG: na_logical_op 2D cases (#31263)
-
-**Measured before:** `TypeError: unsupported operand type(s) for |: 'int' and 'float'`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The change replaces `libops.vec_binop` with `libops.vec_binop(x.ravel(), y.ravel(), op)` to flatten the input arrays before performing the binary operation, which resolves a `ValueError: operands could not be broadcast together with shapes (1,) (2,)` in the test case `test_logical_op_2d`. The return statement now reshapes the result to match the original shape of `x`, ensuring the function's behavior remains consistent with the project's own tests.
-
-`pandas-77` — invented: ____
-
----
-
-## 23. `pandas-114`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG: Index.get_value implementation for ExtensionArray (#29926)
-
-**Measured before:** `Exception: tried to convert a DecimalArray to a numpy array`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The change replaces direct attribute access with `extract_array`, which removes the need to check for `_values` and simplifies the logic by removing the special case for scalar keys. This refactoring eliminates the potential for `KeyError` when accessing non-scalar keys, which was previously handled by converting the key to a location and raising a `KeyError` if the index is empty or holds integers/booleans. The change also adds a new error message for non-scalar keys, which was previously caught by the conversion to a location.
-
-`pandas-114` — invented: ____
-
----
-
-## 24. `pandas-27`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG: to_period() freq was not infered (#33406)
-
-**Measured before:** `AttributeError: 'NoneType' object has no attribute 'n'`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The `get_period_alias` function now returns a string representation of the frequency when it cannot be inferred, which resolves the issue where the `to_period` method failed to handle certain input formats like 'D' or 'W'. This change ensures that the `to_period` method can correctly convert datetime-like objects to period arrays without raising a `ValueError`.
-
-`pandas-27` — invented: ____
-
----
-
-## 25. `pandas-115`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG: fix Series.interpolate(method='index') with unsorted index (#29943)
-
-**Measured before:** `AssertionError: Series are different`
-
-**Measured after:**  `2 passed`
-
-**The model said:** The change replaces `np.interp` with a sorted version of the interpolation logic, which fixes the `IndexError: invalid index to scalar variable.` when the input index is not sorted.
-
-`pandas-115` — invented: ____
-
----
-
-## 26. `youtube-dl-30`  (youtube-dl, arm `diff_v2`)
-
-**Commit message:** [YoutubeDL] format spec: Do not fail when a filter gives an empty result
-
-**Measured before:** `IndexError: list index out of range`
-
-**Measured after:**  `OK`
-
-**The model said:** The change removes the `list(formats)` conversion inside the `selector_function`, which prevents the function from returning an empty list when no formats match the selector. This ensures that the project's own tests continue to pass without raising a `TypeError`.
-
-`youtube-dl-30` — invented: ____
-
----
-
-## 27. `tornado-8`  (tornado, arm `diff_v2`)
-
-**Commit message:** fix websocket handshake failure causes an exception
-
-**Measured before:** `AssertionError: 500 != 400`
-
-**Measured after:**  `OK`
-
-**The model said:** The commit adds a `try/except` block to catch `ValueError` exceptions in the `accept_connection` method of `WebSocketProtocol13`. If a `ValueError` is caught, the handler sets the status to 400, finishes the connection with a log message indicating missing/invalid WebSocket headers, and logs the message at debug level.
-
-`tornado-8` — invented: ____
-
----
-
-## 28. `matplotlib-25`  (matplotlib, arm `diff_v2`)
-
-**Commit message:** Backport PR #14488: Make sure EventCollection doesn't modify input in-place
-
-**Measured before:** `AssertionError:`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The change adds a check for `positions` being `None` and raises a `ValueError` if it is, ensuring that the function now requires a valid array-like object. This prevents the program from crashing when `positions` is not provided, which was previously possible due to the lack of explicit validation.
-
-`matplotlib-25` — invented: ____
-
----
-
-## 29. `luigi-26`  (luigi, arm `diff_v2`)
-
-**Commit message:** Add a basic test for hadoop_jar.py
-
-**Measured before:** `TypeError: expected str, bytes or os.PathLike object, not NoneType`
-
-**Measured after:**  `1 passed, 2 warnings`
-
-**The model said:** The commit adds a check to ensure that the `job.jar()` attribute is defined before attempting to access its path. This prevents the program from crashing when the jar file is not specified, instead raising a custom `HadoopJarJobError` with a descriptive message.
-
-`luigi-26` — invented: ____
-
----
-
-## 30. `youtube-dl-4`  (youtube-dl, arm `diff_v2`)
-
-**Commit message:** [jsinterp] Fix function calls without arguments.
-
-**Measured before:** `ExtractorError: Unsupported JS expression 'x()'; please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; see  https://yt-dl.org/update  on how to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.`
-
-**Measured after:**  `OK`
-
-**The model said:** The change removes the trailing comma from the argument list regex, which allows the parser to handle cases where no arguments are provided by returning an empty tuple instead of raising a `ValueError`.
-
-`youtube-dl-4` — invented: ____
-
----
-
-## 31. `pandas-96`  (pandas, arm `diff_v2`)
-
-**Commit message:** BUG: bug in date_range with custom business hours and given periods (#30675)
-
-**Measured before:** `ValueError`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The `skip_bd` variable was updated to use `CustomBusinessDay` instead of `BusinessDay` when the offset is an instance of `_CustomMixin`, which adds support for custom business hours, holidays, and calendars. This change ensures that the test suite no longer fails with the error `TypeError: 'CustomBusinessDay' object is not iterable`.
-
-`pandas-96` — invented: ____
-
----
-
-## 32. `tqdm-5`  (tqdm, arm `diff_v2`)
-
-**Commit message:** support `bool()` cast when `disable=True`
-
-**Measured before:** `AttributeError: 'tqdm' object has no attribute 'total'`
+**Measured before:** `assert 2 == 1`
 
 **Measured after:**  `1 passed, 1 warning`
 
-**The model said:** The commit adds a check for `total` being `None` when `iterable` is not `None`, which attempts to infer the length of the iterable using `len()`. This prevents a `RuntimeError: object of type 'generator' has no len()` when `total` is not explicitly set, ensuring that the progress bar can still be displayed correctly.
+**The model said:** The check for the presence of the 'Host' header was moved from the `HTTPRequest` constructor to the `HTTPMessage` base class, which resolves the failure where the test `test_request_with_missing_host_header` failed with the error "AssertionError: assert 'Host: example.com' == 'example.com'".
 
-`tqdm-5` — invented: ____
+`httpie-4` — invented: ____
 
 ---
 
-## 33. `pandas-11`  (pandas, arm `diff_v2`)
+## 15. `youtube-dl-12`  (youtube-dl, arm `score_fix_v2`)
+
+**Commit message:** [YoutubeDL] Fix typo in string negation implementation and add more tests (closes #18961)
+
+**Measured before:** `ExtractorError: requested format not available`
+
+**Measured after:**  `OK`
+
+**The model said:** The `not` operator was applied directly to the `str_op` function instead of passing it as an argument to the lambda, which resolves the failure where the test `test_youtube_dl__extractor__youtube__video_id` failed with the message "AssertionError: assert '12345' == '12345'".
+
+`youtube-dl-12` — invented: ____
+
+---
+
+## 16. `pandas-11`  (pandas, arm `score_fix_v2`)
 
 **Commit message:** BUG: can't concatenate DataFrame with Series with duplicate keys (#33805)
 
@@ -482,321 +244,181 @@ in, so you only type y or n. Then:
 
 **Measured after:**  `2 passed`
 
-**The model said:** The change replaces the `try-except` block with a direct lookup using `np.nonzero`, which removes the need for exception handling and simplifies the logic. This refactoring ensures that the error message is more informative by providing the exact index of the missing key instead of raising a generic `KeyError`.
+**The model said:** The change replaces the `try-except` block with a boolean mask and `np.nonzero` to find the first occurrence of each key in the level, which resolves the `ValueError: Key 'x' not in level [x]` failure.
 
 `pandas-11` — invented: ____
 
 ---
 
-## 34. `pandas-129`  (pandas, arm `diff_v2`)
+## 17. `keras-35`  (keras, arm `score_fix_v2`)
 
-**Commit message:** BUG: np.datetime64 - TimedeltaArray (#29558)
+**Commit message:** Fix ImageDataGenerator preprocessing_function (#9273)
 
-**Measured before:** `ValueError: Unexpected type 'datetime64'. 'values' must be a DatetimeArray ndarray, or Series or Index containing one of those.`
+**Measured before:** `ValueError: cannot resize an array that references or is referenced`
 
-**Measured after:**  `12 passed`
+**Measured after:**  `1 passed, 26 warnings`
 
-**The model said:** The change adds a special case for scalar `np.datetime64` objects, allowing them to be directly subtracted from `DatetimeArray` instances by wrapping them in `Timestamp` objects. This resolves the TypeError observed when attempting to subtract a scalar `np.datetime64` from a `DatetimeArray`.
+**The model said:** The `preprocessing_function` was removed from the `ImageDataGenerator` constructor, which resolves the failure where the test `test_image_data_generator_preprocess` failed with the message "AssertionError: assert '[128, 128, 3]' == '[128, 128, 1]".
 
-`pandas-129` — invented: ____
-
----
-
-## 35. `thefuck-8`  (thefuck, arm `score_v2`)
-
-**Commit message:** Tests! Also fixed some bytes-string issues
-
-**Measured before:** `assert 'dnf install vim' in []`
-
-**Measured after:**  `2 passed`
-
-**The model said:** The change replaces the bytes-style regex with a string-style regex in `_get_operations`, which removes the need for explicit decoding when reading from `proc.stdout`. This refactoring eliminates the risk of UnicodeDecodeError, which was previously causing the test to fail.
-
-`thefuck-8` — invented: ____
+`keras-35` — invented: ____
 
 ---
 
-## 36. `keras-37`  (keras, arm `score_v2`)
+## 18. `pandas-169`  (pandas, arm `score_fix_v2`)
 
-**Commit message:** Fix __call__ for Bidirectional wrapper (#9248)
+**Commit message:** BUG: fix+test quantile with empty DataFrame, closes #23925 (#27436)
 
-**Measured before:** `assert 2 == 4`
-
-**Measured after:**  `1 passed, 27 warnings`
-
-**The model said:** The `Bidirectional` wrapper now checks if the initial state passed to it is a list, raising a `ValueError` if it is not. This ensures that the state is correctly specified as a list of state tensors, which is necessary for the layer to function properly.
-
-`keras-37` — invented: ____
-
----
-
-## 37. `pandas-135`  (pandas, arm `score_v2`)
-
-**Commit message:** BUG/TST: ensure groupby.agg preserves extension dtype (#29144)
-
-**Measured before:** `AssertionError: Attributes of Series are different`
+**Measured before:** `ValueError: need at least one array to concatenate`
 
 **Measured after:**  `1 passed`
 
-**The model said:** The commit adds a `try/except` block to catch `TypeError` exceptions when calling `_aggregate_series_pure_python`, which is triggered by non-array-like objects. This prevents the program from crashing and ensures that the project's own tests continue to observe the expected behavior.
+**The model said:** The commit adds a check for an empty column list in `DataFrame.quantile` and returns an empty DataFrame instead of raising an error, which resolves the failure `AssertionError: assert '[nan] [nan]' == '[nan] [nan]'` from GH#23925.
 
-`pandas-135` — invented: ____
-
----
-
-## 38. `matplotlib-5`  (matplotlib, arm `score_v2`)
-
-**Commit message:** Correctly set default linewidth for unfilled markers.
-
-**Measured before:** `assert array([1.]) == (1 + 1)`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The default linewidth for unfilled markers was updated to use `rcParams['lines.linewidth']` instead of directly accessing the attribute, which prevents potential `AttributeError` failures when the attribute is `None`. This change reduces the defect risk to 9.5%.
-
-`matplotlib-5` — invented: ____
+`pandas-169` — invented: ____
 
 ---
 
-## 39. `youtube-dl-30`  (youtube-dl, arm `score_v2`)
+## 19. `tqdm-1`  (tqdm, arm `score_fix_v2`)
 
-**Commit message:** [YoutubeDL] format spec: Do not fail when a filter gives an empty result
+**Commit message:** fix `tenumerate(start)`
 
-**Measured before:** `IndexError: list index out of range`
-
-**Measured after:**  `OK`
-
-**The model said:** The change adds a check to ensure that the `formats` list is non-empty before attempting to iterate over it, which prevents the program from crashing when the filter returns an empty list. This addresses the issue of failing when a filter gives an empty result, which was previously causing the program to exit with a `RuntimeError: generator returned nothing`.
-
-`youtube-dl-30` — invented: ____
-
----
-
-## 40. `pandas-148`  (pandas, arm `score_v2`)
-
-**Commit message:** BUG: Fix issue with apply on empty DataFrame (#28213)
-
-**Measured before:** `AssertionError: Series are different`
-
-**Measured after:**  `4 passed`
-
-**The model said:** The commit replaces the direct instantiation of an empty `Series` with a call to `Series([])` inside the `try/except` block, which simplifies the logic and removes the need for the `EMPTY_SERIES` constant. This refactoring eliminates the potential for a `TypeError` when attempting to slice the `obj` with an empty `Series`, which was previously causing the test to fail. The risk score remains 98.6%, indicating that the defect is still present but has been mitigated by the change.
-
-`pandas-148` — invented: ____
-
----
-
-## 41. `pandas-80`  (pandas, arm `score_v2`)
-
-**Commit message:** BUG: Series/Frame invert dtypes (#31183)
-
-**Measured before:** `AssertionError: Attributes of Series are different`
-
-**Measured after:**  `2 passed`
-
-**The model said:** The `__invert__` method was added to the `BaseMaskedArray` class, which allows the inversion of boolean arrays using the `~` operator. This change fixes the failure observed in the `test_boolean_array_invert` test, which previously raised a `TypeError` because the `~` operator was not supported by the `BooleanArray` class.
-
-`pandas-80` — invented: ____
-
----
-
-## 42. `ansible-1`  (ansible, arm `score_v2`)
-
-**Commit message:** better error for "ansible-galaxy collection verify" if there's no MANIFEST.json (#67498)
-
-**Measured before:** `TypeError: 'GalaxyAPI' object is not iterable`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The commit adds a check for the presence of a `MANIFEST.json` file in the collection directory, which is required for collections built and installed via `ansible-galaxy`. This prevents the program from crashing when a collection is missing the manifest file, instead raising an `AnsibleError` with a helpful message.
-
-`ansible-1` — invented: ____
-
----
-
-## 43. `httpie-1`  (httpie, arm `score_v2`)
-
-**Commit message:** Fixed #451 - OSError: [Errno 36] File name too long
-
-**Measured before:** `AttributeError: <module 'httpie.downloads' from '<repo>/httpie/downloads.py'> does not have the attribute 'get_filename_max_length'`
-
-**Measured after:**  `11 passed`
-
-**The model said:** The `filename_from_url` function was refactored into `trim_filename`, which reduces the file name length by removing characters from the end until it fits within the system's maximum path length. This change fixes the `OSError: [Errno 36] File name too long` issue by ensuring that the generated filenames do not exceed the system's limit.
-
-`httpie-1` — invented: ____
-
----
-
-## 44. `scrapy-2`  (scrapy, arm `score_v2`)
-
-**Commit message:** Fix scrapy.utils.datatypes.LocalCache limit issue
-
-**Measured before:** `TypeError: '>=' not supported between instances of 'int' and 'NoneType'`
-
-**Measured after:**  `OK`
-
-**The model said:** The `LocalCache` class now includes a check for the `limit` attribute before attempting to pop items when the cache size exceeds the specified limit, which prevents the `IndexError: pop from empty list` failure observed in the test suite.
-
-`scrapy-2` — invented: ____
-
----
-
-## 45. `tqdm-5`  (tqdm, arm `score_v2`)
-
-**Commit message:** support `bool()` cast when `disable=True`
-
-**Measured before:** `AttributeError: 'tqdm' object has no attribute 'total'`
+**Measured before:** `TypeError: 'int' object is not subscriptable`
 
 **Measured after:**  `1 passed, 1 warning`
 
-**The model said:** The commit adds a check for `total` being `None` when `iterable` is not `None`, which attempts to infer the length of the iterable using `len()`. This change prevents a `RuntimeError: object of type 'generator' has no len()` when `total` is not explicitly set, which was previously causing the test suite to fail.
+**The model said:** The `start` argument was added to the `tqdm_class` call in `tqdm.contrib.__init__.py`, which resolves the `AssertionError: assert '[0, 1, 2]...[2, 3, 4]' == '[0, 1, 2]...[2, 3, 4]'` failure by ensuring the correct index is used when enumerating over the iterable.
 
-`tqdm-5` — invented: ____
-
----
-
-## 46. `pandas-57`  (pandas, arm `score_v2`)
-
-**Commit message:** BUG: list-like to_replace on Categorical.replace is ignored or crash (#31734)
-
-**Measured before:** `TypeError: assert_series_equal() got an unexpected keyword argument 'check_category_order'`
-
-**Measured after:**  `13 passed`
-
-**The model said:** The `Categorical.replace` method now includes a `check_category_order` parameter, which defaults to `True`. This change ensures that the order of categories within the Categorical array is preserved when replacing values, which was previously ignored. This fix addresses a regression introduced by the commit, causing the project's own tests to fail with a `ValueError: cannot replace category 'foo' with non-category 'bar'`.
-
-`pandas-57` — invented: ____
+`tqdm-1` — invented: ____
 
 ---
 
-## 47. `pandas-114`  (pandas, arm `score_v2`)
+## 20. `httpie-3`  (httpie, arm `score_fix_v2`)
 
-**Commit message:** BUG: Index.get_value implementation for ExtensionArray (#29926)
+**Commit message:** Fixed --download with --session
 
-**Measured before:** `Exception: tried to convert a DecimalArray to a numpy array`
+**Measured before:** `AttributeError: 'NoneType' object has no attribute 'decode'`
 
-**Measured after:**  `1 passed`
+**Measured after:**  `1 passed, 1 warning`
 
-**The model said:** The change replaces direct access to `_values` with `extract_array`, which removes the need to check for `ExtensionArray` and simplifies the logic by removing the special case for non-scalar keys. This refactoring eliminates the potential for a `KeyError` when accessing non-scalar keys, which was previously raised in `Index.get_value`.
+**The model said:** The commit removes the `continue` statement inside the loop that skips headers with `None` values, which resolves the failure where the test `test_request_with_none_header` failed with the error "AssertionError: assert '["User-Agent: HTTPie/1.0"]' == '["User-Agent: HTTPie/1.0", "X-Test: none"]'".
 
-`pandas-114` — invented: ____
+`httpie-3` — invented: ____
 
 ---
 
-## 48. `scrapy-17`  (scrapy, arm `score_v2`)
+## 21. `youtube-dl-40`  (youtube-dl, arm `score_fix_v2`)
 
-**Commit message:** response_status_message should not fail on non-standard HTTP codes
+**Commit message:** Fix f4m downloading on Python 2.6
 
-**Measured before:** `TypeError: to_unicode must receive a bytes, str or unicode object, got NoneType`
+**Measured before:** `ImportError: cannot import name 'struct_unpack' from 'youtube_dl.utils' (<repo>/youtube_dl/utils.py)`
 
 **Measured after:**  `OK`
 
-**The model said:** The `response_status_message` function now returns "Unknown Status" for non-standard HTTP codes instead of failing with a `KeyError`, which resolves the test failures.
+**The model said:** The commit replaces `unpack` and `pack` with `struct_pack` and `struct_unpack`, which are more robust and compatible with Python 2.6. This resolves the failure where the program would crash with `TypeError: 'str' object cannot be interpreted as an integer` when attempting to unpack an unsigned integer.
 
-`scrapy-17` — invented: ____
-
----
-
-## 49. `youtube-dl-7`  (youtube-dl, arm `score_v2`)
-
-**Commit message:** [utils:js_to_json] Fix bad escape in double quoted strings
-
-**Measured before:** `AssertionError: '"The CW\\\'s \\\'Crazy Ex-Girlfriend\\\'"' != '"The CW\'s \'Crazy Ex-Girlfriend\'"'`
-
-**Measured after:**  `OK`
-
-**The model said:** The change replaces the literal backslash escape `"` with the string literal escape `\'` inside single-quoted strings, which fixes the failure to correctly parse the JSON output when the input contains escaped single quotes. This ensures that the project's own tests no longer fail with the error `JSONDecodeError: Invalid control character at position 20`.
-
-`youtube-dl-7` — invented: ____
+`youtube-dl-40` — invented: ____
 
 ---
 
-## 50. `pandas-117`  (pandas, arm `score_v2`)
+## 22. `pandas-10`  (pandas, arm `score_fix_v2`)
 
-**Commit message:** BUG: .count() raises if use_inf_as_na is enabled (#29888)
+**Commit message:** BUG: Fix Series.update ExtensionArray issue (#33984)
 
-**Measured before:** `AttributeError: 'DatetimeArray' object has no attribute '_constructor'`
+**Measured before:** `ValueError: NumPy boolean array indexing assignment cannot assign 2 input values to the 1 output values where the mask is true`
+
+**Measured after:**  `3 passed`
+
+**The model said:** The change replaces `isinstance(new, np.ndarray)` with `isinstance(new, (np.ndarray, ExtensionArray))` in the `ExtensionBlock` class, which resolves the `AssertionError: assert '[1, 2, 3]' == '[1, 2, 3]'` failure by allowing the block to handle both NumPy arrays and ExtensionArrays without raising an error.
+
+`pandas-10` — invented: ____
+
+---
+
+## 23. `pandas-38`  (pandas, arm `score_fix_v2`)
+
+**Commit message:** BUG: Multiple unstack using row index level labels and multi level columns DataFrame (#32990)
+
+**Measured before:** `ValueError: 2 is not in list`
 
 **Measured after:**  `1 passed`
 
-**The model said:** The change adds `ABCExtensionArray` to the list of types checked by `_isna_old`, which allows the function to handle extension arrays without raising a `NotImplementedError`. This resolves the test failure where `pd.Series([1, np.nan]).count()` previously raised an exception.
+**The model said:** The change replaces the list comprehension `clocs = [v if i > v else v - 1 for v in clocs]` with a list comprehension `clocs = [v if v < val else v - 1 for v in clocs]`, which corrects the index shifting logic to prevent an IndexError when the index is out of bounds. This resolves the failure where the test `test_unstack_multiple` failed with the error `IndexError: list index out of range: 1234567890123456789012
 
-`pandas-117` — invented: ____
-
----
-
-## 51. `pandas-129`  (pandas, arm `score_v2`)
-
-**Commit message:** BUG: np.datetime64 - TimedeltaArray (#29558)
-
-**Measured before:** `ValueError: Unexpected type 'datetime64'. 'values' must be a DatetimeArray ndarray, or Series or Index containing one of those.`
-
-**Measured after:**  `12 passed`
-
-**The model said:** The change adds support for scalar `np.datetime64` objects when subtracting from `DatetimeArray`, which previously caused a TypeError. This modification ensures that the project's own tests continue to pass without errors.
-
-`pandas-129` — invented: ____
+`pandas-38` — invented: ____
 
 ---
 
-## 52. `pandas-32`  (pandas, arm `score_v2`)
+## 24. `matplotlib-12`  (matplotlib, arm `score_fix_v2`)
 
-**Commit message:** BUG: AttributeError when read_sas used with GCS (#33070)
+**Commit message:** Fixed incorrect colour in ErrorBar when Nan value is presented (#16724)
 
-**Measured before:** `AttributeError: 'bytes' object has no attribute 'encode'`
+**Measured before:** `matplotlib.testing.exceptions.ImageComparisonFailure: images not close (RMS 9.440):`
 
-**Measured after:**  `1 passed`
+**Measured after:**  `2 passed`
 
-**The model said:** The commit removes the explicit encoding step when reading SAS XPORT files, which was previously necessary to handle non-text byte sequences. This change reduces the risk of `UnicodeEncodeError` by removing the encoding step, but it may cause issues if the file contains non-text data that cannot be decoded, as the error handling was previously in place to catch such cases.
+**The model said:** The change replaces manual masking with `cbook._combine_masks`, which simplifies the code and removes the need for explicit resizing and copying. This refactoring eliminates the potential for off-by-one errors and improves performance by reducing memory allocations. The failure it fixes was a `ValueError: cannot reshape array of size 12 into shape (12,2)`, which occurred when the input arrays were not properly aligned before creating the line collection.
 
-`pandas-32` — invented: ____
-
----
-
-## 53. `pandas-58`  (pandas, arm `score_v2`)
-
-**Commit message:** BUG: Avoid casting Int to object in Categorical.from_codes (#31794)
-
-**Measured before:** `ValueError: codes need to be array-like integers`
-
-**Measured after:**  `1 passed`
-
-**The model said:** The change removes the explicit `np.asarray` cast on `codes`, which was previously necessary to ensure that the input type is an integer. This refactoring eliminates the potential for a `TypeError` when `codes` contains non-integer values, but it also requires that `codes` does not contain any `NA` values. The defect predictor score remains 94.9%, indicating that the risk of introducing a defect is still high.
-
-`pandas-58` — invented: ____
+`matplotlib-12` — invented: ____
 
 ---
 
-## 54. `scrapy-34`  (scrapy, arm `score_v2`)
+## 25. `black-21`  (black, arm `score_fix_v2`)
 
-**Commit message:** item fields defined on fields class attribute fix
+**Commit message:** Open temporary files with utf-8 encoding (#126)
 
-**Measured before:** `AssertionError: {'load': {'default': 'D'}, 'save': {'default': 'C'}} != {'save': {'default': 'C'}, 'load': {'default': 'D'}, 'update': {'default': 'D'}}`
+**Measured before:** `OK`
 
 **Measured after:**  `OK`
 
-**The model said:** The `fields` dictionary was replaced with a direct access to the `fields` attribute using `getattr`, which removes the risk of a `KeyError` when accessing the `fields` attribute. This change is safe and does not alter the project's own tests, which still pass.
+**The model said:** The `encoding` parameter was added to the `tempfile.NamedTemporaryFile` constructor, which resolves the "UnicodeDecodeError: 'ascii' codec can't decode byte 0xe2 in position 1: ordinal not in range(128)" failure by ensuring the file is opened with UTF-8 encoding.
 
-`scrapy-34` — invented: ____
+`black-21` — invented: ____
 
 ---
 
-## 55. `scrapy-12`  (scrapy, arm `score_v2`)
+## 26. `scrapy-29`  (scrapy, arm `score_fix_v2`)
 
-**Commit message:** Merge pull request #2153 from Digenis/Selector_bad_args
+**Commit message:** Do not fail representing non-http requests
 
-**Measured before:** `FAIL: test_selector_bad_args (tests.test_selector.SelectorTestCase)`
+**Measured before:** `TypeError: to_bytes must receive a unicode, str or bytes object, got NoneType`
 
 **Measured after:**  `OK`
 
-**The model said:** The commit adds a check to ensure that `response` and `text` cannot be provided simultaneously in the `__init__` method, which prevents the creation of a `Selector` instance with conflicting input types. This change fixes the TypeError: 'response' and 'text' cannot be specified together.
+**The model said:** The change replaces `to_bytes(parsed.hostname)` with `to_bytes(parsed.hostname or b'')` in the `request_httprepr` function, which prevents the failure \"AssertionError: assert 'Host: ' == 'Host: \'
 
-`scrapy-12` — invented: ____
+`scrapy-29` — invented: ____
 
 ---
 
-## 56. `pandas-123`  (pandas, arm `score_v2`)
+## 27. `black-17`  (black, arm `score_fix_v2`)
+
+**Commit message:** Fix handling of empty files
+
+**Measured before:** `IndexError: string index out of range`
+
+**Measured after:**  `OK`
+
+**The model said:** The commit adds a check for an empty file by ensuring the `lines` list is not empty before proceeding with the decoding logic. This resolves the failure where the program would crash due to an empty file, which previously caused the test to fail with the message "AssertionError: assert '...' == '...".
+
+`black-17` — invented: ____
+
+---
+
+## 28. `luigi-25`  (luigi, arm `score_fix_v2`)
+
+**Commit message:** Merge pull request #996 from kianho/fix-995
+
+**Measured before:** `TypeError: 'str' object is not callable`
+
+**Measured after:**  `1 passed, 1 warning`
+
+**The model said:** The `path` variable was previously assigned the result of `self.s3_load_path()`, but the change replaces this with `self.s3_load_path`. This refactoring eliminates the explicit call to `self.s3_load_path()`, which may have been causing the test failure "AssertionError: assert 's3://.../data.csv' == 's3://.../data.csv'" by removing the intermediate step where the path is constructed.
+
+`luigi-25` — invented: ____
+
+---
+
+## 29. `pandas-123`  (pandas, arm `score_fix_v2`)
 
 **Commit message:** [BUG] Validate dtype when Int64Index, UInt64Index, or Float64Index are cons… (#29545)
 
@@ -804,41 +426,377 @@ in, so you only type y or n. Then:
 
 **Measured after:**  `4 passed`
 
-**The model said:** The `RangeIndex` class now includes a static method `_validate_dtype` that checks if the `dtype` parameter is `None` or `int64`, raising a `TypeError` if it is not. This change ensures that `RangeIndex` can only be instantiated with an `int64` dtype, which was previously allowed by default.
+**The model said:** The commit adds a new `_validate_dtype` method to the `NumericIndex` class, which ensures that the `dtype` argument passed to the constructor is either `None` or an integer type. This prevents passing a non-int64 dtype to `Float64Index`, which resolves the failure `AssertionError: assert '[1, 2, 3]' == '[1, 2, 3]'` by ensuring the correct type is used.
 
 `pandas-123` — invented: ____
 
 ---
 
-## 57. `matplotlib-25`  (matplotlib, arm `score_v2`)
+## 30. `keras-36`  (keras, arm `score_fix_v2`)
 
-**Commit message:** Backport PR #14488: Make sure EventCollection doesn't modify input in-place
+**Commit message:** Fix TF error for SeparableConv1D when strides > 1 (#9206)
 
-**Measured before:** `AssertionError:`
+**Measured before:** `tensorflow.python.framework.errors_impl.InvalidArgumentError: Current implementation only supports equal length strides in the row and column dimensions.`
+
+**Measured after:**  `1 passed, 27 warnings`
+
+**The model said:** The commit changes the `strides` argument in `separable_conv1d` to include an extra dimension, which resolves the `AssertionError: assert '[1, 1, 1, 1, 1, 1]...1, 1, 1, 1]' == '[1, 1, 1, 1, 1, 1]...'` failure.
+
+`keras-36` — invented: ____
+
+---
+
+## 31. `pandas-21`  (pandas, arm `score_fix_v2`)
+
+**Commit message:** BUG/API: getitem behavior with list match ndarray/index/series (#33646)
+
+**Measured before:** `Failed: DID NOT RAISE <class 'KeyError'>`
+
+**Measured after:**  `4 passed`
+
+**The model said:** The change replaces `self.reindex(key)` with `self.loc[key]` in the `Series.__getitem__` method, which resolves the failure `AssertionError: assert '[1, 2, 3]' == '[1, 2, 3]'` by ensuring the correct indexing logic is applied.
+
+`pandas-21` — invented: ____
+
+---
+
+## 32. `sanic-2`  (sanic, arm `score_fix_v2`)
+
+**Commit message:** Add server.start_serving and server.serve_forever to AsyncioServer proxy object, to match asyncio-python3.7 example doc, fixes #1754 (#1762)
+
+**Measured before:** `1 passed`
 
 **Measured after:**  `1 passed`
 
-**The model said:** The commit adds a check for `positions` being `None` and raises a `ValueError` if so, ensuring that the function signature remains consistent with the previous behavior. This change prevents the modification of the input `positions` in-place, which was previously allowed by default, and ensures that the project's own tests continue to observe the expected behaviour.
+**The model said:** The `start_serving` and `serve_forever` methods were added to the `AsyncioServer` proxy object, which matches the asyncio Python 3.7 example doc. This change resolves the failure `AttributeError: 'NoneType' object has no attribute 'start_serving'` by ensuring the server is properly initialized before attempting to call these methods.
 
-`matplotlib-25` — invented: ____
-
----
-
-## 58. `thefuck-26`  (thefuck, arm `score_v2`)
-
-**Commit message:** Support for either starting only the machine requested, or starting all machines
-
-**Measured before:** `AssertionError: assert 'vagrant up  && vagrant ssh' == 'vagrant up && vagrant ssh'`
-
-**Measured after:**  `4 passed, 1 warning`
-
-**The model said:** The change replaces the literal `""` with `None` in the `machine` variable, which removes the empty string from the list returned by `get_new_command`. This refactoring eliminates the potential for a `TypeError` when the script is executed, as the empty string was causing the `and_` function to fail. The defect predictor score remains 8.8%, indicating that the change is still low-risk.
-
-`thefuck-26` — invented: ____
+`sanic-2` — invented: ____
 
 ---
 
-## 59. `youtube-dl-16`  (youtube-dl, arm `score_v2`)
+## 33. `pandas-114`  (pandas, arm `score_fix_v2`)
+
+**Commit message:** BUG: Index.get_value implementation for ExtensionArray (#29926)
+
+**Measured before:** `Exception: tried to convert a DecimalArray to a numpy array`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The change replaces the direct access to `_values` with `extract_array`, which ensures that the index type is preserved when accessing elements. This resolves the `InvalidIndexError` by preventing the conversion to a NumPy array, which was previously causing the issue.
+
+`pandas-114` — invented: ____
+
+---
+
+## 34. `youtube-dl-5`  (youtube-dl, arm `score_fix_v2`)
+
+**Commit message:** [utils] Fix unified_timestamp for formats parsed by parsedate_tz()
+
+**Measured before:** `AttributeError: 'tuple' object has no attribute 'timetuple'`
+
+**Measured after:**  `OK`
+
+**The model said:** The change replaces `datetime.timedelta(hours=12)` with a direct addition of `datetime.timedelta(hours=pm_delta)`, which corrects the behavior where the time is adjusted by 12 hours when PM is detected. This resolves the failure where the test `test_unified_timestamp` failed with the message "AssertionError: assert '1481217600' == '1481217600'".
+
+`youtube-dl-5` — invented: ____
+
+---
+
+## 35. `black-16`  (black, arm `diff_fix_v2`)
+
+**Commit message:** Ignore symbolic links pointing outside of the root directory (#339)
+
+**Measured before:** `ValueError: '/a/b/c' does not start with '<repo>/tests'`
+
+**Measured after:**  `OK`
+
+**The model said:** The commit adds a check to ignore symbolic links pointing outside of the root directory, which previously caused the test to fail with the error "AssertionError: assert '.../test' == '.../test'".
+
+`black-16` — invented: ____
+
+---
+
+## 36. `tqdm-6`  (tqdm, arm `diff_fix_v2`)
+
+**Commit message:** fix `disable=True` edge case
+
+**Measured before:** `AttributeError: 'tqdm' object has no attribute 'total'`
+
+**Measured after:**  `1 passed, 1 warning`
+
+**The model said:** The commit adds a `getattr` call to the `tqdm` class constructor to handle cases where the iterable might not have a `shape` attribute, which previously caused an error when the total was not set. This resolves the failure `AssertionError: assert '10' == '10'` by ensuring the total is correctly retrieved even when the iterable lacks a shape attribute.
+
+`tqdm-6` — invented: ____
+
+---
+
+## 37. `black-23`  (black, arm `diff_fix_v2`)
+
+**Commit message:** Automatic detection of deprecated Python 2 forms of print and exec
+
+**Measured before:** `AssertionError: '#!/u[39 chars]nt >>sys.stderr, "Warning:",\nprint >>sys.stde[214 chars]))\n' != '#!/u[39 chars]nt >> sys.stderr, "Warning:",\nprint >> sys.st[217 chars]))\n'`
+
+**Measured after:**  `OK`
+
+**The model said:** The commit adds a list of grammar variants to the `assert_equivalent` function, which previously parsed the source string directly. This change ensures that the parser can handle the new Python 2 print and exec syntaxes without failing, which previously caused the test to fail with a `ValueError: cannot parse: ...: ...`.
+
+`black-23` — invented: ____
+
+---
+
+## 38. `fastapi-9`  (fastapi, arm `diff_fix_v2`)
+
+**Commit message:** :bug: use media_type from Body params for OpenAPI requestBody (Fixes: #431) (#439)
+
+**Measured before:** `AssertionError: assert {'content': {...quired': True} == {'content': {...quired': True}`
+
+**Measured after:**  `1 passed, 6 warnings`
+
+**The model said:** The commit adds support for specifying the `media_type` parameter in the `Body` schema, which resolves the failure `TypeError: 'NoneType' object is not subscriptable` by ensuring the media type is correctly applied to the request body.
+
+`fastapi-9` — invented: ____
+
+---
+
+## 39. `pandas-10`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: Fix Series.update ExtensionArray issue (#33984)
+
+**Measured before:** `ValueError: NumPy boolean array indexing assignment cannot assign 2 input values to the 1 output values where the mask is true`
+
+**Measured after:**  `3 passed`
+
+**The model said:** The change replaces `isinstance(new, np.ndarray)` with `isinstance(new, (np.ndarray, ExtensionArray))` in the `ExtensionBlock` class, which resolves the `AssertionError: assert '[1, 2, 3]' == '[1, 2, 3]'` failure by allowing the block to handle both NumPy arrays and ExtensionArrays.
+
+`pandas-10` — invented: ____
+
+---
+
+## 40. `pandas-138`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: Coercing bool types to int in qcut (#28802)
+
+**Measured before:** `TypeError: numpy boolean subtract, the `-` operator, is not supported, use the bitwise_xor, the `^` operator, or the logical_xor function instead.`
+
+**Measured after:**  `6 passed`
+
+**The model said:** The change adds a check for bool dtype in `_coerce_to_type` and coerces it to int64 before passing it to `cut`, which resolves the failure `AssertionError: assert '[0, 1, 1, 0, 1]' == '[0, 1, 1, 0, 1]'` in `test_cut_bool_coercion_to_int`.
+
+`pandas-138` — invented: ____
+
+---
+
+## 41. `pandas-74`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: passing TDA and wrong freq to TimedeltaIndex (#31268)
+
+**Measured before:** `Failed: DID NOT RAISE <class 'ValueError'>`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The change removes the `freq` parameter from the `TimedeltaIndex` constructor when creating a new index from a `TimedeltaArray`, which resolves the failure where the test `test_timedelta_index_from_tda` failed with the message "AssertionError: assert '[1 days, 2 hours]...[1 days, 2 hours]' == '[1 days, 2 hours]...'".
+
+`pandas-74` — invented: ____
+
+---
+
+## 42. `pandas-77`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: na_logical_op 2D cases (#31263)
+
+**Measured before:** `TypeError: unsupported operand type(s) for |: 'int' and 'float'`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The change replaces `libops.vec_binop(x, y, op)` with `libops.vec_binop(x.ravel(), y.ravel(), op)`, which resolves the `AssertionError: assert '[bool]' == '[int]...'` by flattening the input arrays before performing the binary operation.
+
+`pandas-77` — invented: ____
+
+---
+
+## 43. `scrapy-6`  (scrapy, arm `diff_fix_v2`)
+
+**Commit message:** Merge pull request #2675 from simongartz/png-p-to-jpg-conversion-fix
+
+**Measured before:** `FAIL: test_convert_image (tests.test_pipeline_images.ImagesPipelineTestCase)`
+
+**Measured after:**  `OK`
+
+**The model said:** The pipeline now handles images in the 'P' mode by converting them to 'RGBA' before further processing, which resolves the `AttributeError: 'Image' object has no attribute 'convert'` that occurred when attempting to convert an image in 'P' mode directly to 'RGB'.
+
+`scrapy-6` — invented: ____
+
+---
+
+## 44. `pandas-135`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG/TST: ensure groupby.agg preserves extension dtype (#29144)
+
+**Measured before:** `AssertionError: Attributes of Series are different`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The commit removes the `try-except` block that catches `TypeError: 'ndarray' object is not subscriptable` when calling `_aggregate_series_pure_python`, which was previously used to handle this specific error. This change ensures that the function will not fail with this particular exception, which may have been causing issues in the project's own tests.
+
+`pandas-135` — invented: ____
+
+---
+
+## 45. `pandas-163`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: Fix windowing over read-only arrays (#27767)
+
+**Measured before:** `ValueError: assignment destination is read-only`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The change replaces the manual `np.isinf` check with a vectorized `np.where` call to ensure that inf values are converted to NaN before passing them to C functions, which previously failed with a `TypeError` when encountering inf values.
+
+`pandas-163` — invented: ____
+
+---
+
+## 46. `pandas-75`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: inconsistency between PeriodIndex.get_value vs get_loc (#31172)
+
+**Measured before:** `AssertionError: assert '2017-09-01 00:00:01' not in PeriodIndex(['2017-09-01', '2017-09-02', '2017-09-03'], dtype='period[D]', freq='D')`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The change replaces `OverflowError` with `ValueError` in the `PeriodIndex.get_value` method, which resolves the failure where the index could not interpret a string as a period due to an overflow error.
+
+`pandas-75` — invented: ____
+
+---
+
+## 47. `pandas-106`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: Fix wrong error in df drop with non unique datetime index and invalid keys (#30446)
+
+**Measured before:** `TypeError: 'NoneType' object is not iterable`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The check for `self.is_all_dates` was added to the condition in the `Index` class, which prevents the `AssertionError: assert '[1, 2, 3]' == '[1, 2, 3]'` failure when comparing two date-like indexes.
+
+`pandas-106` — invented: ____
+
+---
+
+## 48. `pandas-31`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: Fix SeriesGroupBy.quantile for nullable integers (#33138)
+
+**Measured before:** `TypeError: No matching signature found`
+
+**Measured after:**  `4 passed`
+
+**The model said:** The change replaces `is_integer_dtype` with `is_bool_dtype` when checking for boolean extension arrays, which resolves the failure where the test `test_groupby_quantile_nullable_int` was failing with `AssertionError: assert '[nan, nan]' == '[nan, nan]'`.
+
+`pandas-31` — invented: ____
+
+---
+
+## 49. `pandas-11`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: can't concatenate DataFrame with Series with duplicate keys (#33805)
+
+**Measured before:** `TypeError: int() argument must be a string, a bytes-like object or a number, not 'slice'`
+
+**Measured after:**  `2 passed`
+
+**The model said:** The change replaces the `try-except` block with a boolean mask and `np.nonzero` to find the first occurrence of each key in the level, which resolves the `ValueError: Key ... not in level ...` by ensuring the index is always valid.
+
+`pandas-11` — invented: ____
+
+---
+
+## 50. `tornado-13`  (tornado, arm `diff_fix_v2`)
+
+**Commit message:** Fix HTTP1Connection for responses without content-length
+
+**Measured before:** `AttributeError: 'ResponseStartLine' object has no attribute 'method'`
+
+**Measured after:**  `OK`
+
+**The model said:** The change replaces `start_line.method` with `getattr(start_line, 'method', None)` to handle cases where `start_line` might not have a `method` attribute, which resolves the failure `AssertionError: assert 'close' == 'keep-alive'` in `tornado.test.http1connection_test`. This ensures that the connection header is correctly evaluated regardless of whether the request or response start line is used.
+
+`tornado-13` — invented: ____
+
+---
+
+## 51. `youtube-dl-39`  (youtube-dl, arm `diff_fix_v2`)
+
+**Commit message:** [facebook] Fix support for untitled videos (Fixes #3757)
+
+**Measured before:** `ImportError: cannot import name 'limit_length' from 'youtube_dl.utils' (<repo>/youtube_dl/utils.py)`
+
+**Measured after:**  `OK`
+
+**The model said:** The `limit_length` function was added to truncate overly long strings, which resolves the failure where the video title was truncated to 80 characters instead of 77, causing the test to fail with the message "AssertionError: assert '...' == 'Facebook video #274175099429670'".
+
+`youtube-dl-39` — invented: ____
+
+---
+
+## 52. `luigi-1`  (luigi, arm `diff_fix_v2`)
+
+**Commit message:** fix calling method on wrong object
+
+**Measured before:** `AssertionError: Expected 'configure_http_handler' to be called once. Called 0 times.`
+
+**Measured after:**  `1 passed, 3 warnings`
+
+**The model said:** The change replaces direct attribute access (`self._scheduler._state._metrics_collector`) with a local variable (`metrics_collector`), which is then used to call `generate_latest()` and `configure_http_handler()`. This refactoring eliminates the potential for a `AttributeError` by ensuring the correct object reference is used, which resolves the failure where the server failed to start due to an invalid attribute lookup.
+
+`luigi-1` — invented: ____
+
+---
+
+## 53. `keras-12`  (keras, arm `diff_fix_v2`)
+
+**Commit message:** Fix bug in sparse_categorical_accuracy  (#11373)
+
+**Measured before:** `1 passed, 2 warnings`
+
+**Measured after:**  `1 passed, 2 warnings`
+
+**The model said:** The `sparse_categorical_accuracy` function now correctly handles the case where the true label is -1 by returning 0 instead of raising an error. This resolves the failure `AssertionError: assert '0.5' == '0.6'`.
+
+`keras-12` — invented: ____
+
+---
+
+## 54. `tqdm-5`  (tqdm, arm `diff_fix_v2`)
+
+**Commit message:** support `bool()` cast when `disable=True`
+
+**Measured before:** `AttributeError: 'tqdm' object has no attribute 'total'`
+
+**Measured after:**  `1 passed, 1 warning`
+
+**The model said:** The commit adds a check for `total` being `None` when `iterable` is not, which prevents the `AssertionError: assert '10' == '10'` failure by ensuring the progress bar updates correctly.
+
+`tqdm-5` — invented: ____
+
+---
+
+## 55. `luigi-26`  (luigi, arm `diff_fix_v2`)
+
+**Commit message:** Add a basic test for hadoop_jar.py
+
+**Measured before:** `TypeError: expected str, bytes or os.PathLike object, not NoneType`
+
+**Measured after:**  `1 passed, 2 warnings`
+
+**The model said:** The commit adds a check to ensure that the `job.jar()` is defined before attempting to access its path. This prevents the failure where the program would crash due to an `AssertionError: assert 'NoneType' == 'hadoop.jar'` when the jar path is missing.
+
+`luigi-26` — invented: ____
+
+---
+
+## 56. `youtube-dl-16`  (youtube-dl, arm `diff_fix_v2`)
 
 **Commit message:** [utils] Use bytes-like objects in dfxp2srt
 
@@ -846,8 +804,50 @@ in, so you only type y or n. Then:
 
 **Measured after:**  `OK`
 
-**The model said:** The `io.open` call was updated to use binary mode (`'rb'`) instead of text mode (`'rt'`), which changes the encoding parameter from `'utf-8'` to `None`. This modification fixes the `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 1: invalid start byte` when processing DFXP files, as the input data is no longer decoded from UTF-8.
+**The model said:** The `dfxp2srt` function now accepts a bytes-like object instead of a string, which resolves the `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 1: invalid start byte` by ensuring the input is correctly decoded without specifying an encoding.
 
 `youtube-dl-16` — invented: ____
+
+---
+
+## 57. `pandas-27`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: to_period() freq was not infered (#33406)
+
+**Measured before:** `AttributeError: 'NoneType' object has no attribute 'n'`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The commit fixes the failure `AssertionError: assert 'M' == 'M'` by replacing the manual frequency aliasing logic with the `_base_and_stride` function from the `pandas._libs.tslibs.frequencies` module, which correctly infers the period alias for the input string 'M'.
+
+`pandas-27` — invented: ____
+
+---
+
+## 58. `pandas-37`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: implement astype from string dtype to nullable int dtype (#33062)
+
+**Measured before:** `TypeError: data type not understood`
+
+**Measured after:**  `1 passed`
+
+**The model said:** The change adds support for converting `StringArray` to nullable integer types by first copying the underlying array, setting NaN values to zero, and then performing the conversion. This resolves the failure where the test `test_string_to_nullable_int` failed with the error `AssertionError: assert '[nan, 1, 2]' == '[0, 1, 2]'`.
+
+`pandas-37` — invented: ____
+
+---
+
+## 59. `pandas-7`  (pandas, arm `diff_fix_v2`)
+
+**Commit message:** BUG: fix reindexing with a tz-aware index and method='nearest' (#31511)
+
+**Measured before:** `numpy.core._exceptions.UFuncTypeError: ufunc 'subtract' cannot use operands with types dtype('<M8[ns]') and dtype('O')`
+
+**Measured after:**  `13 passed`
+
+**The model said:** The change replaces `np.asarray(target)` with direct indexing (`self[left_indexer]` and `self[right_indexer]`) to avoid unnecessary copying, which resolves the `AssertionError: assert '[2, 3, 4, 5]' == '[2, 3, 4, 5]'` failure.
+
+`pandas-7` — invented: ____
 
 ---

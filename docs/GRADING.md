@@ -7,7 +7,7 @@ agreement between that rubric and a person has never been measured. Until it is,
 a reviewer asking "how do you know your rubric measures what you say it does"
 has no answer.
 
-Both packets are drawn from `v3plain_v2` -- the arm the paper actually cites.
+Both packets are drawn from `v3plain_fix_v2` -- the arm the paper actually cites.
 The earlier packets came from `bip_arm_exec.json`, which is n=264 and a
 superseded checkpoint, so grading those would have measured agreement on output
 nobody reports.
@@ -45,7 +45,7 @@ blank is data; a guess is noise.**
 Then:
 
     .venv/bin/python bench/bugsinpy_rater.py --score data/bip_rater_v3.csv \
-        --arm v3plain_v2 --rows data/bugsinpy_rows_v2.jsonl
+        --arm v3plain_fix_v2 --rows data/bugsinpy_rows_v2.jsonl
 
 ## Job 2 -- 59 flagged inventions (~30 min)
 
@@ -57,8 +57,8 @@ contradicts or never showed? `n` means the rubric is wrong here -- the named
 failure IS in the measurement, or the sentence is hedged enough not to assert
 it.
 
-All 9 of `v3plain_v2`'s flagged inventions are here, uncapped, because those are
-the ones the headline depends on. `diff_v2` and `score_v2` are sampled at 25
+All 9 of `v3plain_fix_v2`'s flagged inventions are here, uncapped, because those are
+the ones the headline depends on. `diff_fix_v2` and `score_fix_v2` are sampled at 25
 each, so the contrast they support is an estimate with a stated n rather than a
 census. The arm is shown because it is not blindable -- the prompts differ
 visibly. What is withheld is which class the rubric thought was invented.
@@ -70,7 +70,7 @@ different sentences. The `arm` column keeps them apart.
 Then:
 
     .venv/bin/python bench/bugsinpy_rater.py --score data/bip_inventions_v3.csv \
-        --arm v3plain_v2 --rows data/bugsinpy_rows_v2.jsonl
+        --arm v3plain_fix_v2 --rows data/bugsinpy_rows_v2.jsonl
 
 ---
 

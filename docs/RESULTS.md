@@ -3,16 +3,233 @@
 Every measurement taken, with the command that reproduces it. Numbers only —
 interpretation lives in `ROADMAP.md`, corpus provenance in `DATASETS.md`.
 
-Status as of 2026-09-06.
+Status as of 2026-09-08.
 
 ---
 
-## Retraining on a pytest-shaped corpus: 40% -> 86% deployed (2026-09-06, latest)
+## The numbers, in one place (8 Sep 2026)
+
+Bench: **BugsInPy, 458 frozen rows**, `data/bugsinpy_rows_v2.jsonl`.
+Rubric: `grounded = (names_exception or quotes_signature) and not invented`.
+All nine plain arms and both guarded arms were run back to back on 8 Sep
+against one parser and one checkpoint set. Greedy decode, 4-bit nf4,
+Qwen2.5-Coder-3B-Instruct + LoRA r=64 a=128, GTX 1660 SUPER.
+
+### Unguarded arms
+
+| arm | explained | names exc | quotes msg | names ident | INVENTS | **GROUNDED** |
+|---|---|---|---|---|---|---|
+| v3, plain | 457 (100%) | 342 | 399 | 427 | 9 | **412 (90%)** |
+| v3 seed 7, plain | 455 (99%) | 334 | 398 | 437 | 10 | **412 (90%)** |
+| v4, plain | 455 (99%) | 350 | 369 | 436 | 14 | **390 (85%)** |
+| v3, strong prompt | 453 (99%) | 333 | 391 | 410 | 31 | **377 (82%)** |
+| base, strong prompt | 456 (100%) | 244 | 246 | 411 | 13 | **292 (64%)** |
+| sft-exec-v2, strong prompt | 455 (99%) | 248 | 290 | 417 | 20 | **286 (62%)** |
+| base, plain | 458 (100%) | 164 | 43 | 401 | 11 | **184 (40%)** |
+| v3, JIT score only | 453 (99%) | 99 | 22 | 440 | 120 | **105 (23%)** |
+| v3, diff only | 455 (99%) | 67 | 21 | 437 | 95 | **76 (17%)** |
+
+### Guarded arms (the deployed configuration)
+
+| arm | said anything | names exc | quotes msg | names ident | INVENTS | **GROUNDED** |
+|---|---|---|---|---|---|---|
+| guarded v3, seed 42 | 444 (97%) | 334 | 388 | 382 | 2 | **399 (87%)** |
+| guarded v3, seed 7 | 445 (97%) | 310 | 376 | 395 | 3 | **382 (83%)** |
+
+### Paired McNemar, n = 458
+
+| comparison | only A | only B | p | |
+|---|---|---|---|---|
+| v3, plain vs v3 seed 7, plain | 27 | 27 | 1 | **NOT distinguishable** |
+| v3, plain vs v4, plain | 50 | 28 | 0.0169 | distinguishable |
+| v3, plain vs v3, strong prompt | 64 | 29 | 0.000366 | distinguishable |
+| v3, plain vs base, strong prompt | 139 | 19 | 1e-23 | distinguishable |
+| v3, plain vs sft-exec-v2, strong prompt | 147 | 21 | 1.78e-24 | distinguishable |
+| v3, plain vs base, plain | 234 | 6 | 2.89e-61 | distinguishable |
+| v3, plain vs v3, JIT score only | 309 | 2 | 2.33e-89 | distinguishable |
+| v3, plain vs v3, diff only | 338 | 2 | 5.18e-98 | distinguishable |
+| v3 seed 7, plain vs v4, plain | 48 | 26 | 0.0141 | distinguishable |
+| base, plain vs base, strong prompt | 35 | 143 | 1.08e-16 | distinguishable |
+| base, strong prompt vs sft-exec-v2, strong prompt | 100 | 94 | 0.72 | **NOT distinguishable** |
+| v3, JIT score only vs v3, diff only | 46 | 17 | 0.000337 | distinguishable |
+| guarded v3 s42 vs guarded v3 s7 | 46 | 29 | 0.0639 | **NOT distinguishable** |
+| guarded v3 s42 vs v3 plain unguarded | 27 | 40 | 0.142 | **NOT distinguishable** |
+| guarded v3 s7 vs v3 plain unguarded | 29 | 59 | 0.00182 | distinguishable |
+| guarded v3 s42 vs base, strong prompt | 133 | 26 | 1.66e-18 | distinguishable |
+
+### Split by whether an exception class exists to name
+
+`no class to name` = `AssertionError` or bare, **250 rows**; `named` = **208 rows**; `bare assert` = **60 rows** (a subset of the first).
+
+| arm | no class to name | named exception | bare assert |
+|---|---|---|---|
+| v3, plain | 207/250 (83%) | 205/208 (99%) | 41/60 (68%) |
+| v3 seed 7, plain | 212/250 (85%) | 200/208 (96%) | 43/60 (72%) |
+| v4, plain | 195/250 (78%) | 195/208 (94%) | 35/60 (58%) |
+| v3, strong prompt | 179/250 (72%) | 198/208 (95%) | 23/60 (38%) |
+| base, strong prompt | 123/250 (49%) | 169/208 (81%) | 26/60 (43%) |
+| sft-exec-v2, strong prompt | 144/250 (58%) | 142/208 (68%) | 23/60 (38%) |
+| base, plain | 20/250 (8%) | 164/208 (79%) | 6/60 (10%) |
+| v3, JIT score only | 60/250 (24%) | 45/208 (22%) | 0/60 (0%) |
+| v3, diff only | 33/250 (13%) | 43/208 (21%) | 0/60 (0%) |
+| guarded v3, seed 42 | 200/250 (80%) | 199/208 (96%) | 42/60 (70%) |
+| guarded v3, seed 7 | 194/250 (78%) | 188/208 (90%) | 41/60 (68%) |
+
+### McNemar within each subset, v3 plain as A
+
+| vs | no class: A / B / p | named: A / B / p |
+|---|---|---|
+| v3 seed 7, plain | 22 / 27 / 0.568 | 5 / 0 / 0.0625 |
+| v4, plain | 39 / 27 / 0.175 | 11 / 1 / 0.00635 |
+| v3, strong prompt | 54 / 26 / 0.00232 | 10 / 3 / 0.0923 |
+| base, strong prompt | 100 / 16 / 4.96e-16 | 39 / 3 / 5.63e-09 |
+| sft-exec-v2, strong prompt | 82 / 19 / 1.66e-10 | 65 / 2 / 3.09e-17 |
+| base, plain | 190 / 3 / 1.91e-52 | 44 / 3 / 2.46e-10 |
+| v3, JIT score only | 148 / 1 / 4.2e-43 | 161 / 1 / 5.58e-47 |
+| v3, diff only | 175 / 1 / 3.7e-51 | 163 / 1 / 1.41e-47 |
+
+### Is the rubric being saturated by copying? (the 412 grounded rows of v3 plain)
+
+- distinct explanation frames: **412/412**
+- median explanation **227 characters**; the measured signature is **24%** of it (p90 44%)
+- rows that are >=90% signature: **5**
+- also name a changed identifier: **387/412**
+- grounded by quoting alone **70**, by naming alone **18**, by both **324**
+
+### Training, for the two v3 checkpoints
+
+Identical to `oracle-reviewer-3b` apart from the corpus and the seed, so the
+corpus is the only variable: 1 epoch, verdict-weight 0.5, 4-bit, LoRA r=64
+alpha=128, 147 steps.
+
+| | seed 42 | seed 7 |
+|---|---|---|
+| wall clock | 4h56m | 4h57m |
+| `train_loss` | 1.744 | 2.24 |
+| mean token accuracy | 0.896 | 0.867 |
+| held-out verdict recall | 1.000 | 1.000 |
+| held-out specificity | 0.842 | 0.737 |
+| held-out top-1 | 0.925 | 0.875 |
+| **bench, plain** | **412/458** | **412/458** |
+| **bench, guarded** | **399/458** | **382/458** |
+
+Every training metric favours seed 42; the plain bench cannot separate them
+(p = 1.000). **Training metrics gate a run, they do not rank checkpoints.**
+
+### The corpus that produced the jump
+
+| | v2 | v3 |
+|---|---|---|
+| training rows | 1103 | **1170** |
+| positive (behaviour differs) | 7% | **39%** |
+| distinct mutation families | 22 | **36** |
+| single-label families | 34% | **11%** |
+| distinct explanation frames | 0.97 | **0.99** |
+| rows failing the grounding audit | 459 (undetected) | **0** |
+
+### What is NOT measured, and must not be claimed
+
+- **Explanation *correctness* is not measured here.** `grounded` asks whether
+  the explanation is faithful to the observed failure, not whether it identifies
+  the *cause*. The 25 Aug locus/mechanism split puts those ~20 points apart.
+  **90% grounded is not 90% correct.**
+- **No human has validated the rubric yet.** 109 blind hand-grades are prepared
+  (`docs/GRADING.md`) and ungraded. Until then every number above is an
+  automated proxy.
+- **The `sft-exec-v2` guarded pair is pre-fix**, so the guarded v2 comparison
+  and the "89% of the jump is the corpus" decomposition are not reportable.
+- **Explain mode has no measurement at all.** It ships; no arm covers it.
+- **The guarded arm carries a ~17-row seed band.** Any single-seed guarded
+  comparison inherits it.
+
+---
+
+## Correction: a JSON parser bug suppressed every arm (2026-09-08)
+
+`first_json` matched braces without tracking string state. A measured failure
+signature containing a brace -- `KeyError: {'a': 1}`, an f-string repr, a dict
+inside a traceback -- closed the object early, and the row was scored as *the
+model said nothing*.
+
+The bug was **selective, not noisy**. Rows whose measured `before`/`after`
+contained a brace were hit 8x more often than rows without one (33% against
+4%), so it deleted precisely the rows where the model had lifted a structured
+value out of the traceback -- the behaviour the corpus exists to teach.
+
+Five near-identical copies of the function existed, two of them on shipped
+paths (`review.py`, `oracle_reviewer/core.py`). They are now one module,
+`oracle_reviewer/jsonio.py`, with 37 tests.
+
+**It suppressed the trained model and spared the base model**, and the counts
+reconcile exactly:
+
+| arm | rows scored "said nothing" pre-fix | recovered by the fix | of those, grounded | net |
+|---|---|---|---|---|
+| base, plain | 2 | 2 | 1 | **+1** |
+| v3, plain, seed 42 | 18 | 17 | 12 | **+12** |
+| v3, plain, seed 7 | **32** | — | — | **+17** |
+
+The base model's output was already flat prose with no quoted structure to
+break, so there was almost nothing there to lose. v3 seed 7 was hit nearly twice
+as hard as seed 42 (32 rows against 18), and that single fact accounts for the
+entire apparent 5-row seed effect reported on 7 Sep -- see the seed replicate
+section, where both seeds now land on 412 exactly.
+
+Two consequences, and they are different:
+
+1. **Every pre-8-Sep number understates its arm**, by an amount that depends on
+   how much structured text that arm quotes. A comparison taken *within* one
+   pre-fix run is still internally consistent, because both arms went through
+   the same broken parser -- it is biased against the better arm, so it is
+   conservative, not wrong-signed.
+2. **A comparison that mixes a pre-fix arm with a post-fix arm is invalid**, and
+   several had accumulated: `--adapter` defaults to the `artifacts/oracle-reviewer-3b`
+   symlink, which was re-pointed on 7 Sep, so the ablation arms had also been
+   measured against a different checkpoint than the one they were being compared
+   to. That is the reason for the full re-run rather than a patch.
+
+All nine plain arms below were re-run against one parser and one checkpoint set,
+back to back, on the same frozen 458 rows, 8 Sep 01:14-12:08, and the deployed
+guarded arm followed at 14:13.
+
+> **A residual, measured rather than assumed.** The GPU box ran the parser as it
+> stood on 7 Sep 20:42; the copy in the tree gained two more repairs after that
+> (a greedy `explanation` read, and holding aside a valid object found nested in
+> prose), deliberately not synced so that all nine arms shared one parser. That
+> leaves **25 rows across the nine arms** -- 1 on v3 plain, 0 on base, 2-5
+> elsewhere -- which the box scored as "said nothing" and the tree's parser
+> recovers from the stored raw text. They are all the same shape: a `youtube-dl`
+> or `tornado` explanation quoting JSON with unescaped inner quotes.
+>
+> Re-scoring all nine arms with the tree's parser moves them by **+0 to +5 rows**
+> and **changes no conclusion**: v3 plain 412 -> 413, base 184 -> 184, v3 vs v4
+> p = 0.0169 -> 0.0286, v3 vs v3-strong p = 0.000366 -> 0.00152, v3 vs
+> base+strong p = 1.0e-23 -> 4.0e-23. The tables below report the **as-run**
+> figures, because those are the ones where a single parser touched every arm;
+> the recovery is a hybrid (recovered rows get one parser, the rest another) and
+> is reported here rather than mixed into the tables. The bias is conservative
+> and slightly against the trained model, since the weaker arms have more rows
+> to recover. What remains **un-re-run** is the `sft-exec-v2`
+guarded pair; the two places that compare against it are struck and labelled
+below rather than renumbered. Sections dated before 6 Sep are left as recorded,
+with their pre-fix numbers, and should be read as conservative.
+
+---
+
+## Retraining on a pytest-shaped corpus: 40% -> 90% unguarded (2026-09-06, re-measured 2026-09-08)
 
 The section below this one ends on a null: the deployed reviewer scored 183/458
 (40%) and was statistically indistinguishable from the un-fine-tuned base model,
 67 discordant rows against 67, p = 1.00. This section is what changed that, and
-the headline is that **the deployed path now scores 392/458 (86%)**.
+the headline is that **the same 458 rows now score 412/458 (90%)** on the
+unguarded arm, against 184/458 (40%) for the un-fine-tuned base under the same
+prompt.
+
+> Every unguarded arm in this section was re-measured on 8 Sep against the fixed
+> parser, and so was the deployed guarded arm: **399/458 (87%)**. What has *not*
+> been re-run is the `sft-exec-v2` guarded pair, so the two subsections that
+> compare against it are marked below and their headline ratio is not currently
+> reportable.
 
 Two things were wrong, and only one of them was the model.
 
@@ -84,62 +301,118 @@ every reading** (the standing kill condition is 0.000 at step 20); specificity
 
 ### The bench arms
 
-Same frozen 458 rows, same rubric, same decode as every arm in the section below.
+Same frozen 458 rows, same rubric, same decode, **one parser** -- nine arms run
+back to back on 8 Sep so that no comparison in this table crosses a code change.
 
     python bench/eval_bugsinpy_arms.py --arm exec --adapter artifacts/sft-exec-v3 \
-        --prompt plain --out data/bip_arm_v3plain_v2.json
-    python bench/eval_bugsinpy_arms.py --arm exec --adapter artifacts/sft-exec-v3 \
-        --prompt strong --batch 2 --out data/bip_arm_v3strong_v2.json
+        --prompt plain --out data/bip_arm_v3plain_fix_v2.json
+    python bench/bugsinpy_compare.py --prefix bip_arm_ \
+        --rows data/bugsinpy_rows_v2.jsonl \
+        --arms v3plain_fix_v2,v3seed7_fix_v2,v4plain_fix_v2,base_fix_v2,\
+basestrong_fix_v2,sftstrong_fix_v2,v3strong_fix_v2,score_fix_v2,diff_fix_v2
 
-| | v3 plain | v3 + strong prompt | base + strong | sft-v2 plain | base plain |
-|---|---|---|---|---|---|
-| produced an explanation | 440 (96%) | 422 (92%) | — | 448 (98%) | 456 (99%) |
-| names the real exception | 331 (72%) | 313 (68%) | — | 218 (48%) | 163 (36%) |
-| quotes the real message | 390 (85%) | 373 (81%) | — | 198 (43%) | 43 (9%) |
-| names a changed identifier | 414 (90%) | 384 (84%) | — | 421 (92%) | 399 (87%) |
-| **INVENTS a different failure** | **9 (2%)** | 31 (7%) | 11 (2%) | 12 (3%) | 11 (2%) |
-| **GROUNDED** | **400 (87%)** | 356 (78%) | 279 (61%) | 255 (56%) | 183 (40%) |
+| | v3 plain | v3 seed 7 | v4 plain | v3 + strong | sft-v2 + strong | base + strong | base plain |
+|---|---|---|---|---|---|---|---|
+| names the real exception | 342 (75%) | 334 (73%) | 350 (76%) | 333 (73%) | 248 (54%) | 244 (53%) | 164 (36%) |
+| quotes the real message | 399 (87%) | 398 (87%) | 369 (81%) | 391 (85%) | 290 (63%) | 246 (54%) | 43 (9%) |
+| names a changed identifier | 427 (93%) | 437 (95%) | 436 (95%) | 410 (90%) | 417 (91%) | 411 (90%) | 401 (88%) |
+| **INVENTS a different failure** | **9 (2%)** | 10 (2%) | 14 (3%) | 31 (7%) | 20 (4%) | 13 (3%) | 11 (2%) |
+| **GROUNDED** | **412 (90%)** | **412 (90%)** | 390 (85%) | 377 (82%) | 286 (62%) | 292 (64%) | 184 (40%) |
 
 McNemar over discordant pairs, all n=458, v3 plain as A:
 
 | comparison | only A | only B | p |
 |---|---|---|---|
-| **v3 plain vs base + strong prompt** | **139** | **18** | **2.4e-24** |
+| v3 plain vs base plain | 234 | 6 | 2.9e-61 |
+| **v3 plain vs base + strong prompt** | **139** | **19** | **1.0e-23** |
 | v3 plain vs sft-v2 + strong prompt | 147 | 21 | 1.8e-24 |
-| v3 plain vs sft-v2 plain | 158 | 13 | 7.8e-33 |
-| v3 plain vs base plain | 224 | 7 | 3.8e-57 |
-| v3 plain vs v3 + strong prompt | 71 | 27 | 1.0e-05 |
-| v3 plain vs v3 + strong, *invented* | 4 | 26 | 6.0e-05 |
+| v3 plain vs v3 + strong prompt | 64 | 29 | 0.000366 |
+| v3 plain vs v4 plain | 50 | 28 | 0.0169 |
+| **v3 plain vs v3 seed 7** | 27 | 27 | **1.000** |
 
 **This is the answer to "it is just prompt engineering".** The adapter on a bare
-40-word prompt beats the un-fine-tuned base carrying a hand-written 1566-character
-system prompt and three few-shot examples, by 121 rows, while fabricating less
-(9 against 11). Under the *same* plain prompt the base scores 183, so the corpus
-is worth +217 rows on its own.
+40-word prompt beats the un-fine-tuned base carrying a hand-written
+1566-character system prompt and three few-shot examples, **by 120 rows**, while
+fabricating less (9 against 13). Under the *same* plain prompt the base scores
+184, so the corpus is worth **+228 rows** on its own.
 
-It also **reverses the v2 finding**. With `sft-exec-v2`, prompting and fine-tuning
-were substitutes and the adapter's effect vanished under a good prompt (93/98,
-p = 0.77). With v3 they are antagonistic: the strong prompt costs 44 rows of
-grounding (p = 1.0e-05) and **triples fabrication, 9 -> 31** (p = 6.0e-05). The
-three hand-written examples carry failure signatures that are not the measured
-one, and the model pattern-matches to them instead of to its own measurement.
-The best configuration is the simplest one.
+That margin is essentially unchanged by the parser fix -- 121 rows before, 120
+after -- which is the useful thing about it. The bug moved both arms; it did not
+manufacture the gap.
+
+**A fine-tune that merely matches a prompt is not a contribution, and this is
+the control that says v3 is not one.** `sft-exec-v2` under the strong prompt
+scores 286 against the base's 292 on the same prompt: 100 discordant rows to 94,
+**p = 0.72, not distinguishable**. For several weeks that was the whole project.
+v3 under a *plain* prompt clears the same baseline by 120 rows at p = 1e-23.
+
+It also **reverses the v2 finding on prompting**. With `sft-exec-v2` prompting
+and fine-tuning were substitutes, and the adapter's effect vanished under a good
+prompt. With v3 they are antagonistic: the strong prompt costs 35 rows of
+grounding (64/29, p = 0.000366) and **triples fabrication, 9 -> 31**. The three
+hand-written examples carry failure signatures that are not the measured one,
+and the model pattern-matches to them instead of to its own measurement. The
+best configuration is the simplest one.
+
+### The ablations: what the execution evidence is actually worth
+
+Same adapter, same weights, same rows, same prompt shape. The only thing that
+changes is the evidence handed to the model: `--arm score` replaces the measured
+before/after with the JIT gate's defect probability, `--arm diff` gives the diff
+alone.
+
+| | v3 + the run | + JIT score only | + diff only |
+|---|---|---|---|
+| produced an explanation | 457 (100%) | 453 (99%) | 455 (99%) |
+| names the real exception | 342 (75%) | 99 (22%) | 67 (15%) |
+| quotes the real message | 399 (87%) | 22 (5%) | 21 (5%) |
+| names a changed identifier | 427 (93%) | **440 (96%)** | **437 (95%)** |
+| **INVENTS a different failure** | **9 (2%)** | 120 (26%) | 95 (21%) |
+| **GROUNDED** | **412 (90%)** | 105 (23%) | 76 (17%) |
+
+| comparison | only A | only B | p |
+|---|---|---|---|
+| v3 + run vs score only | **309** | **2** | 2.3e-89 |
+| v3 + run vs diff only | **338** | **2** | 5.2e-98 |
+| score only vs diff only | 46 | 17 | 0.000337 |
+
+Two rows in the entire bench go the other way, on either ablation against the
+grounded arm.
+
+**This is not a comprehension failure.** Both ablations name a changed identifier
+*more* often than the grounded arm -- 96% and 95% against 93%. The model is
+reading the diff perfectly well. What it has lost is anything to anchor a failure
+to, so it invents one on a quarter of the corpus (26% and 21%, against 2%).
+
+**Amends the 4 Sep ablation.** That section (`The missing baseline`, below) ran
+the same three arms on 519 synthetic cross-family rows and found `score` and
+`diff` *indistinguishable*, p = 0.699, concluding "the risk score contributes
+nothing". On real bugs it contributes something: 46/17, **p = 0.000337**, a net
++29 rows. The revised statement is that the JIT probability is worth roughly a
+tenth of what the run is worth (+29 against +336 over the same baseline), which
+is a weak prior rather than nothing. The likely reason it showed as zero on the
+synthetic corpus is that the gate's probability carries no signal there;
+on real commits it weakly tracks whether behaviour changed at all. That is a
+hypothesis, not a measurement, and it is not needed for the architectural claim.
+
+The architectural claim survives either reading: **the gate decides whether to
+look, and it is worth ~9% of what looking is worth.**
 
 ### The rubric is saturable by copying, so here is the subset where it is not
 
 `grounded = (names_exception or quotes_signature) and not invented`, and the
 `exec` prompt *hands the model the measured failure string* -- so a one-line
-`print(before)` would score 458/458. **87% is a faithfulness number, not a
+`print(before)` would score 458/458. **90% is a faithfulness number, not a
 bug-finding number**, and must be reported as one.
 
-Three checks that it is not a degenerate paste, on the 400 grounded rows:
+Four checks that it is not a degenerate paste, on the 412 grounded rows:
 
-- **400/400 distinct explanation frames** -- zero recitation;
-- median explanation 226 characters, of which the signature is 24% (p90 43%);
-  only **2** rows are >=90% signature;
-- **94%** also name a changed identifier.
-- groundedness is earned by quoting alone on 69 rows, by naming alone on 15,
-  and by both on 316.
+- **412/412 distinct explanation frames** -- zero recitation;
+- median explanation 227 characters, of which the signature is 24% (p90 44%);
+  only **5** rows are >=90% signature;
+- **387/412 (94%)** also name a changed identifier;
+- groundedness is earned by quoting alone on 70 rows, by naming alone on 18,
+  and by both on 324.
 
 The stronger defence is to split the corpus by whether an exception *class*
 exists to name at all. On the 250 rows with none -- `AssertionError` or bare --
@@ -148,8 +421,8 @@ name:
 
 | subset | n | v3 plain | base + strong | only A | only B | p |
 |---|---|---|---|---|---|---|
-| **no class to name** (`AssertionError`/bare) | 250 | **196 (78%)** | 117 (47%) | 95 | 16 | 7.5e-15 |
-| named exception present | 208 | **204 (98%)** | 162 (78%) | 44 | 2 | 3.1e-11 |
+| **no class to name** (`AssertionError`/bare) | 250 | **207 (83%)** | 123 (49%) | 100 | 16 | 5.0e-16 |
+| named exception present | 208 | **205 (99%)** | 169 (81%) | 39 | 3 | 5.6e-09 |
 
 The hard subset is the **majority** of the corpus, and the discordant count is
 larger there than on the easy one. The gain is not the model learning to say
@@ -157,37 +430,122 @@ larger there than on the easy one. The gain is not the model learning to say
 rows where the measured text is all there is. **This is the claim to lead with,
 because it is the one immune to the copy ceiling.**
 
-### The deployed path, re-measured
+The ablations make the same cut far more sharply, because there the copy ceiling
+is removed rather than argued around:
+
+| subset | v3 + the run | + JIT score only | + diff only |
+|---|---|---|---|
+| no class to name (250) | **207 (83%)** | 60 (24%) | 33 (13%) |
+| named exception present (208) | **205 (99%)** | 45 (22%) | 43 (21%) |
+| *bare `assert`, no class at all* (60) | **41 (68%)** | **0 (0%)** | **0 (0%)** |
+
+**Zero out of sixty, on both ablations.** Where a traceback names a class, a
+model can sometimes recover it from the diff and the project's idiom -- that is
+what the 22% and 21% in the bottom-right of the first two rows are. Where the
+failure is a bare `assert`, there is nothing to recover: the value exists only
+in the run. Without the run the model never once lands it, and with the run it
+lands 68%.
+
+Two subset results cut against earlier readings and are recorded here rather
+than buried:
+
+- **The strong prompt hurts specifically on the hard rows.** v3 plain vs v3
+  strong is 54/26, p = 0.0023 on the 250 no-class rows, and 10/3, p = 0.092 --
+  not distinguishable -- on the 208 named-exception rows. The few-shot examples
+  cost the model exactly the capability that is hardest to fake.
+- **v4's loss is on the EASY rows, not the hard ones.** v3 vs v4 is 39/27,
+  p = 0.175 on the no-class subset (not distinguishable) and 11/1, p = 0.0063 on
+  the named-exception subset. The 6 Sep note below reads v4's collapse as
+  paraphrase-instead-of-quotation; that is consistent, but it is now clear the
+  damage lands where a signature was sitting there to be quoted.
+
+### The deployed path, re-measured (8 Sep, fixed parser)
 
     MODEL=artifacts/oracle-reviewer-3b ./serve.sh start   # -> sft-exec-v3
     python bench/bugsinpy_guarded.py --dataset data/bugsinpy_rows_v2.jsonl \
-        --out data/bip_guarded_v3_v2.json
+        --model sft-exec-v3 --out data/bip_guarded_v3_fix_v2.json
 
-| | guarded v3 | guarded v2 | v3 plain, unguarded |
-|---|---|---|---|
-| said anything at all | 436 (95%) | 439 (96%) | 440 (96%) |
-| something was withheld | 18 (4%), whole 14 (3%) | 36 (8%), whole 11 (2%) | — |
-| names the real exception | 329 (72%) | 140 (31%) | 331 (72%) |
-| quotes the real message | 381 (83%) | 162 (35%) | 390 (85%) |
-| names a changed identifier | 379 (83%) | 398 (87%) | 414 (90%) |
-| **INVENTS a different failure** | **2 (0%)** | 8 (2%) | 9 (2%) |
-| **GROUNDED** | **392 (86%)** | **183 (40%)** | 400 (87%) |
+Both seeds were run through the guard chain, because the plain arm's seed pair
+turned out to matter (below) and there was no reason to assume the guarded arm
+behaves the same. **It does not.**
+
+| | guarded v3 (s42) | guarded v3 (s7) | v3 plain, unguarded | guarded v2 `PRE-FIX` |
+|---|---|---|---|---|
+| said anything at all | 444 (97%) | 445 (97%) | 457 (100%) | 439 (96%) |
+| something was withheld | 19 (4%), whole 14 (3%) | 18 (4%) | — | 36 (8%), whole 11 (2%) |
+| names the real exception | 334 (73%) | 310 (68%) | 342 (75%) | 140 (31%) |
+| quotes the real message | 388 (85%) | 376 (82%) | 399 (87%) | 162 (35%) |
+| names a changed identifier | 382 (83%) | 395 (86%) | 427 (93%) | 398 (87%) |
+| **INVENTS a different failure** | **2 (0%)** | 3 (1%) | 9 (2%) | 8 (2%) |
+| **GROUNDED** | **399 (87%)** | **382 (83%)** | **412 (90%)** | **183 (40%)** |
 
 | comparison | metric | only A | only B | p |
 |---|---|---|---|---|
-| **guarded v3 vs guarded v2** | grounded | **217** | **8** | **5.5e-54** |
-| guarded v3 vs base + strong | grounded | 139 | 26 | 7.3e-20 |
-| guarded v3 vs v3 plain unguarded | grounded | 31 | 39 | **0.403** |
+| guarded s42 vs guarded s7 | grounded | 46 | 29 | 0.0639 |
+| guarded s42 vs v3 plain unguarded | grounded | 27 | 40 | **0.142** |
+| **guarded s7 vs v3 plain unguarded** | grounded | 29 | **59** | **0.00182** |
+| guarded s42 vs base + strong prompt | grounded | 133 | 26 | 1.7e-18 |
+| ~~guarded v3 vs guarded v2~~ | grounded | — | — | **invalid, see below** |
 
-**The guard chain is now neutral on correctness and still earning its place on
-safety.** Guarded 392 against raw 400 is 31/39, p = 0.403 -- a wash -- while
-fabrications fall **9 -> 2**. The guards have stopped rescuing a weak model's
-mistakes and are trimming the last inventions off a strong one, which is a
-cleaner claim than the v2 story and one with a p-value attached. Withholding
-halved (36 -> 18 rows touched). What still gets dropped is what the chain was
-built for: 5 invented scalars and 4 phantom removals.
+> **The guarded-v2 column is pre-fix and the comparison against it is struck.**
+> `bip_guarded_v2.json` was measured with the broken parser; `bip_guarded_v3_fix_v2.json`
+> was not, so the 217/8 that used to sit in that row mixes parsers and is not
+> reportable. Re-running the v2 adapter through the guard chain costs ~2h of GPU
+> and has not been done. The direction is not in doubt -- 183 against 399 is far
+> outside anything an 18-row parser artefact can produce, and the v2 adapter's
+> flat prose was the *least* affected by the bug -- but the exact figure is not
+> available and is not used anywhere above.
 
-### Decomposing the jump: 89% of it is the corpus
+**The guard chain's cost is NOT reliably zero, and one seed would have said it
+was.** On seed 42, guarded 399 against raw 412 is 27/40, p = 0.142 -- a wash,
+and the claim "the guard is free" is defensible. On seed 7 the same comparison
+is 29/59, **p = 0.00182**: the guard costs 30 rows and the loss is real. The
+reportable statement is the pair -- **guarded 382-399, mean 390.5, against an
+unguarded 412** -- and the guard's cost is somewhere in 13 to 30 rows, not zero.
+
+**The guard chain amplifies seed variance rather than damping it.** Unguarded,
+the two seeds are *identical*, 412 and 412, 27/27, p = 1.000. Guarded, they are
+399 and 382, 46/29, p = 0.064 -- a 17-row spread out of a pair that had no
+spread at all before the chain touched it. This is mechanically unsurprising in
+hindsight: the chain makes several model calls per row and each is another draw,
+so per-row disagreements that cancelled in one pass compound across four. It
+does mean **any guarded single-seed comparison in this document carries a ~17-row
+band**, which is wider than several of the effects that have been read off it.
+
+What the guard buys is unchanged and is still worth it: fabrications fall
+**9 -> 2** on seed 42 and **10 -> 3** on seed 7. Withholding touches 19 and 18
+rows respectively.
+
+What gets dropped is what the chain was built for: 5 invented scalars
+(`['10']` x3, `['36']`, `['-8']`, `['-01','00']`) and 3 phantom removals
+(`shutdown`, `skip_defaults`, `record_task_history` -- each asserted as removed
+where no removed line in the diff mentions it), plus one empty answer.
+
+**On the hard subset the guard is free, on both seeds.** Bare-assert rows:
+guarded 42/60 (70%) and 41/60 (68%) against unguarded 41/60 (68%). Every row the
+guard costs comes off the *easy* half, where a signature was there to quote and
+the guard judged the quote insufficient -- exactly the trade it is supposed to
+make. Named-exception rows: 357/398 and 341/398 guarded, against 371/398
+unguarded.
+
+Seed 7's extra drops are the same categories, not new ones: 3 invented scalars,
+5 phantom removals (`KeyError` x2, `TypeError` x2, `split`, `shutdown`), 2
+truncated answers, 1 empty.
+
+### Decomposing the jump: 89% of it is the corpus  `NOT REPORTABLE AS OF 8 SEP`
+
+> **Every cell here is a guarded `sft-exec-v2` measurement taken with the broken
+> parser, and the v3 cell is not.** The decomposition is a ratio of two guarded
+> effects and would survive a *uniform* shift, but the correction is not uniform
+> -- it scales with how much structured text an arm quotes, and that is precisely
+> what distinguishes v2 from v3. So the "89%" cannot be defended as stated.
+>
+> Closing it costs two guarded runs of the v2 adapter, ~4h of GPU: one on the
+> three-case prompt and one on the four-case prompt. Until then the claim to make
+> is the weaker, safe one -- **the corpus is the dominant term and the prompt fix
+> is a minor one** -- which follows from the +228-row unguarded corpus effect
+> measured under one parser above, and does not depend on this subsection.
+
 
 The 40% -> 86% jump changed two things at once. `data/bip_guarded_v2.json` is
 stamped 05 Sep 06:07; `oracle_reviewer/core.py` gained the missing fix-direction
@@ -701,6 +1059,13 @@ The arms are paired — the same rows, so McNemar on the discordant pairs:
 indistinguishable: handing the model a defect probability leaves it exactly
 where it was with the diff alone. Execution is worth 54 points and the score is
 worth zero, which is the claim the design rests on, measured rather than argued.
+
+> **Amended 8 Sep.** Replicating these three arms on the 458 real BugsInPy bugs
+> does NOT reproduce the `score` vs `diff` null: there the score arm beats the
+> diff arm 46/17, p = 0.000337. The "worth zero" claim holds on this synthetic
+> corpus and not on real commits, where the probability is worth a weak +29 rows
+> against execution's +336. See the ablation table in the 6 Sep section above,
+> which is the one to cite.
 
 Split by whether behaviour actually changed — the half where the values must be
 derived rather than restated:
@@ -5102,28 +5467,31 @@ to *what to say*.
 
 **Prompting the base model works, and then stops working.**
 
+*(counts below re-measured 8 Sep against the fixed parser; the pre-fix figures
+were 183 / 279 / 274 / 400 / 356.)*
+
 | checkpoint | prompt | grounded | INVENTS |
 |---|---|---|---|
-| base Qwen2.5-Coder-3B | plain | 183/458 (40%) | 11 |
-| base Qwen2.5-Coder-3B | strong (system + 3 examples) | 279/458 (61%) | 11 |
-| earlier exec SFT | strong | 274/458 (60%) | 20 |
-| **v3 adapter** | **plain** | **400/458 (87%)** | **9** |
-| v3 adapter | strong | 356/458 (78%) | 31 |
+| base Qwen2.5-Coder-3B | plain | 184/458 (40%) | 11 |
+| base Qwen2.5-Coder-3B | strong (system + 3 examples) | 292/458 (64%) | 13 |
+| earlier exec SFT (`sft-exec-v2`) | strong | 286/458 (62%) | 20 |
+| **v3 adapter** | **plain** | **412/458 (90%)** | **9** |
+| v3 adapter | strong | 377/458 (82%) | 31 |
 
 Three things in that table are worth stating separately, because each one
 kills a different objection.
 
-1. **The strong prompt is a real intervention on the base model**: 183 -> 279,
-   42 rows to 138, p < 1e-5. Prompting is not a straw man here.
-2. **The earlier SFT checkpoint did not beat the prompt.** 274 vs 279 under the
-   same strong prompt, 93 rows to 98, **p = 0.77**. A fine-tune that merely
+1. **The strong prompt is a real intervention on the base model**: 184 -> 292,
+   35 rows to 143, p = 1.1e-16. Prompting is not a straw man here.
+2. **The earlier SFT checkpoint did not beat the prompt.** 286 vs 292 under the
+   same strong prompt, 100 rows to 94, **p = 0.72**. A fine-tune that merely
    matches a prompt is not a contribution, and for several weeks that is what
    this project had.
-3. **v3 beats the prompted base by 121 rows on a PLAIN prompt** — 21 to 147,
-   p < 1e-5. That is the result. The corpus does what the prompt could not.
+3. **v3 beats the prompted base by 120 rows on a PLAIN prompt** — 19 to 139,
+   p = 1.0e-23. That is the result. The corpus does what the prompt could not.
 
-**And the strong prompt now HURTS.** v3 plain 400 vs v3 strong 356, 71 to 27,
-p = 1e-5, with inventions going 9 -> 31. The adapter was trained against the
+**And the strong prompt now HURTS.** v3 plain 412 vs v3 strong 377, 64 to 29,
+p = 0.000366, with inventions going 9 -> 31. The adapter was trained against the
 plain prompt; the three hand-written examples are out of its distribution, and
 the model paraphrases them instead of reading the measurement. This is the same
 mechanism that sank v4 the next day, observed a day earlier without being
@@ -5131,8 +5499,8 @@ recognised.
 
 **What this is not.** `grounded` asks whether the explanation gets the observed
 failure right. It does not ask whether the explanation identifies the *cause*,
-and the 25 Aug locus/mechanism split says those diverge by ~20 points. 87%
-grounded is not 87% correct, and nothing here licenses that reading.
+and the 25 Aug locus/mechanism split says those diverge by ~20 points. 90%
+grounded is not 90% correct, and nothing here licenses that reading.
 
 ### v4: adding a prompt SECTION cost 20 rows, and the revert (6 Sep)
 
@@ -5142,8 +5510,16 @@ train/deploy gap. 1069 train rows, 35% positive, audit clean. It lost.
 
 | | v3 | v4 | discordant | p |
 |---|---|---|---|---|
-| plain | **400/458** | 380/458 | 50 / 30 | **0.033** |
-| guarded | **392/458** | 358/458 | 61 / 27 | **0.00037** |
+| plain *(re-measured 8 Sep)* | **412/458** | 390/458 | 50 / 28 | **0.0169** |
+| plain, seed 7 *(re-measured 8 Sep)* | **412/458** | 390/458 | 48 / 26 | **0.0141** |
+| guarded *(both arms pre-fix, see note)* | **392/458** | 358/458 | 61 / 27 | **0.00037** |
+
+> **On the guarded row's parser status.** Both guarded arms here were measured
+> with the broken parser, in the same era, so unlike the v2 comparison this one
+> is internally consistent. It is also conservative in the right direction: v3
+> quotes a signature on 399 rows against v4's 369, so v3 lost *more* rows to the
+> bug, and the true gap is if anything wider than 392-358. The plain rows above
+> it are post-fix and need no such caveat.
 
 Both arms, same direction, and the guarded arm — the deployed configuration,
 where `verify()` withholds an explanation that fails to quote its measured
@@ -5151,8 +5527,8 @@ values — lost hardest. Per the pre-registered rule, v4 was reverted and v3
 stands.
 
 **The mechanism is legible in the sub-counts.** v4 does not get *worse* at
-finding the failure — `names_exception` went UP, 331 -> 341. What collapsed was
-`quotes_signature`, 390 -> 363. v4 paraphrases where v3 quotes, and the rubric
+finding the failure — `names_exception` went UP, 342 -> 350. What collapsed was
+`quotes_signature`, 399 -> 369. v4 paraphrases where v3 quotes, and the rubric
 counts quoting. Feeding the outcome as prose taught the model to *restate* the
 outcome in its own words rather than lift the signature out of it.
 
@@ -5165,7 +5541,7 @@ read as a prompt-engineering curiosity instead of as evidence.
 negative one, not a broken one, and it is the only direct measurement of what
 prompt-structure drift costs this adapter.
 
-### The seed replicate: 400/458 is the corpus, not the draw (7 Sep)
+### The seed replicate: 412/458 is the corpus, not the draw (7 Sep, re-measured 8 Sep)
 
 Every checkpoint comparison in this project had been a single-seed point
 estimate, and on 28 Aug seed alone moved the basic-bench headline by 10 cases.
@@ -5184,22 +5560,39 @@ exactly. 147 steps, 4h57m on the 6GB card.
 | held-out top-1 | 0.925 | 0.875 |
 | held-out verdict recall | 1.000 | 1.000 |
 
-**The bench disagreed.**
+**The bench disagreed** — and after the parser fix it disagreed harder than the
+first reading suggested.
 
 | | seed 42 | seed 7 |
 |---|---|---|
-| grounded | 400/458 (87%) | 395/458 (86%) |
+| grounded | **412/458 (90%)** | **412/458 (90%)** |
 | INVENTS a different failure | 9 | 10 |
-| names the real exception | 331 | 317 |
-| quotes the real message | 390 | 386 |
+| names the real exception | 342 | 334 |
+| quotes the real message | 399 | 398 |
 
-Paired McNemar: **32 seed42-only, 27 seed7-only, p = 0.60.** The reportable
-figure is the pair — **mean 397.5/458 = 86.8%, range 395–400** — never the
-better draw, which would be selecting on the outcome.
+Paired McNemar: **27 seed42-only, 27 seed7-only, p = 1.000.** The two seeds land
+on the same total, from different rows.
 
-**The seeds disagree on 59 rows (13%) and it cancels.** Per-row churn is large;
-the aggregate is stable. Four rows are invented by *both* seeds: those are
-corpus-level failures and are the only inventions worth reading individually.
+> **Do not lean on the exactness.** The identical total is parser-dependent: the
+> tree's parser recovers 1 more row on seed 42 and 3 more on seed 7 from stored
+> raw text, giving 413 against 415, 26/28, p = 0.892 (see the residual note in
+> the correction section). The reportable finding is that the seeds are
+> **statistically indistinguishable on the plain arm under either parser**, not
+> that they tie to the row.
+
+> Read pre-fix, this was 400 against 395 with a 5-row gap and p = 0.60, and the
+> honest reporting rule was to quote the pair rather than the better draw. The
+> fixed parser collapses the gap to zero. The rule stands regardless — the point
+> was never that the gap was small, it was that a single seed is not an estimate
+> — but it is worth recording that the apparent 5-row seed effect was a parser
+> artefact, not a draw.
+
+**The seeds disagree on 54 rows (12%) and it cancels.** Per-row churn is large;
+the aggregate is stable. Four rows are
+invented by *both* seeds (`keras-12`, `keras-28`, `tornado-8`, `tornado-15`):
+those are corpus-level failures and are the only inventions worth reading
+individually. Five more are seed-42-only and six are seed-7-only, which is what
+per-row churn looks like.
 
 Two consequences:
 
@@ -5207,13 +5600,26 @@ Two consequences:
   and it was wrong about the direction of a 5-row difference while reporting a
   10-point specificity gap. Training metrics gate a run (recall 0 at step 20
   still kills it); they do not rank checkpoints.
-* **The v4 revert survives, but only on the guarded arm — and that is worth
-  saying out loud.** Running the seed-7 checkpoint against v4 directly gives
-  **46 / 31, p = 0.11: not distinguishable.** The plain-arm case against v4
-  (p = 0.033) does NOT survive a seed swap; it was inside the band after all.
-  What carries the revert is the guarded arm, 392 vs 358 at p = 0.00037 — a
-  34-row gap against a measured seed band of ~5, and the guarded arm is the
-  deployed configuration. There is no seed-7 guarded run to check that against,
-  so the honest statement is: the decision stands on one arm at one seed, and
-  the arm it stands on is the one that ships. A seed-7 guarded run would close
-  this and costs ~50 min of GPU.
+* **The v4 revert survives the seed swap on the plain arm.** *(Amended 8 Sep;
+  the pre-fix reading of this bullet said the opposite and is struck.)* Running
+  the seed-7 checkpoint against v4 under one parser gives **48 / 26,
+  p = 0.0141** — distinguishable, and in the same direction and near-identical
+  magnitude to seed 42's **50 / 28, p = 0.0169**. Both seeds beat v4 by 22 rows.
+  The earlier claim that "the plain-arm case against v4 does NOT survive a seed
+  swap; it was inside the band after all" was an artefact of comparing a
+  seed-7 arm scored by one parser against a v4 arm scored by another. The
+  revert now rests on two independent seeds on the arm that is free of the guard
+  chain, which is a stronger footing than the guarded-arm-only story it
+  replaces -- and that turns out to matter, because the guarded arm is the
+  *worse* place to stand: see the third bullet.
+* **The seed stability measured here does NOT transfer to the guarded arm**
+  *(added 8 Sep)*. Both v3 seeds were also run through the guard chain. Unguarded
+  they are identical (412 / 412, p = 1.000); guarded they are **399 and 382**,
+  46/29, p = 0.064 -- a 17-row band where there had been none. The chain makes
+  several model calls per row, so per-row disagreements that cancel in one pass
+  compound across four. Two consequences worth carrying forward: the earlier
+  reasoning that the v4 guarded gap (34 rows) was safe "against a measured seed
+  band of ~5" used the *plain* arm's band and understated the right one by 3x --
+  34 against 17 is still a gap, but a far less comfortable one; and every other
+  single-seed guarded comparison in this document inherits the same ~17-row
+  uncertainty.

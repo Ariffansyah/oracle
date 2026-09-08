@@ -53,3 +53,6 @@ data/deepjit/
 # 11M of BugsInPy metadata plus the project clones and per-bug worktrees it
 # drives. Re-fetchable by bench/bugsinpy.py --fetch.
 data/bugsinpy/
+
+# scratch output from the SZZ pass
+.szz_work/

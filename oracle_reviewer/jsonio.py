@@ -195,6 +195,7 @@ def first_json_ex(text: str) -> tuple[dict | None, str | None]:
         return {"explanation": _unquote(m.group(1))}, "explanation-only"
     return fallback if fallback else (None, None)
 
+
 def first_json(text: str) -> dict | None:
     """The first JSON object in `text`, repaired if it has to be.
 

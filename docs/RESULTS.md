@@ -344,20 +344,51 @@ stronger claim than the deployment-cost argument it replaces.
 
 ### Take execution away from the large model
 
-The same ablation, at both scales, on the same 458 rows:
+The same ablation, at both scales, on the same 458 rows. The `diff` cell landed
+8 Sep 22:24, completing the grid. All six arms are parser-consistent, and every
+figure below was recomputed from the rubric components rather than trusting a
+stored total -- recomputed `grounded` equals the `counts` block in all seven
+files read.
 
 | arm | grounded | INVENTS | names exc | quotes msg |
 |---|---|---|---|---|
 | 120B + execution | **429 (94%)** | 15 | 375 | 395 |
 | **3B + execution** | **412 (90%)** | **9** | 342 | 399 |
+| 120B + diff only | 183 (40%) | 139 | 178 | 67 |
 | 120B + JIT score only | 182 (40%) | 135 | 180 | 67 |
 | 3B + JIT score only | 105 (23%) | 120 | 99 | 22 |
+| 3B + diff only | 76 (17%) | 95 | 67 | 21 |
 
-| comparison | only A | only B | p |
-|---|---|---|---|
-| **3B + execution vs 120B + score** | **240** | **10** | **2.5e-58** |
-| 120B + execution vs 120B + score | 248 | 1 | 5.5e-73 |
-| 3B + score vs 120B + score | 40 | 117 | 6.0e-10 |
+| comparison | only A | only B | p | |
+|---|---|---|---|---|
+| **3B + execution vs 120B + diff** | **238** | **9** | **7.5e-59** | distinguishable |
+| **3B + execution vs 120B + score** | **240** | **10** | **2.5e-58** | distinguishable |
+| 120B + execution vs 120B + diff | 246 | **0** | 1.8e-74 | distinguishable |
+| 120B + execution vs 120B + score | 248 | 1 | 5.5e-73 | distinguishable |
+| 120B + execution vs 3B + execution | 32 | 15 | 0.0186 | distinguishable |
+| 3B + score vs 120B + score | 40 | 117 | 6.0e-10 | distinguishable |
+| 3B + diff vs 120B + diff | 21 | 128 | 6.5e-20 | distinguishable |
+| **120B + diff vs 120B + score** | 44 | 43 | **1.0** | **NOT distinguishable** |
+| **120B + diff vs 3B(base) + execution** | 88 | 89 | **1.0** | **NOT distinguishable** |
+
+**Taking execution away from the 120B costs it 246 rows and returns zero.**
+Not "few" -- zero. The set of rows the diff-only arm gets right is a strict
+subset of the set the execution arm gets right, with no exceptions in 458.
+Whatever the large model can infer from a diff alone, it can also infer with
+the measurement in front of it; the reverse fails 246 times.
+
+**The null in the last row is the sharpest result in this document.** The
+*untrained* base 3B, given the measured before/after, scores 184. The 120B,
+given only the diff, scores 183. Paired, they are indistinguishable -- 88 rows
+against 89, p = 1.0. Access to execution output substitutes for a 40x parameter
+increase *and* for the fine-tune simultaneously. This is not the headline claim
+because it involves an untrained model on both ends of the useful comparison,
+but it is the cleanest isolation of what the measurement is worth.
+
+> **Read the base arm correctly.** `bip_arm_base_fix_v2.json` records
+> `arm: "exec"` -- the untrained 3B receives the measured before/after, the same
+> evidence the v3 model gets. It is "base" in weights, not in evidence. A
+> reading that treats it as an unevidenced control would invert the claim.
 
 **This is the strongest single statement the project can make: a 3B given a
 measurement beats a 40x larger model given a risk score, by 230 rows.** Ten rows
@@ -367,6 +398,14 @@ increase in parameters, and that is not an argument, it is a paired test.
 Scale is not worthless without grounding -- the 120B's score arm beats the 3B's,
 182 against 105, p = 6.0e-10 -- but it recovers less than half of what the
 measurement supplies, and it costs 135 fabrications to do it.
+
+**The risk score adds nothing over a bare diff, and that now replicates.** For
+the 120B, `score` (182) and `diff` (183) are indistinguishable -- 44 against 43,
+p = 1.0. The v1 run found the same thing on the earlier corpus (20 / 32,
+p = 0.126). Two corpora, two nulls: handing a large model a JIT probability
+buys it nothing it did not already have from the diff. Stage 1's value is in
+*gating* which files get reviewed, not in conditioning the prose -- and the
+Stage 1 section below is where that value is measured.
 
 > **Two v1 claims die here, and both were arguments in this project's favour.**
 > `POSITIONING.md` said the large model falls *further* without execution (54

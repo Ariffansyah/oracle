@@ -1,0 +1,180 @@
+{
+ "n": 35,
+ "families": {
+  "c-ratio-trunc": {
+   "introduce": 0.6495207574337826,
+   "fix": 0.6427243035437314,
+   "refactor": 0.7829231381277816
+  },
+  "c-signed-overflow": {
+   "introduce": 0.11447589494908399,
+   "fix": 0.0774647087117507,
+   "refactor": 0.5420382384856015
+  },
+  "go-first-empty-guard": {
+   "introduce": 0.6702919911144317,
+   "fix": 0.4804382576397757,
+   "refactor": 0.8561662854844292
+  },
+  "go-ratio-trunc": {
+   "introduce": 0.8637479554156289,
+   "fix": 0.9013791209311004,
+   "refactor": 0.8262463439557481
+  },
+  "java-batch-total-reset": {
+   "introduce": 0.9720597857732075,
+   "fix": 0.9789065406528721,
+   "refactor": 0.8522604401678185
+  },
+  "java-divzero-guard": {
+   "introduce": 0.2437861587158329,
+   "fix": 0.10794467557501916,
+   "refactor": 0.4867491959296458
+  },
+  "java-list-alias-mutate": {
+   "introduce": 0.8568828177861444,
+   "fix": 0.851752474714824,
+   "refactor": 0.7299231675164206
+  },
+  "java-min-empty-guard": {
+   "introduce": 0.6872298054159458,
+   "fix": 0.46325102663514006,
+   "refactor": 0.8083184169750902
+  },
+  "java-ratio-trunc": {
+   "introduce": 0.616218331281401,
+   "fix": 0.5964648321501942,
+   "refactor": 0.29309118453482236
+  },
+  "js-array-alias-mutate": {
+   "introduce": 0.585649917542524,
+   "fix": 0.6264356223353896,
+   "refactor": 0.7923392588650502
+  },
+  "js-array-mutate-iterate": {
+   "introduce": 0.6184468824682375,
+   "fix": 0.5440025208439238,
+   "refactor": 0.7211406626505773
+  },
+  "js-concat-coerce": {
+   "introduce": 0.27495751454642975,
+   "fix": 0.30694957533925726,
+   "refactor": 0.43943900796649676
+  },
+  "js-divzero-guard": {
+   "introduce": 0.732604589284758,
+   "fix": 0.6859172814322927,
+   "refactor": 0.786304577513449
+  },
+  "js-loose-equal-coerce": {
+   "introduce": 0.33003191600529136,
+   "fix": 0.36223569299292663,
+   "refactor": 0.44018041950487385
+  },
+  "js-math-min-empty": {
+   "introduce": 0.8399748440251016,
+   "fix": 0.7373461054925614,
+   "refactor": 0.6991211544447649
+  },
+  "js-ratio-trunc": {
+   "introduce": 0.9347873105874753,
+   "fix": 0.9324380819431178,
+   "refactor": 0.6478118729658963
+  },
+  "js-safe-int-overflow": {
+   "introduce": 0.6401700086750537,
+   "fix": 0.4699989591349975,
+   "refactor": 0.19959129421908875
+  },
+  "js-word-count-reset": {
+   "introduce": 0.7233659657838772,
+   "fix": 0.7382398170133888,
+   "refactor": 0.9191794476282189
+  },
+  "php-array-ref-alias": {
+   "introduce": 0.7259219806495933,
+   "fix": 0.7675919841369322,
+   "refactor": 0.7334366677629883
+  },
+  "php-compound-assign-coerce": {
+   "introduce": 0.5492231390214355,
+   "fix": 0.5411488004348348,
+   "refactor": 0.27353853611266055
+  },
+  "php-ratio-trunc": {
+   "introduce": 0.674955398415225,
+   "fix": 0.7327954244112601,
+   "refactor": 0.7762848611017948
+  },
+  "py-int-str-coerce": {
+   "introduce": 0.10999826454858412,
+   "fix": 0.1317664433094846,
+   "refactor": 0.05157269366646693
+  },
+  "py-list-alias-mutate": {
+   "introduce": 0.9958389086188122,
+   "fix": 0.9809296006992646,
+   "refactor": 0.7202010277056522
+  },
+  "py-list-mutate-iterate": {
+   "introduce": 0.6180554841404561,
+   "fix": 0.6415728154973895,
+   "refactor": 0.1262527681776675
+  },
+  "py-min-empty-guard": {
+   "introduce": 0.9436733423435634,
+   "fix": 0.7551971200848051,
+   "refactor": 0.8412431152532376
+  },
+  "py-ratio-trunc": {
+   "introduce": 0.5027403328418821,
+   "fix": 0.6020065659778076,
+   "refactor": 0.028235545212720523
+  },
+  "py-row-max-reset": {
+   "introduce": 0.9643513153744788,
+   "fix": 0.9787395854796378,
+   "refactor": 0.1556230842801873
+  },
+  "py-str-concat-typeerror": {
+   "introduce": 0.1541723615004867,
+   "fix": 0.20838131814740676,
+   "refactor": 0.015234466081902981
+  },
+  "py-zerodiv-guard": {
+   "introduce": 0.674329018641039,
+   "fix": 0.20287673577473556,
+   "refactor": 0.006954632782049642
+  },
+  "rb-array-alias-mutate": {
+   "introduce": 0.23416024311007874,
+   "fix": 0.2657823362465243,
+   "refactor": 0.15973245225903165
+  },
+  "rb-array-mutate-iterate": {
+   "introduce": 0.41350341800272583,
+   "fix": 0.3989432974323104,
+   "refactor": 0.19961750798779232
+  },
+  "rb-first-empty-guard": {
+   "introduce": 0.11445414219337759,
+   "fix": 0.11280055640574953,
+   "refactor": 0.11449366365244654
+  },
+  "rb-row-min-reset": {
+   "introduce": 0.830473865074076,
+   "fix": 0.6121694388110728,
+   "refactor": 0.4772499471314208
+  },
+  "rb-str-concat-typeerror": {
+   "introduce": 0.10635442258478532,
+   "fix": 0.11299674984300327,
+   "refactor": 0.05218110885532266
+  },
+  "rs-runtime-overflow": {
+   "introduce": 0.5246984536588782,
+   "fix": 0.46359326283134406,
+   "refactor": 0.6755244819836781
+  }
+ }
+}

@@ -348,10 +348,35 @@ specific, more fluent wrong answers. That is an argument for grounding that no
 amount of prompting or parameter count answers, and it exists only because the
 large model was actually run.
 
+> **BOTH HALVES OF THAT PARAGRAPH ARE STRUCK, 8 Sep 2026.** Re-run on the v2
+> corpus against `sft-exec-v3`, neither claim survives:
+>
+> * **The large model degrades more gracefully, not less.** The 3B falls
+>   90% -> 23% (67 points); the 120B falls 94% -> 40% (54). The direction is the
+>   reverse of what is written above.
+> * **The fabrication gap is gone.** 29% for the 120B against 26% for the 3B,
+>   where v1 had 28% against 11%.
+>
+> What replaces them is stronger than either, and it is the claim to lead with:
+> **a 3B given a measurement beats a 40x larger model given a risk score, by 230
+> rows — 412/458 against 182/458, paired 240/10, p = 2.5e-58.** Execution
+> grounding is worth more than a 40x increase in parameters. See `RESULTS.md`,
+> *The 3B against a 40x larger model*.
+
 What survives for the 3B is a deployment argument, and it must be stated with
 its price attached: self-hosting costs 41 points of grounding and buys zero data
 egress, ~3 GB of VRAM, and no code leaving the machine. That is a defensible
 trade for reviewing proprietary code. It is not a claim that small is enough.
+
+> **SUPERSEDED 8 Sep 2026.** The 41-point figure was measured on the v1 corpus
+> against the checkpoint that `sft-exec-v3` replaced. Re-run on the 458-row v2
+> corpus, the 3B scores **412/458 (90%)** against the 120B's **429 (94%)** --
+> paired McNemar 15/32, **p = 0.0186**. The price is **4 points, not 41**, the
+> 3B fabricates *less* (9 against 15), and on the 60 rows with no exception class
+> to name it leads, 41 to 36. The 120B's entire remaining advantage is +19 rows
+> on `AssertionError` signatures. The paragraph above understates the 3B badly
+> and should be rewritten around the new figure before it is used anywhere; see
+> `RESULTS.md`, *The 3B against a 40x larger model*.
 
 **4. Differential testing and regression oracles.** The neighbourhood the
 academic framing usually misses, and mechanically the closest. Per-file

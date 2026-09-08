@@ -144,6 +144,241 @@ Every training metric favours seed 42; the plain bench cannot separate them
 
 ---
 
+## Stage 1: the label the field trains on cannot tell a defect from its repair (2026-09-08)
+
+Every JIT defect predictor -- JITLine, DeepJIT, CC2Vec, aegis, and this
+project's own gate -- is trained on one label: SZZ's *this commit is
+bug-inducing*, inferred by blaming the lines a later fix touched. They differ
+only in how they represent the commit. This section measures what that label
+costs, and what replacing it buys.
+
+### First, two controls that had never been run
+
+`--ablate` has been implemented in `ml_model/train_gate.py` since the gate was
+written and was never reported. On ApacheJIT, 7989 commits, chronological 80/20:
+
+    python -m ml_model.train_gate --jsonl data/apachejit_commits.jsonl --ablate
+
+| variant | AUC | PR-AUC | commits skipped @95% recall |
+|---|---|---|---|
+| metrics only (the 2013 baseline) | 0.777 | 0.660 | 20.4% |
+| embeddings only | 0.768 | 0.498 | 28.3% |
+| **embeddings + metrics** | **0.829** | **0.702** | **30.1%** |
+
+**Reading the code is worth +0.052 AUC over process metrics**, and the channels
+are complementary rather than redundant -- each is worse alone than the pair.
+
+**The count control, on ApacheJIT this time.** The existing control (2026-08-26)
+was run only on QT and OPENSTACK, where a single-feature line counter lands
+within 0.033 AUC of JITLine and the conclusion drawn was that the gap is mostly
+churn. That conclusion does **not** transfer:
+
+| features | AUC | PR-AUC |
+|---|---|---|
+| raw `la`, unmodelled | 0.662 | 0.360 |
+| `la` only | 0.637 | 0.337 |
+| `la+ld` | 0.660 | 0.365 |
+| all 14 process metrics | 0.777 | 0.660 |
+| **embeddings + metrics** | **0.829** | **0.702** |
+
+On ApacheJIT the full gate is **+0.167 AUC over churn** and nearly doubles
+PR-AUC, 0.360 -> 0.702. **The churn ceiling is a property of the benchmark, not
+of JIT defect prediction.** QT and OPENSTACK have almost no headroom above
+commit size; ApacheJIT has a great deal. A paper reporting only on the first two
+is competing inside a band where a line counter is near state of the art.
+
+### The direction probe: a defect against its own repair
+
+    python bench/direction_probe.py
+
+35 fixture families supply three commits over the *same* code:
+
+    introduce   clean -> buggy    behaviour changes, for the worse
+    fix         buggy -> clean    behaviour changes, for the better
+    refactor    clean -> clean    behaviour PRESERVED (a rename)
+
+Nothing in an SZZ label or in AUC computed over it asks a model to separate the
+first from the second. This asks.
+
+| ordering | holds | rate | p |
+|---|---|---|---|
+| **introduce > fix** (size-matched) | 14/35 | **40%** | 0.311 |
+| introduce > refactor | 11/35 | 31% | 0.041 |
+
+> **The size control runs before the result and the result is not printed
+> without it.** `introduce` and `fix` edit the same lines and have **identical
+> diff sizes on 35/35 cases**, so nothing about commit shape separates them --
+> that comparison is clean. The `refactor` arm is **not**: a rename touches every
+> use of the identifier, so those diffs average 5.5 changed lines against 2.0,
+> larger on 35/35, p = 1.7e-07. Its 31% is reported as suggestive only.
+> Spearman between diff size and gate score across all 105 fixtures is
+> rho = 0.091, p = 0.357.
+
+**On perfectly size-matched pairs the gate is at chance.** It cannot tell a
+defect from its repair, which is what the single-fixture note in
+`test_gate_line.py` recorded and this replicates at n=35.
+
+### Replacing the label: predict what running the code would show
+
+`bench/behaviour_gate.py` trains the **same** architecture -- GraphCodeBERT
+encoder, LightGBM head, same seed, same hyperparameters -- on a target that was
+*measured* rather than inferred:
+
+> **will running this commit change observable behaviour?**
+
+Labels come from executing pre and post and comparing stdout, stderr and exit
+code. `data/exec_sft_v3.jsonl` already carried this as `differs`;
+`dataset_builder/gen_exec_multilang.py` adds 1152 rows across Python,
+JavaScript, Ruby and PHP over 6 families, **checked disjoint from the evaluation
+fixtures at build time** -- this project has been bitten once by a gate trained
+on its own evaluation set.
+
+    python -m dataset_builder.gen_exec_multilang --out data/exec_ml.jsonl
+    python bench/behaviour_gate.py --extra data/exec_ml.jsonl
+
+Held out on 7 mutation families with **zero overlap** with training:
+**AUC 0.923, PR-AUC 0.703** at a 23% base rate.
+
+On the same 35 triplets:
+
+| arm | mean score | what it should be |
+|---|---|---|
+| introduce | 0.457 | HIGH -- behaviour changes |
+| fix | 0.407 | HIGH -- behaviour changes |
+| **refactor** | **0.157** | LOW -- behaviour preserved |
+
+| ordering | SZZ gate | behaviour gate | p |
+|---|---|---|---|
+| **introduce > refactor** | 11/35 (31%) | **31/35 (89%)** | **3.5e-06** |
+| **fix > refactor** | 14/35 (40%) | **31/35 (89%)** | **3.5e-06** |
+| introduce > fix *(should be chance)* | 14/35 (40%) | 21/35 (60%) | 0.311 |
+
+Three things make this more than a number going up.
+
+1. **It wins against the size gradient.** The refactor arm's diffs are 2.75x
+   larger than the defects they control for, so a model reading commit shape is
+   pushed to rank them highest. This one ranks them lowest, 31 times out of 35.
+2. **`introduce > fix` stays at chance, and that is correct.** The model does not
+   pretend to tell a good change from a bad one; it detects behavioural change,
+   which is what it was trained to do and what it claims. A model that "beat"
+   this row would be the suspicious one.
+3. **It transfers to languages the corpus does not contain.**
+
+| | n | SZZ gate | behaviour gate | p |
+|---|---|---|---|---|
+| languages in the corpus (py, js, rb, php) | 25 | 7/25 (28%) | **23/25 (92%)** | 1.9e-05 |
+| languages NOT in it (java, c, go, rust) | 10 | 4/10 (40%) | **8/10 (80%)** | 0.109 |
+
+**Limits.** The transfer row is n=10 and does not reach significance. Per-language
+counts are small (JavaScript 9, Java 5, Ruby 5, the rest <=3) and nothing should
+be read from any single language. The fixtures are synthetic. And the claim is
+narrow by construction: **behaviour change is not defectiveness** -- a correct
+feature addition changes behaviour too. What this gate predicts is whether Stage
+2 will have anything to measure, which is the question a cascade whose second
+stage runs the code actually needs answered, and it is not the question the JIT
+literature asks.
+
+> Of the generated pairs, **119 of 1152 had a measured label that defied the
+> edit's intent** -- a `>` to `>=` flip changes nothing when no value sits on the
+> boundary. They are kept with the measured label. That is the difference
+> between a label that is run and a label that is assumed.
+
+---
+
+## The 3B against a 40x larger model, on the v2 corpus (2026-09-08)
+
+The comparison in `Does any of this survive a bigger model?` below was run on
+the **v1 corpus with the pre-v3 checkpoint**, where the 3B scored 50% against
+gpt-oss-120b's 91%. That 41-point deficit is the basis for the concession in
+`POSITIONING.md` that self-hosting costs 41 points of grounding. **The checkpoint
+it was measured on has since been replaced.** Re-run against `sft-exec-v3` on the
+458-row v2 corpus, same rows, same rubric, paired:
+
+    .venv/bin/python bench/eval_bugsinpy_arms.py --arm exec --backend api \
+        --dataset data/bugsinpy_rows_v2.jsonl --out data/bip120b_arm_exec_v2.json
+
+| | 3B, v3, plain | gpt-oss-120b |
+|---|---|---|
+| produced an explanation | 457 (100%) | 458 (100%) |
+| names the real exception | 342 (75%) | 375 (82%) |
+| quotes the real message | 399 (87%) | 395 (86%) |
+| **INVENTS a different failure** | **9 (2%)** | 15 (3%) |
+| **GROUNDED** | **412 (90%)** | **429 (94%)** |
+
+Paired McNemar on `grounded`: **15 / 32, p = 0.0186.** The 120B still wins, and
+the honest headline is that **the deficit is 4 points, not 41**.
+
+**The remaining gap is one row type.** Split by what the measured failure names:
+
+| subset | n | 3B | 120B | only 3B | only 120B | p | |
+|---|---|---|---|---|---|---|---|
+| named exception | 208 | 205 (99%) | 208 (100%) | 0 | 3 | 0.25 | tie |
+| **`AssertionError`** | 190 | 166 (87%) | **185 (97%)** | 4 | 23 | **0.000311** | 120B |
+| **bare assert, no class** | 60 | **41 (68%)** | 36 (60%) | 11 | 6 | 0.332 | 3B leads |
+
+The 120B is +19 rows on `AssertionError` and +17 overall, so **every other
+subset is a wash or runs the other way**. On the 60 hardest rows -- no exception
+class anywhere, the value exists only in the run -- the 3B is ahead, 41 to 36.
+Not significant at n=60, but it is not behind, and this is the subset the whole
+grounding argument rests on.
+
+The 3B also **fabricates less**: 9 against 15 (5/11, p = 0.21).
+
+> **Two asymmetries, both favouring the 120B, both left in place.** The API path
+> sends no `max_tokens` while the 3B arms ran with `max_new_tokens=128` -- though
+> that ceiling bound on only 10 of 457 rows (2%), the ones whose explanation does
+> not end in terminal punctuation. And `corpus/label.py:181` sends
+> `response_format: {"type": "json_object"}`, so the 120B's output is guaranteed
+> parseable while the 3B had to emit valid JSON unaided -- which is exactly what
+> the parser bug punished it for. Equalising the second would need a constrained
+> decoder on the 3B and has not been done. Both mean the 3B is doing slightly
+> better than 90% against 94% suggests.
+
+**What this licenses, and what it does not.** It does not license "small is as
+good as large" -- p = 0.0186 is a real difference and it should be reported as
+one. It does license retiring the 41-point figure, and stating instead: *a 3B
+fine-tuned on a measured-execution corpus lands within 4 points of a 40x larger
+model given the same evidence, fabricates less, and is not behind on the rows
+where the answer cannot be guessed from the traceback.* That is a materially
+stronger claim than the deployment-cost argument it replaces.
+
+### Take execution away from the large model
+
+The same ablation, at both scales, on the same 458 rows:
+
+| arm | grounded | INVENTS | names exc | quotes msg |
+|---|---|---|---|---|
+| 120B + execution | **429 (94%)** | 15 | 375 | 395 |
+| **3B + execution** | **412 (90%)** | **9** | 342 | 399 |
+| 120B + JIT score only | 182 (40%) | 135 | 180 | 67 |
+| 3B + JIT score only | 105 (23%) | 120 | 99 | 22 |
+
+| comparison | only A | only B | p |
+|---|---|---|---|
+| **3B + execution vs 120B + score** | **240** | **10** | **2.5e-58** |
+| 120B + execution vs 120B + score | 248 | 1 | 5.5e-73 |
+| 3B + score vs 120B + score | 40 | 117 | 6.0e-10 |
+
+**This is the strongest single statement the project can make: a 3B given a
+measurement beats a 40x larger model given a risk score, by 230 rows.** Ten rows
+out of 458 go the other way. Execution grounding is worth more than a 40x
+increase in parameters, and that is not an argument, it is a paired test.
+
+Scale is not worthless without grounding -- the 120B's score arm beats the 3B's,
+182 against 105, p = 6.0e-10 -- but it recovers less than half of what the
+measurement supplies, and it costs 135 fabrications to do it.
+
+> **Two v1 claims die here, and both were arguments in this project's favour.**
+> `POSITIONING.md` said the large model falls *further* without execution (54
+> points against the 3B's 44) and fabricates far more (28% against 11%). On v2
+> neither holds: the 3B falls 90% -> 23% (67 points) against the 120B's
+> 94% -> 40% (54), so the large model degrades **more** gracefully; and the
+> fabrication rates are near level, 29% against 26%. They are struck in
+> `POSITIONING.md` rather than quietly dropped. The replacement claim above does
+> not depend on either.
+
+---
+
 ## Correction: a JSON parser bug suppressed every arm (2026-09-08)
 
 `first_json` matched braces without tracking string state. A measured failure

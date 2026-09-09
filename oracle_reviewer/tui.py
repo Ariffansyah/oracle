@@ -23,6 +23,14 @@ until you open it, and closes again on enter or escape.
   :model oracle-reviewer-3b
   :mode explain          explain the code and its risks, with the run as context
   :mode grounded         only say what running it proved (the default)
+
+When the run establishes nothing -- no test files, or a baseline that was
+already broken -- grounded mode may have no supportable sentence left, and a
+file the command never touched is where a reading is worth most. So it asks
+once more as a reading of the diff, printed under a banner saying so. The
+fabrication checks all still apply to that reading, and so does the rule
+against bare verdicts: a refused "no new bug was introduced" does not come back
+as "this is harmless". Set ORACLE_FALLBACK_EXPLAIN=0 to keep the silence.
 """
 from __future__ import annotations
 
@@ -648,7 +656,16 @@ class Reviewer(App):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--repo", default=".")
+    # No default repository. The picker is the default entry point because the
+    # run command is the most consequential setting in the tool and was
+    # previously chosen invisibly: a detected command that could not start made
+    # the model look broken rather than the setting look wrong. `--repo` skips
+    # the picker for anyone who already knows what they want.
+    ap.add_argument("--repo", default="",
+                    help="repository to review; omit to choose one, and its "
+                         "run command, in a picker")
+    ap.add_argument("--no-pick", action="store_true",
+                    help="never show the picker; use the current directory")
     ap.add_argument("--run", default="",
                     help="the command whose output defines what the project "
                          "does; detected from the repository when omitted")
@@ -662,6 +679,21 @@ def main() -> int:
                          f"(default {core.TIMEOUT}); a lint or build over a "
                          "large codebase needs more")
     a = ap.parse_args()
+    repo, run = a.repo, a.run
+    if not repo:
+        if a.no_pick:
+            repo = "."
+        else:
+            # The picker owns the terminal, so it must finish before the gate
+            # is preloaded and before the reviewer starts -- two full-screen
+            # Textual apps cannot share a terminal, and torch's resource
+            # tracker cannot be spawned once one of them holds the fds.
+            from .picker import choose
+            picked = choose()
+            if picked is None:
+                return 0
+            repo, run = picked[0], run or picked[1]
+
     gate = not a.no_gate
     if gate:
         # Before the TUI starts, never inside it -- see core.preload_gate.
@@ -673,7 +705,7 @@ def main() -> int:
             # the settings panel is concerned: either way it cannot be turned
             # on later, so it must not be offered as a switch.
             gate = False
-    Reviewer(repo=a.repo, run=a.run, host=a.host, model=a.model,
+    Reviewer(repo=repo, run=run, host=a.host, model=a.model,
              timeout=a.timeout, gate=gate).run()
     return 0
 

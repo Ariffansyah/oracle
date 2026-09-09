@@ -279,6 +279,38 @@ _RESTATE = "The project still fails with exit 5: no tests ran."
 assert unmeasured_claim(_RESTATE, baseline_broken=False) is None, _RESTATE
 assert unmeasured_claim(_RESTATE, baseline_broken=True) is None, _RESTATE
 
+# ------------------------------------------- asserting NO bug, with no evidence
+# "introduces a bug" was caught; its negation was not. Observed surviving the
+# filter on a Go router commit that added rate limiting to /login and /users,
+# printed under a badge that itself read "No Tests Ran — Nothing Measured":
+#
+#   "The output remains identical, and no new bug was introduced."
+#
+# Asserting no defect is exactly as unsupported as asserting one, and it is the
+# clause a reader carries away from a review that measured nothing.
+_NOBUG = "The output remains identical, and no new bug was introduced."
+assert unmeasured_claim(_NOBUG), _NOBUG
+assert "harmless" in unmeasured_claim(_NOBUG), unmeasured_claim(_NOBUG)
+for s in ("No regressions were introduced by this change.",
+          "This does not introduce any bugs.",
+          "The change should not affect behaviour.",
+          "Nothing was broken.",
+          "There are no side effects.",
+          # A hedge is still a verdict.
+          "The change appears correct.",
+          "This looks safe.",
+          "It seems fine."):
+    assert unmeasured_claim(s), s
+
+# The widening must not swallow the honest answers, which are the whole point
+# of the unexercised case. "no tests ran" is not "no bugs".
+for ok in ("No tests ran over this package.",
+           "No test files exist for these routes.",
+           "The output is unchanged.",
+           "Nothing was observed either way.",
+           "This command does not cover the change; check callers of sum_to."):
+    assert unmeasured_claim(ok) is None, ok
+
 # Plain description of a diff must not trip any of this.
 for ok in ("the `version` field was added to the Cache struct",
            "`Set` gained a third parameter, `version`",

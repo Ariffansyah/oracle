@@ -137,9 +137,28 @@ def direction_reversed(expl: str, before: str, after: str) -> str | None:
 # and neither the invented-number check nor the direction check can see it --
 # it invents no number and states no direction. An instruction the model can
 # ignore is not a guarantee; this is the enforcement.
+#
+# A second gap, found the same way. `_ASSERTS_BROKEN` catches "introduces a
+# bug" but nothing caught its NEGATION, so this survived the filter on a Go
+# router commit that added rate limiting to /login and /users, in a review whose
+# own badge read "No Tests Ran — Nothing Measured":
+#
+#   "The output remains identical, and no new bug was introduced."
+#
+# The first clause restates a real measurement and is allowed. The second is a
+# safety verdict on a change nothing executed -- and it is the half a reader
+# carries away. Asserting no bug is exactly as unsupported as asserting one.
 _ASSERTS_SAFE = [
     re.compile(p, re.I) for p in (
-        r"\b(?:does|do|did|will|would)\s+not\s+(?:affect|change|alter|impact|break)\b",
+        r"\b(?:does|do|did|will|would|should)\s+not\s+(?:affect|change|alter|impact|break)\b",
+        # "no new bug was introduced", "no regressions", "no side effects"
+        r"\bno\s+(?:new\s+)?(?:bugs?|defects?|regressions?|side[- ]?effects?)\b",
+        r"\b(?:does|do|did|will|would|should)\s+not\s+introduce\b[^.]{0,30}?"
+        r"\b(?:bugs?|defects?|regressions?|errors?|issues?|problems?|side[- ]?effects?)\b",
+        r"\bnothing\s+(?:is|was|has\s+been)\s+broken\b",
+        # A hedge is still a verdict: "appears correct" says the same thing.
+        r"\b(?:appears?|seems?|looks?)\s+(?:to\s+be\s+)?"
+        r"(?:correct|fine|safe|harmless|ok(?:ay)?)\b",
         r"\bno\s+(?:effect|impact|functional\s+change|behaviou?ral\s+change)\b",
         r"\bno\s+change\s+in\s+behaviou?r\b",
         r"\bnon-?functional\b",

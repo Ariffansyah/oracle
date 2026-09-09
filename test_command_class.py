@@ -68,4 +68,37 @@ assert "never reached by these tests" in tests
 for c in ("pnpm run lint", "pytest -q", "npx tsc --noEmit", "next build"):
     assert "NOT a clean bill of health" in body(c), c
 
+# ------------------------------------- a test command that ran no tests at all
+# `go test ./...` answering `[no test files]` has already settled the ambiguity
+# the wording above hedges about: the change was NOT reached, because nothing
+# was there to reach it. Offering the reader two possibilities and calling the
+# choice unknown is less true than what was measured, and it points at the
+# wrong next step -- re-reading the diff instead of writing the missing test.
+def unrun(out, cmd="go test ./..."):
+    r = FileReview(path="internal/routes/routes.go", risk="unclear", diff=D,
+                   why_unclear="not-exercised", checks=command_class(cmd))
+    r.before = r.after = out
+    return r, review_body(r, cmd)
+
+r, go = unrun("?  example.com/api/internal/routes  [no test files]")
+assert r.badge == "No Tests Ran — Nothing Measured", r.badge
+assert "ran NO TESTS over this code" in go
+assert "The gap is the test, not the diff" in go
+# The hedge belongs to the ambiguous case and must not survive into this one.
+assert "which of the two is NOT known" not in go
+assert "NOT a clean bill of health" in go
+
+# Every runner's own way of saying it, not just Go's.
+for out in ("collected 0 items", "no tests ran", "Ran 0 tests", "0 passing"):
+    r2, b2 = unrun(out, "pytest -q")
+    assert r2.badge == "No Tests Ran — Nothing Measured", (out, r2.badge)
+    assert "ran NO TESTS" in b2, out
+
+# When tests DID run, the ambiguity is real and the hedge stays. This is the
+# assertion that keeps the fix from swallowing the honest uncertain case.
+r3, ran = unrun("ok  example.com/api  0.02s")
+assert r3.badge == "Command Output Unchanged — Worth Checking", r3.badge
+assert "which of the two is NOT known" in ran
+assert "ran NO TESTS" not in ran
+
 print("ok")

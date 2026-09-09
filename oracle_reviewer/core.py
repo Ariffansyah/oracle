@@ -132,6 +132,27 @@ MODE = os.environ.get("ORACLE_MODE", "grounded").strip().lower() or "grounded"
 if MODE == "explain" and _RELATED_ENV == "":
     RELATED = True
 
+# When the run established NOTHING and grounded mode consequently has nothing it
+# may say, ask again as a reading of the diff rather than print silence.
+#
+# Grounded mode refusing an unsupported claim is the contribution, and it stays:
+# the refusal happens first, every time, and only when it leaves the file with
+# no prose at all does the reading get asked for. A file the command never
+# touched is exactly where a developer is least served by silence -- a Go router
+# adding rate limiting to /login, in a package with no test files, produced a
+# correct badge, a correct paragraph about what was not established, and not one
+# word about the change itself.
+#
+# The result is banner-tagged (EXPLAIN_TAG) and every fabrication check still
+# applies to it. What is dropped is only the rule that a verdict must come from
+# a run -- which is the rule that cannot be met when there was no run.
+#
+# Off with ORACLE_FALLBACK_EXPLAIN=0. It cannot affect a published number: the
+# BugsInPy rows are all measured (a failing test before, a passing one after),
+# so `measured` is never False there and this never fires.
+FALLBACK_EXPLAIN = os.environ.get(
+    "ORACLE_FALLBACK_EXPLAIN", "1").strip().lower() not in ("0", "false", "no", "off")
+
 # Printed above any prose explain mode produced. The default mode's prose is
 # backed by a measurement; this is not, and a reader cannot tell them apart from
 # the sentence alone -- they read identically. Saying which one they are looking
@@ -260,6 +281,12 @@ class FileReview:
             # it -- that phrasing suggests a check happened and came back level.
             # Name the check instead, so the badge cannot be read as a verdict on
             # the code when it is only a verdict on the style.
+            # A test command that reported running no tests earns its own
+            # badge. "Command Output Unchanged" implies a comparison took
+            # place; when `go test` answers `[no test files]`, none did, and
+            # the badge is the part of the review most likely to be read alone.
+            if self.checks == "tests" and ran_no_tests(self.before):
+                return "No Tests Ran — Nothing Measured"
             return {"style": "Style Checked — Behaviour Unchecked",
                     "analysis": "Statically Analysed — Behaviour Unchecked",
                     "types": "Types Checked — Behaviour Unchecked",
@@ -319,12 +346,22 @@ def git(repo: str, *args: str, check: bool = True) -> str:
 _DEPS = ("node_modules", ".venv", "venv", "vendor", ".bundle", "Pods",
          ".yarn/cache", ".pnpm-store")
 
+# Dependencies are not the only gitignored thing a run needs. A Next.js build
+# in a worktree died on `NEXT_PUBLIC_PUBLIC_SITE_URL environment variable is not
+# set` -- the code was fine, the config simply was not there, and the review
+# measured a missing variable on both sides instead of the change. Matched as
+# globs because the name varies (.env, .env.local, .env.development).
+_CONFIG_GLOBS = (".env", ".env.*")
+
 
 def link_deps(repo: str, path: pathlib.Path) -> list[str]:
     """Point the worktree at the source repo's installed dependencies."""
     linked = []
     src_root = pathlib.Path(repo_path(repo))
-    for name in _DEPS:
+    names = list(_DEPS)
+    for pattern in _CONFIG_GLOBS:
+        names.extend(p.name for p in src_root.glob(pattern) if p.is_file())
+    for name in names:
         src, dst = src_root / name, path / name
         if not src.exists() or dst.exists():
             continue
@@ -673,8 +710,21 @@ def filter_prose(expl: str, before: str, after: str, diff: str,
 
 
 def explain(host: str, model: str, r: FileReview, message: str, cmd: str,
-            outcome: str, measured: bool = True, mode: str = "") -> None:
-    """Fill in `explanation`, or record why it was withheld. Never raises."""
+            outcome: str, measured: bool = True, mode: str = "",
+            strict: bool = False) -> None:
+    """Fill in `explanation`, or record why it was withheld. Never raises.
+
+    `strict` asks the explain-mode QUESTION under the grounded-mode FILTER. It
+    exists for the automatic fallback: explain mode normally drops the
+    unmeasured-claim rule, which is right when a person chose the mode and is
+    wrong when the tool reached for it on their behalf -- without this, the
+    fallback answered a refused "no new bug was introduced" with a bare "this
+    is harmless", which is the same unsupported verdict wearing a banner.
+
+    Sentences that REASON keep passing: "a sixth attempt inside that window is
+    rejected before Login runs" states a mechanism, names no verdict, and
+    survives. Only the bare safety and defect assertions are held back.
+    """
     mode = mode or MODE
     r.mode = mode
     template = EXPLAIN_USER if mode == "explain" else USER
@@ -720,12 +770,33 @@ def explain(host: str, model: str, r: FileReview, message: str, cmd: str,
         r.withheld = "the model reported the two runs the wrong way round"
         return
     kept, dropped = filter_prose(expl, r.before, r.after, r.diff, measured,
-                                 r.why_unclear, mode)
+                                 r.why_unclear,
+                                 "grounded" if strict else mode)
     r.explanation = kept
     if dropped:
         # Deduplicated: several sentences failing the same check is one fact
         # about the answer, not several.
         r.withheld = "; ".join(dict.fromkeys(dropped))
+    # Nothing survived, and there was no measurement for it to survive on. The
+    # refusal above already happened -- this does not soften it, it asks a
+    # different question: not "what did the run prove" but "what does this code
+    # do". See FALLBACK_EXPLAIN. The recursion terminates because the retry is
+    # made in explain mode, which this condition excludes.
+    if FALLBACK_EXPLAIN and not kept and not measured and mode != "explain":
+        refused = r.withheld
+        # The retry reports on its OWN prose. Carrying the grounded refusal
+        # forward would print "part of the explanation was withheld" beside a
+        # reading nothing was withheld from -- the claim it names belongs to an
+        # answer that is not being shown, and the banner already says this text
+        # is unverified.
+        r.withheld = ""
+        explain(host, model, r, message, cmd, outcome, measured, "explain",
+                strict=True)
+        if not r.explanation:
+            # The reading did not survive either. Report the grounded refusal:
+            # it names an actual claim, where the fallback's silence would not.
+            r.mode = mode
+            r.withheld = refused or r.withheld
 
 
 # Ordered most specific first. Each entry is (marker file, builder), where the
@@ -974,6 +1045,16 @@ _ESTABLISHES = {
     "tests": ("does execute the code. Identical output means either the change "
               "was never reached by these tests, or it ran and changed nothing "
               "they assert on -- which of the two is NOT known"),
+    # The same command, when its own output settles the ambiguity. `go test`
+    # answering `[no test files]` has ALREADY said the change was not reached,
+    # so offering the reader two possibilities and calling the choice unknown
+    # is less true than what was measured. The distinction changes what happens
+    # next: "which of the two is unknown" invites re-reading the diff, while
+    # "no tests exist here" names the missing thing and where to put it.
+    "no-tests": ("reported that it ran NO TESTS over this code. That is not a "
+                 "passing test run -- nothing exercised this file, so the "
+                 "identical output is not evidence about the change at all. "
+                 "The gap is the test, not the diff"),
     "unknown": ("produced identical output. Whether it exercises this change "
                 "at all is not known, so nothing is established either way"),
 }
@@ -1258,6 +1339,11 @@ def review_body(r: FileReview, cmd: str) -> str:
             # comments, and a changed string literal is neither logic nor a
             # comment.
             kind = r.checks or command_class(cmd)
+            # A test command that says it ran no tests is not a test result.
+            # Reported as such: the hedge below is for when the ambiguity is
+            # real, and here the command already resolved it.
+            if kind == "tests" and ran_no_tests(r.before):
+                kind = "no-tests"
             body = (f"This file's code changed. `{cmd}` "
                     f"{_ESTABLISHES.get(kind, _ESTABLISHES['unknown'])}. "
                     f"It is NOT a clean bill of health. "
@@ -1491,12 +1577,22 @@ def review_commit(repo: str, commit: str, cmd: str, host: str, model: str,
             r.risk, r.why_unclear = "unclear", "not-exercised"
             r.checks = command_class(cmd)
             say(f"[{i}/{len(files)}] {path}: not covered by `{cmd}` ...")
-            explain(host, model, r, message, cmd,
-                    "the output is byte-for-byte IDENTICAL. That means either "
-                    "the changed code never ran, or it ran and changed nothing "
-                    "this command prints -- which of the two is NOT known. "
-                    "Nothing was established either way",
-                    measured=False)
+            # Tell the model what was actually observed. Handing it the two-way
+            # hedge when the command already said `[no test files]` invites an
+            # explanation that speculates about coverage, when the honest and
+            # more useful thing to say is that no test exists to cover this.
+            if r.checks == "tests" and ran_no_tests(r.before):
+                observed = ("the command reported that it ran NO TESTS over "
+                            "this code. Not a passing run -- nothing exercised "
+                            "this file, so nothing was established about the "
+                            "change")
+            else:
+                observed = ("the output is byte-for-byte IDENTICAL. That means "
+                            "either the changed code never ran, or it ran and "
+                            "changed nothing this command prints -- which of "
+                            "the two is NOT known. Nothing was established "
+                            "either way")
+            explain(host, model, r, message, cmd, observed, measured=False)
             out.append(r)
             continue
 

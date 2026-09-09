@@ -263,6 +263,35 @@ transformers, trl, peft, datasets and bitsandbytes are needed to train — every
 other command runs without them, and the training scripts exit with an install
 hint rather than an ImportError.
 
+### The `oracle` command
+
+```bash
+pip install -e .            # installs the `oracle` entry point
+
+oracle serve                # start the model server on the box + the tunnel
+oracle                      # pick a repository and review it
+oracle serve stop           # take the server and tunnel down
+```
+
+`oracle serve status` says whether each is up, and distinguishes a stopped
+server from a box it cannot reach at all.
+
+Plain `oracle` opens a **picker** before the reviewer starts: it lists the git
+repositories under your home directory, identifies each one
+(`TypeScript · Next.js · pnpm`), and proposes the commands that could establish
+a baseline, best first. `e` edits the command, enter starts, `q` quits.
+
+The picker exists because the run command decides what the reviewer can
+observe, and it used to be chosen invisibly. A detected `pnpm run lint` cannot
+start inside a worktree — pnpm verifies its dependency tree first and a linked
+`node_modules` never satisfies that check — so the review measured the package
+manager's complaint on both sides and refused to speak. That reads as a broken
+model when it is a wrong setting, so the setting is now shown before anything
+runs, and package scripts are resolved to the binary they invoke
+(`./node_modules/.bin/eslint`) so the package manager is never in the way.
+
+`--repo PATH` skips the picker; `--run CMD` skips detection as well.
+
 ## Pipeline
 
 ```bash

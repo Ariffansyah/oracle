@@ -35,8 +35,20 @@ SSHOPTS="-o BatchMode=yes -o ConnectTimeout=8 -o ControlMaster=auto
 
 remote() { ssh $SSHOPTS "$H" "bash -lc '$1'" 2>/dev/null; }
 
+# `remote` cannot distinguish "the command returned false" from "ssh never got
+# there": both are non-zero, and its stderr is discarded. That made an ASLEEP
+# box report `!! artifacts/oracle-reviewer-3b does not exist on oracle-gpu` --
+# a message about the wrong thing entirely, pointing at a model that was
+# present the whole time. Reachability is now its own question, asked first.
+reachable() { ssh $SSHOPTS "$H" true 2>/dev/null; }
+
 start() {
   WANT=$(basename "$MODEL")
+  if ! reachable; then
+    echo "!! cannot reach $H — it may be asleep or off the network."
+    echo "   Wake it and retry; nothing is wrong with the model or the repo."
+    exit 1
+  fi
   # Reuse a server already serving the model we want. A restart reloads 3B of
   # weights in 4-bit, which is a minute-plus on this card, and `start` used to
   # pay it on EVERY launch — including when the right server was already up.
@@ -107,9 +119,16 @@ stop() {
 }
 
 status() {
-  remote 'pgrep -f "llm_explainer[.]serve" >/dev/null &&
-      echo "  server: up  ($(tr "\r" "\n" < ~/oracle/serve.log 2>/dev/null | tail -1))" ||
-      echo "  server: down"'
+  # `remote` sends stderr to /dev/null, so an unreachable box printed NOTHING
+  # for the server and the output read as "down" -- the two states that most
+  # need telling apart looked the same. Reachability is checked first.
+  if ! reachable; then
+    echo "  server: unknown — cannot reach $H (asleep, or off the network)"
+  else
+    remote 'pgrep -f "llm_explainer[.]serve" >/dev/null &&
+        echo "  server: up  ($(tr "\r" "\n" < ~/oracle/serve.log 2>/dev/null | tail -1))" ||
+        echo "  server: down"'
+  fi
   curl -s -m 3 "http://localhost:${PORT}/api/tags" >/dev/null 2>&1 &&
     echo "  tunnel: up, answering on localhost:${PORT}" ||
     echo "  tunnel: down"

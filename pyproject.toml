@@ -27,6 +27,7 @@ oracle = "cli:run"
 [tool.setuptools]
 py-modules = ["main", "cli", "config", "evaluate", "variance", "count_control"]
 packages = [
+    "oracle_reviewer",
     "llm_explainer",
     "ui",
     "ml_model",

@@ -1,0 +1,56 @@
+{
+ "3B tuned + execution": {
+  "localized": 374,
+  "reversed": 16,
+  "p_localized": 1.0,
+  "p_reversed": 1.0
+ },
+ "3B tuned + execution, seed 7": {
+  "localized": 387,
+  "reversed": 7,
+  "p_localized": 0.09191454981585423,
+  "p_reversed": 0.0783538818359375
+ },
+ "3B tuned + execution, guarded": {
+  "localized": 276,
+  "reversed": 10,
+  "p_localized": 5.467315786081288e-21,
+  "p_reversed": 0.26317596435546875
+ },
+ "3B untuned + execution": {
+  "localized": 254,
+  "reversed": 4,
+  "p_localized": 2.5548753585057904e-25,
+  "p_reversed": 0.004180908203125
+ },
+ "3B tuned + risk score": {
+  "localized": 375,
+  "reversed": 17,
+  "p_localized": 1.0,
+  "p_reversed": 1.0
+ },
+ "3B tuned + diff only": {
+  "localized": 376,
+  "reversed": 10,
+  "p_localized": 0.899076313652859,
+  "p_reversed": 0.1795654296875
+ },
+ "120B + execution": {
+  "localized": 391,
+  "reversed": 0,
+  "p_localized": 0.12847543208575976,
+  "p_reversed": 3.0517578125e-05
+ },
+ "120B + risk score": {
+  "localized": 404,
+  "reversed": 1,
+  "p_localized": 0.0031886785048038926,
+  "p_reversed": 0.000274658203125
+ },
+ "120B + diff only": {
+  "localized": 398,
+  "reversed": 0,
+  "p_localized": 0.019690184799846844,
+  "p_reversed": 3.0517578125e-05
+ }
+}

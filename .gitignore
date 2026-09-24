@@ -56,3 +56,16 @@ data/bugsinpy/
 
 # scratch output from the SZZ pass
 .szz_work/
+
+# The paper's replication set. Its Data Availability section promises the
+# training corpora, the 458 evaluation rows and the grades, so they must be in
+# a fresh clone. All small (under 2M each).
+!data/exec_sft_v3.jsonl
+!data/exec_sft_v3_holdout_cross.jsonl
+!data/exec_sft_v3_holdout_within.jsonl
+!data/exec_explain_v3.jsonl
+!data/exec_ml.jsonl
+!data/bugsinpy_rows_v2.jsonl
+!data/bip_rater_v3_author.csv
+!data/bip_rater_v3_claude.csv
+!data/bip_inventions_v3_claude.csv
